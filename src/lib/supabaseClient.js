@@ -3,12 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Fail fast with a clear error so developers don't hit confusing runtime
+// failures elsewhere in the app when the env vars are missing.
 if (!supabaseUrl || !supabaseAnonKey) {
-  // Loud on purpose — a silent blank screen is much harder to debug than
-  // this message the first time someone forgets to fill in .env.local.
-  console.error(
-    "Missing Supabase env vars. Copy .env.example to .env.local and fill in " +
-    "VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from your Supabase project settings."
+  throw new Error(
+    "Missing Supabase env vars. Copy .env.example to .env.local and fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from your Supabase project settings."
   );
 }
 
