@@ -92,6 +92,11 @@ function applyTheme(themeId) {
   const f = FONT_PRESETS[t.font] || FONT_PRESETS.ledger;
   Object.assign(FONTS, f);
 }
+// Populate COLORS/FONTS immediately with the default theme, so the sign-in
+// screen (which renders before any session — and therefore before Workspace
+// ever calls applyTheme with the user's saved preference) isn't left with
+// blank colors. Workspace re-applies the user's actual theme once settings load.
+applyTheme("ledger");
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayStr = (d = new Date()) => {
