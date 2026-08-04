@@ -26,10 +26,12 @@ create index if not exists kv_store_key_shared_idx on public.kv_store (key, shar
 
 alter table public.kv_store enable row level security;
 
--- Read: your own rows, or anyone's shared rows.
+-- Read: your own rows, or any signed-in user's shared rows. (Anonymous
+-- visitors get nothing — the peer leaderboard should only be visible to
+-- signed-in users, matching the rest of the policy set.)
 create policy "kv_store_select" on public.kv_store
   for select
-  using (shared = true or owner_id = auth.uid());
+  using (auth.role() = 'authenticated' and (shared = true or owner_id = auth.uid()));
 
 -- Write: only your own rows (private or shared).
 create policy "kv_store_insert" on public.kv_store

@@ -13,7 +13,7 @@ export const todayStr = (d = new Date()) => {
 // (`.setDate()`), which can shift results by a day for users far from UTC or
 // right around a DST boundary. parseLocalDate always builds the date from
 // local-time components so arithmetic stays consistent end to end.
-function parseLocalDate(v) {
+export function parseLocalDate(v) {
   if (v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
   const [y, m, d] = String(v).split("-").map(Number);
   return new Date(y, (m || 1) - 1, d || 1);

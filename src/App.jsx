@@ -5,13 +5,13 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
 import {
-  Target, Timer as TimerIcon, BookOpen, ClipboardList, AlertTriangle, Users,
-  Settings as SettingsIcon, Flame, Trophy, Play, Pause, Square, Plus, Trash2,
-  Check, ChevronRight, ChevronLeft, Download, X, Copy, Award, TrendingUp, Circle, CircleDot,
-  CheckCircle2, Star, BookMarked, NotebookPen, ListChecks, CalendarDays, Layers, Lock, Zap
+  Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
+  Flame, Trophy, Play, Pause, Square, Plus, Trash2,
+  ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
+  CheckCircle2, Star, BookMarked, NotebookPen, Layers, Lock, Zap
 } from "lucide-react";
-import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, RANK_COLORS } from "./lib/theme";
-import { uid, todayStr, daysBetween, genCode, fmtMin, addDays } from "./lib/utils";
+import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss } from "./lib/theme";
+import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import Sidebar from "./components/layout/Sidebar";
 import WeakAreas from "./components/features/WeakAreas";
 
@@ -148,35 +148,63 @@ function chapterLevel(subject, name, cache = {}) {
 // supabase/schema.sql for the table + policies.
 function useStorage(session) {
   const userId = session?.user?.id || null;
+  // Keys whose most recent load failed. If a load error made us fall back to
+  // an empty/default value, saving that value back would silently overwrite
+  // the user's real data — so save() refuses those keys until a load
+  // succeeds.
+  const failedLoadsRef = useRef(new Set());
+
   const load = useCallback(async (key, fallback, shared = false) => {
     if (!userId) return fallback;
+    const k = `${key}:${shared}`;
     try {
       let query = supabase.from("kv_store").select("value").eq("key", key).eq("shared", shared);
       if (!shared) query = query.eq("owner_id", userId);
       const { data, error } = await query.maybeSingle();
-      if (error || !data) return fallback;
-      return data.value ?? fallback;
+      if (error) {
+        failedLoadsRef.current.add(k);
+        console.error(`[storage] load failed for "${key}" (shared=${shared})`, error);
+        return fallback;
+      }
+      failedLoadsRef.current.delete(k);
+      return data?.value ?? fallback;
     } catch (e) {
+      failedLoadsRef.current.add(k);
+      console.error(`[storage] load threw for "${key}" (shared=${shared})`, e);
       return fallback;
     }
   }, [userId]);
+
   const save = useCallback(async (key, value, shared = false) => {
     if (!userId) return;
+    const k = `${key}:${shared}`;
+    if (failedLoadsRef.current.has(k)) {
+      // Last read failed, so `value` may be the fallback (e.g. an empty
+      // array). Writing it now would clobber the real stored data.
+      console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — last load failed`);
+      return;
+    }
     try {
       await supabase.from("kv_store").upsert(
         { owner_id: userId, key, shared, value, updated_at: new Date().toISOString() },
         { onConflict: "owner_id,key,shared" }
       );
-    } catch (e) { /* noop */ }
+    } catch (e) {
+      console.error(`[storage] save failed for "${key}" (shared=${shared})`, e);
+    }
   }, [userId]);
   return { load, save };
 }
-
 function Bubble({ status, size = 20, onClick }) {
   const colorMap = { todo: COLORS.faint, doing: COLORS.warn, done: COLORS.done, mastered: COLORS.ink };
   const filled = status === "done" || status === "mastered";
+  const interactive = !!onClick;
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" onClick={onClick} style={{ cursor: onClick ? "pointer" : "default", flexShrink: 0 }}>
+    <svg width={size} height={size} viewBox="0 0 20 20" onClick={onClick}
+      role={interactive ? "button" : undefined} tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `Status: ${STATUS_LABEL[status] || status}` : undefined}
+      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+      style={{ cursor: onClick ? "pointer" : "default", flexShrink: 0 }}>
       <rect x="2" y="2" width="16" height="16" rx="4" fill={filled ? colorMap[status] : "transparent"} stroke={colorMap[status]} strokeWidth="1.5" />
       {status === "doing" && <rect x="2" y="10.5" width="16" height="7.5" rx="2" fill={COLORS.warn} opacity="0.85" />}
       {filled && <path d="M5.5 10.5l3 3 6-6.5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
@@ -371,7 +399,13 @@ function Workspace({ session }) {
 
   const chime = (freq = 880) => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Reuse the context created (and user-gesture-unlocked) by
+      // unlockAudio() instead of allocating a fresh one per completion —
+      // fresh contexts auto-pause on iOS when created outside a gesture,
+      // and leaking one per chime forever is wasteful.
+      const ctx = window.__ledgerAudioCtx || null;
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
@@ -386,6 +420,12 @@ function Workspace({ session }) {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
+      // No-op if we already own a context, so repeated Start clicks don't
+      // leak new contexts.
+      if (window.__ledgerAudioCtx) {
+        if (window.__ledgerAudioCtx.state === "suspended") window.__ledgerAudioCtx.resume().catch(() => {});
+        return;
+      }
       const ctx = new AudioContext();
       if (ctx.state === "suspended") ctx.resume().catch(() => {});
       window.__ledgerAudioCtx = ctx;
@@ -439,9 +479,17 @@ function Workspace({ session }) {
       setCompletedFlash({ kind: "break", message: "Break's over — start your next focus session when ready." });
       chime(660);
     }
+  }, [timerElapsed, timerMode, timerRunning, phaseTarget, pomoPhase, pomoTarget, pomoCycle, timerSubject]);
+
+  // The completion effect above changes state (elapsed, phase, cycle) in the
+  // same render it sets completedFlash, which cancels any in-effect timeout
+  // before it fires. Auto-dismiss lives in its own effect keyed on the flash
+  // itself, so setting it also schedules the fade-out cleanly.
+  useEffect(() => {
+    if (!completedFlash) return;
     const t = setTimeout(() => setCompletedFlash(false), 5000);
     return () => clearTimeout(t);
-  }, [timerElapsed, timerMode, timerRunning, phaseTarget, pomoPhase, pomoTarget, pomoCycle, timerSubject]);
+  }, [completedFlash]);
 
   const skipBreak = () => {
     setTimerRunning(false);
@@ -499,8 +547,18 @@ function Workspace({ session }) {
     })();
   }, [load]);
 
+  // syllabus and cards get edited keystroke-by-keystroke (chapter notes
+  // textarea, card front/back), so their autosaves are debounced — the rest
+  // change at click granularity and still save immediately.
+  const saveTimeoutRef = useRef(null);
+  const debouncedSave = useCallback((key, value) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => save(key, value), 600);
+  }, [save]);
+  useEffect(() => () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); }, []);
+
   useEffect(() => { if (ready && profile) save("profile", profile); }, [profile, ready, save]);
-  useEffect(() => { if (ready) save("syllabus", syllabus); }, [syllabus, ready, save]);
+  useEffect(() => { if (ready) debouncedSave("syllabus", syllabus); }, [syllabus, ready, debouncedSave]);
   useEffect(() => { if (ready) save("tasks", tasks); }, [tasks, ready, save]);
   useEffect(() => { if (ready) save("sessions", sessions); }, [sessions, ready, save]);
   useEffect(() => { if (ready) save("mocks", mocks); }, [mocks, ready, save]);
@@ -508,7 +566,7 @@ function Workspace({ session }) {
   useEffect(() => { if (ready) save("peers", peers); }, [peers, ready, save]);
   useEffect(() => { if (ready) save("unlockedBadges", unlockedBadges); }, [unlockedBadges, ready, save]);
   useEffect(() => { if (ready) save("dpp", dpp); }, [dpp, ready, save]);
-  useEffect(() => { if (ready) save("cards", cards); }, [cards, ready, save]);
+  useEffect(() => { if (ready) debouncedSave("cards", cards); }, [cards, ready, debouncedSave]);
   useEffect(() => { if (ready) save("settings", settings); }, [settings, ready, save]);
 
   useEffect(() => {
@@ -521,25 +579,47 @@ function Workspace({ session }) {
     });
   }, [ready, sessions, tasks, mocks, syllabus, errors, dpp]);
 
-  // publish own leaderboard entry whenever sessions/profile change
+  // publish own leaderboard entry whenever sessions/profile change.
+  // Keyed by owner_id (unique) rather than by the 6-char profile code:
+  // two users can share a code, which previously made reads keyed on
+  // `lb:<code>` ambiguous (maybeSingle errored → "Pending sync…" forever).
+  // The code is still stored in the payload so peers can find the row.
   useEffect(() => {
-    if (!ready || !profile) return;
+    if (!ready || !profile || !userId) return;
     const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
-    save(`lb:${profile.code}`, { name: profile.name, minutes: Math.round(todayMin), date: todayStr(), streak: computeStreak(sessions) }, true);
-  }, [sessions, profile, ready, save]);
+    save(`lb:${userId}`, { code: profile.code, name: profile.name, minutes: Math.round(todayMin), date: todayStr(), streak: computeStreak(sessions) }, true);
+  }, [sessions, profile, ready, save, userId]);
 
-  // fetch peer data
+  // fetch peer data — query shared rows by the code stored in each payload
   useEffect(() => {
-    if (!ready || peers.length === 0) return;
+    if (!ready || peers.length === 0 || !userId) return;
     (async () => {
-      const out = {};
-      for (const code of peers) {
-        const d = await load(`lb:${code}`, null, true);
-        if (d) out[code] = d;
+      try {
+        // Select owner_id and updated_at so we can deterministically
+        // resolve multiple rows that share the same 6-char code by
+        // preferring the most recently-updated entry.
+        const { data, error } = await supabase
+          .from("kv_store")
+          .select("owner_id, value, updated_at")
+          .eq("shared", true)
+          .in("value->>code", peers);
+        if (error) throw error;
+        const out = {};
+        (data || []).forEach(r => {
+          const code = r?.value?.code;
+          if (!code) return;
+          const prev = out[code];
+          // Keep the most recently-updated row for this code (stable choice)
+          if (!prev || new Date(r.updated_at) > new Date(prev._updated_at || 0)) {
+            out[code] = { ...r.value, _owner_id: r.owner_id, _updated_at: r.updated_at };
+          }
+        });
+        setPeerData(out);
+      } catch (e) {
+        console.error("[peers] failed to fetch leaderboard entries", e);
       }
-      setPeerData(out);
     })();
-  }, [peers, ready, load, sessions]);
+  }, [peers, ready, userId, sessions]);
 
   if (!ready) {
     return <div style={{ background: COLORS.bg, minHeight: 400, display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body }}>
@@ -567,12 +647,12 @@ function Workspace({ session }) {
   const timer = { mode: timerMode, running: timerRunning, elapsed: timerElapsed, subject: timerSubject, pomoMinutes, pomoTarget, phase: pomoPhase, phaseTarget, breakTarget, cycle: pomoCycle, completedFlash };
 
   return (
-    <div ref={appRef} style={{ background: COLORS.bg, fontFamily: FONTS.body, color: COLORS.text, borderRadius: 14, position: "relative", overflow: "visible", border: `1px solid ${COLORS.border}`, display: "flex", minHeight: 640, maxWidth: 1180, margin: "0 auto" }}>
-      <style>{`${FONT_IMPORT} * { box-sizing: border-box; } ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:${COLORS.border};border-radius:4px}`}</style>
+    <div ref={appRef} className="lg-shell" style={{ background: COLORS.bg, fontFamily: FONTS.body, color: COLORS.text, borderRadius: 14, position: "relative", overflow: "visible", border: `1px solid ${COLORS.border}`, display: "flex", minHeight: 640, maxWidth: 1180, margin: "0 auto" }}>
+      <style>{globalCss()}</style>
 
       <Sidebar tab={tab} setTab={setTab} profile={profile} onSignOut={() => supabase.auth.signOut()} />
 
-      <div style={{ flex: 1, padding: "22px 26px", overflowY: "auto", maxHeight: 900, borderTopRightRadius: 14, borderBottomRightRadius: 14, backgroundImage: `linear-gradient(${COLORS.border}2e 1px, transparent 1px)`, backgroundSize: "100% 30px", backgroundPositionY: "8px" }}>
+      <div className="lg-main" style={{ flex: 1, padding: "22px 26px", overflowY: "auto", maxHeight: 900, borderTopRightRadius: 14, borderBottomRightRadius: 14, backgroundImage: `linear-gradient(${COLORS.border}2e 1px, transparent 1px)`, backgroundSize: "100% 30px", backgroundPositionY: "8px" }}>
         <TopBar profile={profile} sessions={sessions} tasks={tasks} />
         {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} unlockedBadges={unlockedBadges} setTab={setTab} />}
         {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} />}
@@ -721,7 +801,7 @@ function TopBar({ profile, sessions, tasks }) {
         <div style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 700 }}>
           {days >= 0 ? `${days} days to ${profile.exam}` : "Exam window is here"}
         </div>
-        <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 2 }}>Target: {new Date(profile.targetDate).toDateString()}</div>
+        <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 2 }}>Target: {parseLocalDate(profile.targetDate).toDateString()}</div>
       </div>
       <div style={{ display: "flex", gap: 10 }}>
         <MiniStat icon={Flame} label="Streak" value={`${computeStreak(sessions)}d`} />
@@ -874,10 +954,10 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+      <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
         <Stat label="Syllabus complete" value={`${pct}%`} sub={`${doneCount}/${allChapters.length} chapters`} />
         <Stat label="Backlog" value={backlog} sub="chapters untouched" />
-        <Stat label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.total / m.max) * 100, 0) / mocks.length)}%` : "log your first"} />
+        <Stat label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length)}%` : "log your first"} />
         <Stat label="Errors catalogued" value={errors.length} sub="patch these before D-day" />
         <Stat label="Questions today" value={`${dppToday.solved}/${dppToday.target}`} sub="daily practice count" />
       </div>
@@ -895,7 +975,7 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
             <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 3 }}>{xpInfo.intoLevel}/{XP_PER_LEVEL} XP to level {xpInfo.level + 1} · {xpInfo.xp} XP total</div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
           {badges.map(b => (
             <div key={b.id} title={b.desc} style={{
               display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "10px 6px", borderRadius: 8,
@@ -968,7 +1048,7 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
         )}
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <Card title="Today's plan" right={<Btn variant="ghost" onClick={() => setTab("tasks")}>Open <ChevronRight size={13} /></Btn>}>
           {todayTasks.length === 0 ? (
             <div style={{ fontSize: 12, color: COLORS.faint }}>No targets set for today. Head to Task Planner.</div>
@@ -1017,7 +1097,9 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
 
   const monthStats = useMemo(() => {
     const year = cursor.getFullYear(), month = cursor.getMonth();
-    const inMonth = (ds) => { const d = new Date(ds); return d.getFullYear() === year && d.getMonth() === month; };
+    // parseLocalDate (local midnight) instead of `new Date(ds)` (UTC
+    // midnight) so month boundaries aren't shifted for users west of UTC.
+    const inMonth = (ds) => { const d = parseLocalDate(ds); return d.getFullYear() === year && d.getMonth() === month; };
     const monthSessions = sessions.filter(s => inMonth(s.date));
     const totalMin = monthSessions.reduce((a, s) => a + s.minutes, 0);
     const activeDays = new Set(monthSessions.map(s => s.date)).size;
@@ -1058,7 +1140,7 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
   const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, alignItems: "flex-start" }}>
+    <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, alignItems: "flex-start" }}>
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div style={{ fontFamily: FONTS.display, fontSize: 17, fontWeight: 600 }}>{monthLabel}</div>
@@ -1452,7 +1534,9 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
     const chronoLabel = chronotype && chronotype[1] > 0 ? chronotype[0] : "—";
     let wkdSum = 0, wkdN = 0, wknSum = 0, wknN = 0;
     sessions.forEach(s => {
-      const day = new Date(s.date).getDay();
+      // parseLocalDate, not `new Date(s.date)` (which parses as UTC and can
+      // land on the wrong weekday for users west of UTC).
+      const day = parseLocalDate(s.date).getDay();
       if (day === 0 || day === 6) { wknSum += s.minutes; wknN++; } else { wkdSum += s.minutes; wkdN++; }
     });
     const wknAvg = wknN ? Math.round(wknSum / wknN) : 0;
@@ -1473,7 +1557,7 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
+      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
         <Card>
           <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
             {["flow", "pomodoro"].map(m => (
@@ -1568,7 +1652,7 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
         </div>
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Card title="Log a session you didn't time">
           <div style={{ fontSize: 11, color: COLORS.faint, marginBottom: 10 }}>Studied offline, with a physical clock, or forgot to start the timer? Add it here — it counts the same as a tracked session.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1697,7 +1781,7 @@ function FloatingTimer({ timer, appRef, activeTab, setTab, onPause, onResume, on
         <>
           <div style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 600, minWidth: 62 }}>{fmtClock(remaining)}</div>
           <div style={{ fontSize: 10, color: COLORS.faint, maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
-          <div style={{ display: "flex", gap: 4 }} onMouseDown={e => e.stopPropagation()}>
+          <div style={{ display: "flex", gap: 4 }} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
             {timer.running ? (
               <button onClick={onPause} style={iconBtnStyle()}><Pause size={12} /></button>
             ) : (
@@ -1882,7 +1966,7 @@ function RecallDeck({ cards, setCards, profile }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+      <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         <Stat label="Cards in deck" value={cards.length} />
         <Stat label="Due today" value={dueCards.length} />
         <Stat label="Mastered (30d+ interval)" value={cards.filter(c => c.interval >= 30).length} />
@@ -1968,14 +2052,16 @@ function Mocks({ mocks, setMocks, profile }) {
   const recentTrend = mocks.length >= 2 ? Math.round((mocks[mocks.length - 1].max ? (mocks[mocks.length - 1].total / mocks[mocks.length - 1].max) * 100 : 0)) - Math.round((mocks[mocks.length - 2].max ? (mocks[mocks.length - 2].total / mocks[mocks.length - 2].max) * 100 : 0)) : 0;
 
   const subjectAvg = profile.subjects.map(sub => {
-    const scores = mocks.map(m => m.subjectScores.find(s => s.subject === sub)).filter(Boolean);
+    // Guard against mocks whose subjectScores is missing (older exports /
+    // hand-edited JSON) — a bare `.find` on undefined would crash the tab.
+    const scores = mocks.map(m => (m.subjectScores || []).find(s => s.subject === sub)).filter(Boolean);
     const pct = scores.length ? Math.round(scores.reduce((a, s) => a + (s.max ? (s.obtained / s.max) * 100 : 0), 0) / scores.length) : 0;
     return { subject: sub, pct };
   });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
         <Stat label="Tests taken" value={mocks.length} />
         <Stat label="Avg score" value={`${avg}%`} />
         <Stat label="Best score" value={`${best}%`} />
@@ -1995,7 +2081,7 @@ function Mocks({ mocks, setMocks, profile }) {
       </Card>
 
       <Card title="Subject-wise average">
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${profile.subjects.length}, 1fr)`, gap: 10 }}>
+        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${profile.subjects.length}, 1fr)`, gap: 10 }}>
           {subjectAvg.map(s => (
             <div key={s.subject} style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 6 }}>{s.subject}</div>
@@ -2062,7 +2148,7 @@ function ErrorLog({ errors, setErrors, mocks }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Card title="Log a mistake">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Input placeholder="Topic / chapter" value={topic} onChange={e => setTopic(e.target.value)} />
@@ -2150,8 +2236,18 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
 
   const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
   const board = [
-    { code: profile.code, name: `${profile.name} (you)`, minutes: Math.round(todayMin), streak: computeStreak(sessions) },
-    ...peers.map(c => peerData[c] ? { code: c, name: peerData[c].name, minutes: peerData[c].minutes, streak: peerData[c].streak } : { code: c, name: "Pending sync…", minutes: 0, streak: 0 }),
+    { code: profile.code, name: `${profile.name} (you)`, minutes: Math.round(todayMin), streak: computeStreak(sessions), stale: false },
+    ...peers.map(c => {
+      const d = peerData[c];
+      if (!d) return { code: c, name: "Pending sync…", minutes: 0, streak: 0, stale: false };
+      // Entries are published at most when the peer opens the app; after
+      // midnight their row still holds yesterday's numbers. Report 0 for
+      // a peer who hasn't synced today rather than showing yesterday's
+      // minutes as if they were today's, and flag it so the board reads
+      // honestly.
+      const stale = d.date !== todayStr();
+      return { code: c, name: d.name, minutes: stale ? 0 : (d.minutes || 0), streak: d.streak || 0, stale };
+    }),
   ].sort((a, b) => b.minutes - a.minutes);
 
   return (
@@ -2177,7 +2273,10 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
         {board.map((p, i) => (
           <div key={p.code} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
             <div style={{ width: 20, fontFamily: FONTS.mono, color: i === 0 ? COLORS.warn : COLORS.faint, fontSize: 13 }}>{i === 0 ? <Trophy size={14} color={COLORS.warn} /> : `#${i + 1}`}</div>
-            <div style={{ flex: 1, fontSize: 13 }}>{p.name}</div>
+            <div style={{ flex: 1, fontSize: 13 }}>
+              {p.name}
+              {p.stale && <span style={{ fontSize: 10, color: COLORS.faint, marginLeft: 6 }}>not synced today</span>}
+            </div>
             <div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 3 }}><Flame size={12} color={COLORS.warn} /> {p.streak}d</div>
             <div style={{ fontFamily: FONTS.mono, fontSize: 13, color: COLORS.ink, minWidth: 60, textAlign: "right" }}>{fmtMin(p.minutes)}</div>
             {p.code !== profile.code && <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(p.code)} />}

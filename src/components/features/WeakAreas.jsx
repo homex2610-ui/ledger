@@ -51,11 +51,21 @@ export function computeWeakAreas({ syllabus, mocks, errors }) {
       : null;
   });
 
-  const errorCountByTopic = {};
-  errors.forEach(e => {
-    const key = e.topic.trim().toLowerCase();
-    errorCountByTopic[key] = (errorCountByTopic[key] || 0) + 1;
-  });
+  // Error topics are free-form ("Kinematics — rotation", "got confused in
+  // NLM"), so exact-string equality against chapter names almost never
+  // matches. Count an error against a chapter when either contains the
+  // other, case-insensitively. This over-counts slightly on very short
+  // names ("Atoms" matching "Atomic structure" is arguably a hit anyway),
+  // but it makes the penalty signal real instead of dead.
+  const countErrorsForChapter = (name) => {
+    const lcName = name.trim().toLowerCase();
+    if (!lcName) return 0;
+    return errors.reduce((count, e) => {
+      const lcTopic = (e.topic || "").trim().toLowerCase();
+      if (!lcTopic) return count;
+      return count + (lcTopic.includes(lcName) || lcName.includes(lcTopic) ? 1 : 0);
+    }, 0);
+  };
 
   const rows = [];
   Object.entries(syllabus).forEach(([subject, chapters]) => {
@@ -64,7 +74,7 @@ export function computeWeakAreas({ syllabus, mocks, errors }) {
       // "todo") — an untouched chapter isn't "weak", it's just not started,
       // and belongs on the Coverage Map / backlog view instead.
       if (c.status === "todo") return;
-      const errorCount = errorCountByTopic[c.name.trim().toLowerCase()] || 0;
+      const errorCount = countErrorsForChapter(c.name);
       const score = scoreChapter(c, subjectMockPct[subject], errorCount);
       rows.push({ subject, name: c.name, score, pyq: c.pyq, module: c.module, errorCount, mockPct: subjectMockPct[subject] });
     });
