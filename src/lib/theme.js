@@ -15,7 +15,7 @@
 
 export const FONT_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&display=swap');";
 
-export const COLORS = { bg: "", panel: "", panel2: "", border: "", ink: "", inkSoft: "", inkDim: "", text: "", dim: "", faint: "", done: "", mastered: "", warn: "", danger: "" };
+export const COLORS = { bg: "", panel: "", panel2: "", border: "", ink: "", inkSoft: "", inkDim: "", inkGlow: "", text: "", dim: "", faint: "", done: "", mastered: "", warn: "", danger: "", shadow: "", shadowStrong: "" };
 export const FONTS = { display: "'Fraunces', serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" };
 
 // Each theme is a full palette, not just an accent color swapped in — the
@@ -66,12 +66,12 @@ export const FONT_PRESETS = {
   newsreader: { display: "'Newsreader', serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" },
 };
 
-function hexToRgba(hex, a) {
+export function hexToRgba(hex, a) {
   const h = (hex || "#C98A3E").replace("#", "");
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${a})`;
 }
-function darken(hex, amt) {
+export function darken(hex, amt) {
   const h = (hex || "#C98A3E").replace("#", "");
   const r = Math.max(0, parseInt(h.slice(0, 2), 16) - amt), g = Math.max(0, parseInt(h.slice(2, 4), 16) - amt), b = Math.max(0, parseInt(h.slice(4, 6), 16) - amt);
   return `#${[r, g, b].map(v => v.toString(16).padStart(2, "0")).join("")}`;
@@ -86,6 +86,15 @@ export function applyTheme(themeId) {
     ink: t.accent, mastered: t.accent,
     inkSoft: hexToRgba(t.accent, isLight ? 0.14 : 0.16),
     inkDim: darken(t.accent, 55),
+    // inkGlow: a slightly stronger accent wash used for signature moments
+    // (hero panels, active states) — distinct from the very faint inkSoft
+    // used for backgrounds behind icons/badges.
+    inkGlow: hexToRgba(t.accent, isLight ? 0.22 : 0.28),
+    // Shadows are tuned per-theme rather than a flat black: light themes
+    // (parchment) get a soft warm-dark shadow so panels don't look like
+    // they're floating over paper; dark themes get true black at low alpha.
+    shadow: isLight ? "rgba(60,45,20,0.10)" : "rgba(0,0,0,0.28)",
+    shadowStrong: isLight ? "rgba(60,45,20,0.16)" : "rgba(0,0,0,0.45)",
   });
   const f = FONT_PRESETS[t.font] || FONT_PRESETS.ledger;
   Object.assign(FONTS, f);
@@ -113,8 +122,48 @@ html, body { overflow-x: hidden; width: 100%; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 4px; }
 
+/* Keyboard focus is always visible, regardless of theme */
+:focus-visible { outline: 2px solid ${COLORS.ink}; outline-offset: 2px; border-radius: 4px; }
+
+/* Ambient depth behind the main column — a very faint accent glow anchored
+   top-left, so panels read as sitting in a lit room instead of on a flat
+   fill. Kept subtle on purpose: this should be felt, not seen. */
+.app-main {
+  background-image:
+    radial-gradient(720px 420px at 8% -8%, ${hexToRgba(COLORS.ink, 0.07)}, transparent 60%),
+    linear-gradient(${COLORS.border}0e 1px, transparent 1px);
+  background-size: 100% 100%, 100% 30px;
+  background-position: 0 0, 0 8px;
+  background-repeat: no-repeat, repeat;
+}
+
 .lg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--lg-min, 140px), 1fr)); }
 .lg-nav-item span { white-space: nowrap; }
+
+/* Card: soft gradient body + lifted shadow instead of a flat fill, so
+   surfaces read with real depth against the ambient background above. */
+.lg-card {
+  background: linear-gradient(165deg, ${COLORS.panel}, ${COLORS.panel2});
+  box-shadow: 0 1px 0 ${hexToRgba("#ffffff", 0.02)} inset, 0 10px 24px -14px ${COLORS.shadowStrong}, 0 1px 3px ${COLORS.shadow};
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+.lg-card-interactive { cursor: pointer; }
+.lg-card-interactive:hover {
+  border-color: ${hexToRgba(COLORS.ink, 0.4)};
+  box-shadow: 0 1px 0 ${hexToRgba("#ffffff", 0.02)} inset, 0 16px 32px -16px ${COLORS.shadowStrong}, 0 1px 3px ${COLORS.shadow};
+  transform: translateY(-1px);
+}
+
+.lg-btn { transition: filter 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, transform 0.1s ease; }
+.lg-btn:active { transform: translateY(1px); }
+.lg-btn-ink { background: linear-gradient(165deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)}); box-shadow: 0 6px 16px -8px ${hexToRgba(COLORS.ink, 0.55)}; }
+.lg-btn-ink:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 8px 20px -8px ${hexToRgba(COLORS.ink, 0.7)}; }
+.lg-btn-ghost:hover:not(:disabled) { border-color: ${hexToRgba(COLORS.ink, 0.45)}; background: ${hexToRgba(COLORS.ink, 0.06)}; }
+.lg-btn-danger:hover:not(:disabled) { background: ${hexToRgba(COLORS.danger, 0.1)}; }
+.lg-btn-subtle:hover:not(:disabled) { filter: brightness(1.1); }
+
+.lg-row { transition: background 0.15s ease; }
+.lg-row:hover { background: ${hexToRgba(COLORS.ink, 0.045)}; }
 
 @media (max-width: 980px) {
   .lg-shell { flex-direction: column !important; max-width: 100% !important; border-radius: 0 !important; min-height: 100vh !important; }
