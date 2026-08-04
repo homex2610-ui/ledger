@@ -42,11 +42,27 @@ Push this folder to a GitHub repo, then:
 3. Deploy. You'll get a `your-project.vercel.app` URL immediately.
 4. In Supabase, go to **Authentication → URL Configuration** and add your
    Vercel URL (and later your custom domain) to **Redirect URLs**, or the
-   magic-link email will bounce people back to `localhost`.
+   magic-link email will bounce people back to `localhost`. Also add
+   `VITE_REDIRECT_URL` to your Vercel env vars (set to the deployed URL) so
+   the redirect target is explicit rather than derived from whatever origin
+   the link is clicked on.
 5. (Optional) Buy a domain and point it at the Vercel project under
    **Settings → Domains**.
 
 Netlify works the same way if you prefer it over Vercel.
+
+### Discord sign-in (optional)
+
+The sign-in screen has a "Continue with Discord" button. To enable it:
+
+1. In Supabase, go to **Authentication → Providers → Discord** and enable it.
+2. Create an app at the [Discord Developer Portal](https://discord.com/developers/applications)
+   → OAuth2, copy its **Client ID** and **Client Secret** into the Supabase
+   provider settings.
+3. In the Discord app's OAuth2 settings, add the redirect URI Supabase shows
+   you (something like `https://<project-ref>.supabase.co/auth/v1/callback`).
+4. Until Discord is enabled in Supabase, the button shows an error message
+   when clicked instead of crashing — no code change needed once it's set up.
 
 ## 4. A few things to know before real users show up
 

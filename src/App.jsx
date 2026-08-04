@@ -13,6 +13,8 @@ import {
 import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import Sidebar from "./components/layout/Sidebar";
+import Header from "./components/layout/Header";
+import ActivePage from "./components/layout/ActivePage";
 import WeakAreas from "./components/features/WeakAreas";
 
 const DEFAULT_SYLLABUS = {
@@ -405,7 +407,7 @@ function Workspace({ session }) {
       // and leaking one per chime forever is wasteful.
       const ctx = window.__ledgerAudioCtx || null;
       if (!ctx) return;
-      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      if (ctx.state === "suspended") ctx.resume().catch(() => { });
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
@@ -423,11 +425,11 @@ function Workspace({ session }) {
       // No-op if we already own a context, so repeated Start clicks don't
       // leak new contexts.
       if (window.__ledgerAudioCtx) {
-        if (window.__ledgerAudioCtx.state === "suspended") window.__ledgerAudioCtx.resume().catch(() => {});
+        if (window.__ledgerAudioCtx.state === "suspended") window.__ledgerAudioCtx.resume().catch(() => { });
         return;
       }
       const ctx = new AudioContext();
-      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      if (ctx.state === "suspended") ctx.resume().catch(() => { });
       window.__ledgerAudioCtx = ctx;
     } catch (e) { /* ignore */ }
   };
@@ -647,12 +649,13 @@ function Workspace({ session }) {
   const timer = { mode: timerMode, running: timerRunning, elapsed: timerElapsed, subject: timerSubject, pomoMinutes, pomoTarget, phase: pomoPhase, phaseTarget, breakTarget, cycle: pomoCycle, completedFlash };
 
   return (
-    <div ref={appRef} className="lg-shell" style={{ background: COLORS.bg, fontFamily: FONTS.body, color: COLORS.text, borderRadius: 14, position: "relative", overflow: "visible", border: `1px solid ${COLORS.border}`, display: "flex", minHeight: 640, maxWidth: 1180, margin: "0 auto" }}>
+    <div ref={appRef} className="app-shell" style={{ border: `1px solid ${COLORS.border}` }}>
       <style>{globalCss()}</style>
 
       <Sidebar tab={tab} setTab={setTab} profile={profile} onSignOut={() => supabase.auth.signOut()} />
 
-      <div className="lg-main" style={{ flex: 1, padding: "22px 26px", overflowY: "auto", maxHeight: 900, borderTopRightRadius: 14, borderBottomRightRadius: 14, backgroundImage: `linear-gradient(${COLORS.border}2e 1px, transparent 1px)`, backgroundSize: "100% 30px", backgroundPositionY: "8px" }}>
+      <div className="app-main">
+        <Header />
         <TopBar profile={profile} sessions={sessions} tasks={tasks} />
         {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} unlockedBadges={unlockedBadges} setTab={setTab} />}
         {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} />}
@@ -1845,69 +1848,69 @@ function Tasks({ tasks, setTasks, profile, dpp, setDpp }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-    {missed.length > 0 && (
-      <Card title={`Missed from earlier days (${missed.length})`} right={<Btn variant="ghost" onClick={rescheduleAll}>Move all to today</Btn>}>
-        {missed.map(t => (
-          <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-            <span style={{ fontSize: 10, color: COLORS.faint }}>{t.date}</span>
-            <div style={{ flex: 1, color: COLORS.dim }}>{t.text}</div>
-            <div style={{ fontSize: 10, color: COLORS.faint, background: COLORS.panel2, padding: "3px 8px", borderRadius: 5 }}>{t.subject}</div>
-            <Btn variant="ghost" onClick={() => rescheduleToday(t.id)}>Move to today</Btn>
-            <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(t.id)} />
-          </div>
-        ))}
-      </Card>
-    )}
-    <Card title="Daily question practice" right={<div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 4 }}><Flame size={12} color={COLORS.warn} /> {dppStreak}d streak</div>}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.dim, marginBottom: 6 }}>
-            <span>{record.solved} / {record.target} questions</span>
-            <span style={{ color: COLORS.ink, fontFamily: FONTS.mono }}>{dppPct}%</span>
-          </div>
-          <div style={{ height: 8, background: COLORS.panel2, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ width: `${dppPct}%`, height: "100%", background: dppPct >= 100 ? COLORS.done : COLORS.ink, transition: "width 0.2s" }} />
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <Btn variant="subtle" onClick={() => bumpSolved(-1)}>-1</Btn>
-          <Btn variant="ink" onClick={() => bumpSolved(1)}>+1</Btn>
-          <Btn variant="ink" onClick={() => bumpSolved(5)}>+5</Btn>
-          <Input value={customAdd} onChange={e => setCustomAdd(e.target.value)} placeholder="n" type="number" style={{ width: 56 }} />
-          <Btn variant="ghost" onClick={() => { const n = parseInt(customAdd); if (!isNaN(n)) bumpSolved(n); setCustomAdd(""); }}>Add</Btn>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label style={{ fontSize: 11, color: COLORS.faint }}>Target</label>
-          <Input type="number" value={record.target} onChange={e => updateDpp({ target: Math.max(1, parseInt(e.target.value) || 1) })} style={{ width: 64 }} />
-        </div>
-      </div>
-    </Card>
-    <Card title={`Today — ${doneN}/${todayTasks.length} complete`} right={<div style={{ fontFamily: FONTS.mono, fontSize: 13, color: COLORS.ink }}>{pct}%</div>}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <Input value={text} onChange={e => setText(e.target.value)} placeholder="What are you tackling today?" onKeyDown={e => e.key === "Enter" && add()} />
-        <Select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: 140 }}>
-          {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-        </Select>
-        <Select value={priority} onChange={e => setPriority(e.target.value)} style={{ width: 110 }}>
-          {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-        </Select>
-        <Btn variant="ink" onClick={add}><Plus size={14} /></Btn>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {todayTasks.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No targets yet. Add one above.</div>}
-        {todayTasks.map(t => (
-          <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
-            <div onClick={() => toggle(t.id)} style={{ cursor: "pointer" }}>
-              {t.done ? <CheckCircle2 size={16} color={COLORS.done} /> : <Circle size={16} color={COLORS.faint} />}
+      {missed.length > 0 && (
+        <Card title={`Missed from earlier days (${missed.length})`} right={<Btn variant="ghost" onClick={rescheduleAll}>Move all to today</Btn>}>
+          {missed.map(t => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+              <span style={{ fontSize: 10, color: COLORS.faint }}>{t.date}</span>
+              <div style={{ flex: 1, color: COLORS.dim }}>{t.text}</div>
+              <div style={{ fontSize: 10, color: COLORS.faint, background: COLORS.panel2, padding: "3px 8px", borderRadius: 5 }}>{t.subject}</div>
+              <Btn variant="ghost" onClick={() => rescheduleToday(t.id)}>Move to today</Btn>
+              <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(t.id)} />
             </div>
-            <div title={`${PRIORITY_LABEL[t.priority || "medium"]} priority`} style={{ width: 7, height: 7, borderRadius: "50%", background: PRIORITY_COLORS[t.priority || "medium"], flexShrink: 0 }} />
-            <div style={{ flex: 1, fontSize: 13, textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</div>
-            <div style={{ fontSize: 10, color: COLORS.faint, background: COLORS.panel2, padding: "3px 8px", borderRadius: 5 }}>{t.subject}</div>
-            <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(t.id)} />
+          ))}
+        </Card>
+      )}
+      <Card title="Daily question practice" right={<div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 4 }}><Flame size={12} color={COLORS.warn} /> {dppStreak}d streak</div>}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.dim, marginBottom: 6 }}>
+              <span>{record.solved} / {record.target} questions</span>
+              <span style={{ color: COLORS.ink, fontFamily: FONTS.mono }}>{dppPct}%</span>
+            </div>
+            <div style={{ height: 8, background: COLORS.panel2, borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ width: `${dppPct}%`, height: "100%", background: dppPct >= 100 ? COLORS.done : COLORS.ink, transition: "width 0.2s" }} />
+            </div>
           </div>
-        ))}
-      </div>
-    </Card>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <Btn variant="subtle" onClick={() => bumpSolved(-1)}>-1</Btn>
+            <Btn variant="ink" onClick={() => bumpSolved(1)}>+1</Btn>
+            <Btn variant="ink" onClick={() => bumpSolved(5)}>+5</Btn>
+            <Input value={customAdd} onChange={e => setCustomAdd(e.target.value)} placeholder="n" type="number" style={{ width: 56 }} />
+            <Btn variant="ghost" onClick={() => { const n = parseInt(customAdd); if (!isNaN(n)) bumpSolved(n); setCustomAdd(""); }}>Add</Btn>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <label style={{ fontSize: 11, color: COLORS.faint }}>Target</label>
+            <Input type="number" value={record.target} onChange={e => updateDpp({ target: Math.max(1, parseInt(e.target.value) || 1) })} style={{ width: 64 }} />
+          </div>
+        </div>
+      </Card>
+      <Card title={`Today — ${doneN}/${todayTasks.length} complete`} right={<div style={{ fontFamily: FONTS.mono, fontSize: 13, color: COLORS.ink }}>{pct}%</div>}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <Input value={text} onChange={e => setText(e.target.value)} placeholder="What are you tackling today?" onKeyDown={e => e.key === "Enter" && add()} />
+          <Select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: 140 }}>
+            {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+          </Select>
+          <Select value={priority} onChange={e => setPriority(e.target.value)} style={{ width: 110 }}>
+            {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+          </Select>
+          <Btn variant="ink" onClick={add}><Plus size={14} /></Btn>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {todayTasks.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No targets yet. Add one above.</div>}
+          {todayTasks.map(t => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <div onClick={() => toggle(t.id)} style={{ cursor: "pointer" }}>
+                {t.done ? <CheckCircle2 size={16} color={COLORS.done} /> : <Circle size={16} color={COLORS.faint} />}
+              </div>
+              <div title={`${PRIORITY_LABEL[t.priority || "medium"]} priority`} style={{ width: 7, height: 7, borderRadius: "50%", background: PRIORITY_COLORS[t.priority || "medium"], flexShrink: 0 }} />
+              <div style={{ flex: 1, fontSize: 13, textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</div>
+              <div style={{ fontSize: 10, color: COLORS.faint, background: COLORS.panel2, padding: "3px 8px", borderRadius: 5 }}>{t.subject}</div>
+              <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(t.id)} />
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -2428,26 +2431,40 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 }
 
 // ---------------- AUTH ----------------
-// Gate the whole Workspace behind a Supabase session. Uses magic-link email
-// sign-in — no password to forget, no OAuth app to configure before you can
-// test locally. Swap in supabase.auth.signInWithOAuth({ provider: "google" })
-// later if you want a Google button too.
+// Gate the whole Workspace behind a Supabase session. Two paths: email
+// magic-link, or Discord OAuth. The post-auth redirect is configurable via
+// VITE_REDIRECT_URL (set it to your deployed URL so magic links and OAuth
+// return to the live site, not localhost). Falls back to the current origin.
 function AuthScreen() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [discordLoading, setDiscordLoading] = useState(false);
+
+  const redirectTo = import.meta.env.VITE_REDIRECT_URL || window.location.origin;
 
   const sendLink = async () => {
     if (!email.trim()) return;
     setLoading(true); setError("");
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: redirectTo },
     });
     setLoading(false);
     if (error) setError(error.message);
     else setSent(true);
+  };
+
+  const signInWithDiscord = async () => {
+    setDiscordLoading(true); setError("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "discord",
+      options: { redirectTo },
+    });
+    setDiscordLoading(false);
+    // A successful OAuth call navigates away — an error only returns here.
+    if (error) setError(error.message);
   };
 
   return (
@@ -2466,6 +2483,22 @@ function AuthScreen() {
           </div>
         ) : (
           <>
+            <button onClick={signInWithDiscord} disabled={discordLoading} style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              padding: "10px 14px", borderRadius: 7, cursor: discordLoading ? "not-allowed" : "pointer",
+              background: COLORS.panel2, border: `1px solid ${COLORS.border}`, color: COLORS.text,
+              fontFamily: FONTS.body, fontSize: 13, fontWeight: 500, opacity: discordLoading ? 0.6 : 1,
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.44.87-.61 1.25a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.25.08.08 0 0 0-.08-.04 19.74 19.74 0 0 0-4.88 1.52.07.07 0 0 0-.04.05C1.72 8.13 1.06 11.8 1.38 15.43a.08.08 0 0 0 .03.05 19.9 19.9 0 0 0 6 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.89.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.92 1.8 8.16 1.8 12.04 0a.07.07 0 0 1 .08.01c.12.1.25.2.38.29a.08.08 0 0 1 0 .13c-.6.35-1.22.64-1.87.89a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6.01-3.03.08.08 0 0 0 .03-.05c.38-4.21-.63-7.85-2.67-11.01a.06.06 0 0 0-.03-.05ZM8.99 13.28c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.95 2.4-2.15 2.4Zm6.02 0c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.94 2.4-2.15 2.4Z" />
+              </svg>
+              {discordLoading ? "Redirecting to Discord…" : "Continue with Discord"}
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0" }}>
+              <div style={{ flex: 1, height: 1, background: COLORS.border }} />
+              <div style={{ fontSize: 11, color: COLORS.faint }}>or</div>
+              <div style={{ flex: 1, height: 1, background: COLORS.border }} />
+            </div>
             <div style={{ fontSize: 13, color: COLORS.dim, marginBottom: 16 }}>Sign in with your email — we'll send a one-click link, no password needed.</div>
             <Input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendLink()} />
             {error && <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 8 }}>{error}</div>}
