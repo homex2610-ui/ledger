@@ -10,7 +10,7 @@ import {
   ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
   CheckCircle2, Star, BookMarked, NotebookPen, Layers, Lock, Zap
 } from "lucide-react";
-import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss } from "./lib/theme";
+import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss, RANK_COLORS, hexToRgba, darken } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
@@ -2253,6 +2253,22 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
     }),
   ].sort((a, b) => b.minutes - a.minutes);
 
+  // Ink-fill bars read relative to today's leader, not a fabricated "goal" —
+  // there's no target-minutes field in the data model, so the honest
+  // denominator is board[0].minutes (0 when nobody's logged anything yet).
+  const leaderMinutes = board[0]?.minutes || 0;
+
+  // Derives a two-letter stamp from a display name for the rank avatar.
+  // Names can carry a "(you)" suffix or be the placeholder "Pending sync…" —
+  // stripped/first-two-words logic keeps both cases readable instead of
+  // producing junk like "A(" from the paren.
+  const initialsOf = (name) => {
+    const clean = name.replace(/\(.*?\)/g, "").trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Card title="Your identity code">
@@ -2273,18 +2289,84 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
       </Card>
 
       <Card title="Leaderboard — today's focus time" right={<div style={{ fontSize: 10, color: COLORS.faint }}>Resets at midnight</div>}>
-        {board.map((p, i) => (
-          <div key={p.code} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
-            <div style={{ width: 20, fontFamily: FONTS.mono, color: i === 0 ? COLORS.warn : COLORS.faint, fontSize: 13 }}>{i === 0 ? <Trophy size={14} color={COLORS.warn} /> : `#${i + 1}`}</div>
-            <div style={{ flex: 1, fontSize: 13 }}>
-              {p.name}
-              {p.stale && <span style={{ fontSize: 10, color: COLORS.faint, marginLeft: 6 }}>not synced today</span>}
-            </div>
-            <div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 3 }}><Flame size={12} color={COLORS.warn} /> {p.streak}d</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: 13, color: COLORS.ink, minWidth: 60, textAlign: "right" }}>{fmtMin(p.minutes)}</div>
-            {p.code !== profile.code && <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(p.code)} />}
-          </div>
-        ))}
+        <div className="lg-card" style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+          {board.map((p, i) => {
+            const rank = i + 1;
+            const isTop3 = rank <= 3;
+            const stampColor = isTop3 ? RANK_COLORS[i] : COLORS.faint;
+            const isSelf = p.code === profile.code;
+            const pct = leaderMinutes > 0 ? Math.min(100, Math.round((p.minutes / leaderMinutes) * 100)) : 0;
+            return (
+              <div
+                key={p.code}
+                className="lg-row"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "34px 1fr auto 70px 24px",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderBottom: i < board.length - 1 ? `1px solid ${COLORS.border}` : "none",
+                  position: "relative",
+                  background: isSelf ? hexToRgba(COLORS.ink, 0.08) : "transparent",
+                }}
+              >
+                {isSelf && (
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: COLORS.ink }} />
+                )}
+                <div
+                  style={{
+                    width: 30, height: 30, borderRadius: "50%",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: isTop3 ? FONTS.display : FONTS.mono,
+                    fontWeight: isTop3 ? 700 : 500,
+                    fontSize: isTop3 ? 13 : 11,
+                    color: stampColor,
+                    border: `1.5px solid ${stampColor}`,
+                    boxShadow: isTop3 ? `0 0 0 3px ${hexToRgba(stampColor, 0.12)}` : "none",
+                  }}
+                >
+                  {isTop3 ? rank : `#${rank}`}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontFamily: FONTS.display, fontWeight: 600, fontSize: 12, color: COLORS.bg,
+                      background: isSelf
+                        ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})`
+                        : `linear-gradient(150deg, ${COLORS.faint}, ${darken(COLORS.faint, 20)})`,
+                    }}
+                  >
+                    {initialsOf(p.name)}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.name}
+                    </div>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.faint, display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
+                      {p.streak > 0 && <><Flame size={10} color={COLORS.warn} /> {p.streak}d</>}
+                      {p.stale && <span style={{ marginLeft: p.streak > 0 ? 6 : 0 }}>not synced today</span>}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ width: 96, display: leaderMinutes > 0 ? "block" : "none" }}>
+                  <div style={{ height: 4, background: COLORS.border, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg, ${darken(COLORS.ink, 30)}, ${COLORS.ink})`, borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: COLORS.faint, marginTop: 3 }}>{pct}% of leader</div>
+                </div>
+                <div style={{ fontFamily: FONTS.mono, fontSize: 14, fontWeight: 600, color: COLORS.text, textAlign: "right" }}>
+                  {fmtMin(p.minutes)}
+                </div>
+                {!isSelf ? (
+                  <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(p.code)} />
+                ) : <span />}
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       <Card title="Study groups">
@@ -2299,13 +2381,24 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
         {joinError && <div style={{ fontSize: 11, color: COLORS.danger }}>{joinError}</div>}
         {Object.keys(groupDefs).length === 0 ? (
           <div style={{ fontSize: 12, color: COLORS.faint }}>Not in any groups yet — create one or join with a code.</div>
-        ) : Object.values(groupDefs).map(g => (
-          <div key={g.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-            <div style={{ flex: 1 }}>{g.name}</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.faint }}>{g.code}</div>
-            <Btn variant="danger" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => onLeaveGroup(g.code)}>Leave</Btn>
+        ) : (
+          <div className="lg-card" style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+            {Object.values(groupDefs).map((g, i, arr) => (
+              <div
+                key={g.code}
+                className="lg-row"
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: i < arr.length - 1 ? `1px solid ${COLORS.border}` : "none" }}
+              >
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Award size={14} color={COLORS.ink} />
+                </div>
+                <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>{g.name}</div>
+                <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.faint, letterSpacing: "0.05em" }}>{g.code}</div>
+                <Btn variant="danger" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => onLeaveGroup(g.code)}>Leave</Btn>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </Card>
     </div>
   );
