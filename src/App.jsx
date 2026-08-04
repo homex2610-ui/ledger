@@ -2435,7 +2435,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 // magic-link, or Discord OAuth. The post-auth redirect is configurable via
 // VITE_REDIRECT_URL (set it to your deployed URL so magic links and OAuth
 // return to the live site, not localhost). Falls back to the current origin.
-function AuthScreen() {
+function AuthScreen({ onDemo }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -2505,6 +2505,18 @@ function AuthScreen() {
             <Btn variant="ink" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={loading} onClick={sendLink}>
               {loading ? "Sending…" : "Send sign-in link"}
             </Btn>
+            {onDemo && (
+              <button
+                onClick={onDemo}
+                style={{
+                  width: "100%", marginTop: 12, padding: "8px 12px", background: "transparent",
+                  border: `1px dashed ${COLORS.border}`, borderRadius: 7, color: COLORS.dim,
+                  fontSize: 12, cursor: "pointer", fontFamily: FONTS.body,
+                }}
+              >
+                Continue as Guest / Demo Mode
+              </button>
+            )}
           </>
         )}
       </div>
@@ -2524,6 +2536,6 @@ export default function AuthGate() {
   if (session === undefined) {
     return <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body }}>Loading…</div>;
   }
-  if (!session) return <AuthScreen />;
+  if (!session) return <AuthScreen onDemo={() => setSession({ user: { id: "demo-user", email: "demo@ledger.app" } })} />;
   return <Workspace session={session} />;
 }
