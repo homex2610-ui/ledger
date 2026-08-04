@@ -10,102 +10,10 @@ import {
   Check, ChevronRight, ChevronLeft, Download, X, Copy, Award, TrendingUp, Circle, CircleDot,
   CheckCircle2, Star, BookMarked, NotebookPen, ListChecks, CalendarDays, Layers, Lock, Zap
 } from "lucide-react";
-
-const FONT_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&display=swap');";
-
-// COLORS/FONTS are shared, mutable objects read fresh at render time by every
-// component below (they read COLORS.ink, FONTS.display, etc directly rather
-// than importing a static value). applyTheme() rewrites their contents in
-// place; because nothing captures a stale reference in a closure, the normal
-// re-render triggered by changing settings.theme is enough to repaint the
-// whole app — no context provider or prop drilling required.
-const COLORS = { bg: "", panel: "", panel2: "", border: "", ink: "", inkSoft: "", inkDim: "", text: "", dim: "", faint: "", done: "", mastered: "", warn: "", danger: "" };
-const FONTS = { display: "'Fraunces', serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" };
-
-// Each theme is a full palette, not just an accent color swapped in — the
-// background, panel depth, and ink color all shift together so switching
-// actually reads as a different room, not the same room with a new lamp.
-const THEME_PRESETS = {
-  ledger: {
-    label: "Ledger", swatch: "#C98A3E", font: "ledger",
-    bg: "#121110", panel: "#1B1917", panel2: "#221F1B", border: "#332F27",
-    text: "#F0EDE6", dim: "#A39C8C", faint: "#5F5A4E",
-    done: "#6FA287", warn: "#C1592F", danger: "#C1443D", accent: "#C98A3E",
-  },
-  midnight: {
-    label: "Midnight", swatch: "#5B8CFF", font: "grotesk",
-    bg: "#0A0D14", panel: "#111624", panel2: "#161C2E", border: "#232B42",
-    text: "#E8ECF7", dim: "#8B93AC", faint: "#4C5470",
-    done: "#3FBF8A", warn: "#E8A23D", danger: "#F0665F", accent: "#5B8CFF",
-  },
-  parchment: {
-    label: "Parchment", swatch: "#966B3C", font: "newsreader",
-    bg: "#F2ECDD", panel: "#FBF8F0", panel2: "#EDE4CE", border: "#D9CBA5",
-    text: "#2A2318", dim: "#6B5F45", faint: "#A5977A",
-    done: "#3F7D50", warn: "#A96A16", danger: "#B23B30", accent: "#966B3C",
-  },
-  forest: {
-    label: "Forest", swatch: "#52B788", font: "ledger",
-    bg: "#0B1512", panel: "#12201A", panel2: "#182B22", border: "#243D31",
-    text: "#E7F2EB", dim: "#8FAF9F", faint: "#4A6459",
-    done: "#52B788", warn: "#D9A441", danger: "#E0645A", accent: "#52B788",
-  },
-  rosequartz: {
-    label: "Rose Quartz", swatch: "#E88DA0", font: "newsreader",
-    bg: "#1A1216", panel: "#241A20", panel2: "#2E1F27", border: "#432F3B",
-    text: "#F6E9EE", dim: "#B593A0", faint: "#6B4E5B",
-    done: "#7CC6A6", warn: "#E2A857", danger: "#E85D6F", accent: "#E88DA0",
-  },
-  terminal: {
-    label: "Terminal", swatch: "#5EEAD4", font: "grotesk",
-    bg: "#08090A", panel: "#101213", panel2: "#161819", border: "#26292B",
-    text: "#E9EEEC", dim: "#8FA19C", faint: "#4B5957",
-    done: "#5EEAD4", warn: "#E8B23D", danger: "#F0665F", accent: "#5EEAD4",
-  },
-};
-const FONT_PRESETS = {
-  ledger: { display: "'Fraunces', serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" },
-  grotesk: { display: "'Space Grotesk', sans-serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" },
-  newsreader: { display: "'Newsreader', serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" },
-};
-
-function hexToRgba(hex, a) {
-  const h = (hex || "#C98A3E").replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-function darken(hex, amt) {
-  const h = (hex || "#C98A3E").replace("#", "");
-  const r = Math.max(0, parseInt(h.slice(0, 2), 16) - amt), g = Math.max(0, parseInt(h.slice(2, 4), 16) - amt), b = Math.max(0, parseInt(h.slice(4, 6), 16) - amt);
-  return `#${[r, g, b].map(v => v.toString(16).padStart(2, "0")).join("")}`;
-}
-function applyTheme(themeId) {
-  const t = THEME_PRESETS[themeId] || THEME_PRESETS.ledger;
-  const isLight = t.text.toLowerCase() === "#2a2318";
-  Object.assign(COLORS, {
-    bg: t.bg, panel: t.panel, panel2: t.panel2, border: t.border,
-    text: t.text, dim: t.dim, faint: t.faint, done: t.done, warn: t.warn, danger: t.danger,
-    ink: t.accent, mastered: t.accent,
-    inkSoft: hexToRgba(t.accent, isLight ? 0.14 : 0.16),
-    inkDim: darken(t.accent, 55),
-  });
-  const f = FONT_PRESETS[t.font] || FONT_PRESETS.ledger;
-  Object.assign(FONTS, f);
-}
-// Populate COLORS/FONTS immediately with the default theme, so the sign-in
-// screen (which renders before any session — and therefore before Workspace
-// ever calls applyTheme with the user's saved preference) isn't left with
-// blank colors. Workspace re-applies the user's actual theme once settings load.
-applyTheme("ledger");
-
-const uid = () => Math.random().toString(36).slice(2, 10);
-const todayStr = (d = new Date()) => {
-  const dt = new Date(d);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-};
-const daysBetween = (a, b) => Math.ceil((new Date(b) - new Date(a)) / 86400000);
-const genCode = () => Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
-const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
+import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, RANK_COLORS } from "./lib/theme";
+import { uid, todayStr, daysBetween, genCode, fmtMin, addDays } from "./lib/utils";
+import Sidebar from "./components/layout/Sidebar";
+import WeakAreas from "./components/features/WeakAreas";
 
 const DEFAULT_SYLLABUS = {
   Physics: ["Units & Measurements", "Kinematics", "Laws of Motion", "Work, Energy & Power", "System of Particles & Rotational Motion", "Gravitation", "Mechanical Properties of Solids", "Mechanical Properties of Fluids", "Thermal Properties of Matter", "Thermodynamics", "Kinetic Theory of Gases", "Oscillations", "Waves", "Electrostatics", "Current Electricity", "Moving Charges & Magnetism", "Magnetism & Matter", "EM Induction", "Alternating Current", "EM Waves", "Ray Optics", "Wave Optics", "Dual Nature of Radiation & Matter", "Atoms", "Nuclei", "Semiconductor Electronics"],
@@ -130,7 +38,6 @@ const PRIORITY_LABEL = { low: "Low", medium: "Medium", high: "High" };
 const PRIORITY_COLORS = { low: "#6FA287", medium: "#C98A3E", high: "#C1443D" };
 
 const REVISION_INTERVALS = [1, 3, 7, 15, 30, 60];
-const addDays = (dateStr, n) => { const d = new Date(dateStr); d.setDate(d.getDate() + n); return todayStr(d); };
 
 // Curated prerequisite chains — static, not AI-generated. Only default chapters
 // carry dependencies; custom-added chapters have none and are always "unlocked".
@@ -333,19 +240,6 @@ function Select(props) {
   return <select {...props} style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
 }
 
-const NAV = [
-  { id: "dashboard", label: "Overview", icon: Target },
-  { id: "calendar", label: "Month View", icon: CalendarDays },
-  { id: "syllabus", label: "Coverage Map", icon: BookOpen },
-  { id: "cards", label: "Recall Deck", icon: Layers },
-  { id: "timer", label: "Deep Work", icon: TimerIcon },
-  { id: "tasks", label: "Daily Targets", icon: ClipboardList },
-  { id: "mocks", label: "Test Trends", icon: TrendingUp },
-  { id: "errors", label: "Mistake Ledger", icon: AlertTriangle },
-  { id: "peers", label: "Study Circle", icon: Users },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
-];
-
 // Renamed from the default export: this is the actual app, mounted only
 // once a Supabase session exists. See AuthGate below for the login screen
 // and the real default export of this file.
@@ -361,11 +255,84 @@ function Workspace({ session }) {
   const [errors, setErrors] = useState([]);
   const [peers, setPeers] = useState([]);
   const [peerData, setPeerData] = useState({});
+  const [groupDefs, setGroupDefs] = useState({});
   const [dpp, setDpp] = useState([]);
   const [cards, setCards] = useState([]);
+  const [unlockedBadges, setUnlockedBadges] = useState([]);
   const [settings, setSettings] = useState({ theme: "ledger", floatingTimer: true });
   const [floatResetKey, setFloatResetKey] = useState(0);
   const appRef = useRef(null);
+
+  const userId = session?.user?.id || null;
+  const createGroup = useCallback(async (code, name) => {
+    if (!userId || !profile) return null;
+    const { data: group, error: groupError } = await supabase
+      .from("groups")
+      .insert({ code, name, owner_id: userId })
+      .select("code,name,owner_id")
+      .single();
+    if (groupError || !group) return null;
+
+    const { error: memberError } = await supabase
+      .from("group_members")
+      .insert({ group_code: code, user_id: userId, profile_code: profile.code });
+    if (memberError) return null;
+
+    setGroupDefs(prev => ({ ...prev, [code]: group }));
+    return group;
+  }, [userId, profile]);
+
+  const joinGroup = useCallback(async (code) => {
+    if (!userId || !profile) return null;
+    const { data: group, error: groupError } = await supabase
+      .from("groups")
+      .select("code,name,owner_id")
+      .eq("code", code)
+      .single();
+    if (groupError || !group) return null;
+
+    const { error: memberError } = await supabase
+      .from("group_members")
+      .insert({ group_code: code, user_id: userId, profile_code: profile.code });
+    if (memberError) return null;
+
+    setGroupDefs(prev => ({ ...prev, [code]: group }));
+    return group;
+  }, [userId, profile]);
+
+  const leaveGroup = useCallback(async (code) => {
+    if (!userId) return false;
+    const { error } = await supabase
+      .from("group_members")
+      .delete()
+      .match({ group_code: code, user_id: userId });
+    if (!error) {
+      setGroupDefs(prev => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
+    }
+    return !error;
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      const { data: membership, error: memberError } = await supabase.from("group_members").select("group_code").eq("user_id", userId);
+      if (memberError) return;
+      const codes = (membership || []).map(entry => entry.group_code).filter(Boolean);
+      if (codes.length === 0) {
+        setGroupDefs({});
+        return;
+      }
+      const { data: groups, error: groupsError } = await supabase.from("groups").select("code,name,owner_id").in("code", codes);
+      if (groupsError) return;
+      const nextDefs = {};
+      (groups || []).forEach(g => { nextDefs[g.code] = g; });
+      setGroupDefs(nextDefs);
+    })();
+  }, [userId]);
 
   applyTheme(settings.theme);
 
@@ -413,6 +380,16 @@ function Workspace({ session }) {
       o.start();
       o.stop(ctx.currentTime + 0.35);
     } catch (e) { /* audio not available */ }
+  };
+
+  const unlockAudio = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      window.__ledgerAudioCtx = ctx;
+    } catch (e) { /* ignore */ }
   };
 
   useEffect(() => {
@@ -511,12 +488,12 @@ function Workspace({ session }) {
 
   useEffect(() => {
     (async () => {
-      const [p, s, t, se, m, er, pe, dq, cd, st] = await Promise.all([
+      const [p, s, t, se, m, er, pe, dq, cd, ub, st] = await Promise.all([
         load("profile", null), load("syllabus", {}), load("tasks", []),
         load("sessions", []), load("mocks", []), load("errors", []), load("peers", []),
-        load("dpp", []), load("cards", []), load("settings", { theme: "ledger", floatingTimer: true }),
+        load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", { theme: "ledger", floatingTimer: true }),
       ]);
-      setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setSettings(st);
+      setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(st);
       setTimerSubject((p && p.subjects && p.subjects[0]) || null);
       setReady(true);
     })();
@@ -529,9 +506,20 @@ function Workspace({ session }) {
   useEffect(() => { if (ready) save("mocks", mocks); }, [mocks, ready, save]);
   useEffect(() => { if (ready) save("errors", errors); }, [errors, ready, save]);
   useEffect(() => { if (ready) save("peers", peers); }, [peers, ready, save]);
+  useEffect(() => { if (ready) save("unlockedBadges", unlockedBadges); }, [unlockedBadges, ready, save]);
   useEffect(() => { if (ready) save("dpp", dpp); }, [dpp, ready, save]);
   useEffect(() => { if (ready) save("cards", cards); }, [cards, ready, save]);
   useEffect(() => { if (ready) save("settings", settings); }, [settings, ready, save]);
+
+  useEffect(() => {
+    if (!ready) return;
+    setUnlockedBadges(prev => {
+      const current = computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp: dpp || [] }).filter(b => b.unlocked).map(b => b.id);
+      const merged = Array.from(new Set([...prev, ...current]));
+      if (merged.length === prev.length && merged.every(id => prev.includes(id))) return prev;
+      return merged;
+    });
+  }, [ready, sessions, tasks, mocks, syllabus, errors, dpp]);
 
   // publish own leaderboard entry whenever sessions/profile change
   useEffect(() => {
@@ -586,21 +574,23 @@ function Workspace({ session }) {
 
       <div style={{ flex: 1, padding: "22px 26px", overflowY: "auto", maxHeight: 900, borderTopRightRadius: 14, borderBottomRightRadius: 14, backgroundImage: `linear-gradient(${COLORS.border}2e 1px, transparent 1px)`, backgroundSize: "100% 30px", backgroundPositionY: "8px" }}>
         <TopBar profile={profile} sessions={sessions} tasks={tasks} />
-        {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} setTab={setTab} />}
+        {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} unlockedBadges={unlockedBadges} setTab={setTab} />}
         {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} />}
         {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} />}
         {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} />}
         {tab === "timer" && <FocusTimer profile={profile} sessions={sessions} setSessions={setSessions} timer={timer}
           setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
-          onStart={() => setTimerRunning(true)} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak} />}
+          onStart={() => { unlockAudio(); setTimerRunning(true); }} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak} />}
         {tab === "tasks" && <Tasks tasks={tasks} setTasks={setTasks} profile={profile} dpp={dpp} setDpp={setDpp} />}
         {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} />}
         {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} />}
-        {tab === "peers" && <Peers profile={profile} peers={peers} setPeers={setPeers} peerData={peerData} sessions={sessions} />}
+        {tab === "weak" && <WeakAreas syllabus={syllabus} mocks={mocks} errors={errors} setTab={setTab} />}
+        {tab === "peers" && <Peers profile={profile} peers={peers} setPeers={setPeers} peerData={peerData} sessions={sessions}
+          groupDefs={groupDefs} onCreateGroup={createGroup} onJoinGroup={joinGroup} onLeaveGroup={leaveGroup} />}
         {tab === "settings" && <SettingsTab
           profile={profile} setProfile={setProfile}
-          data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards }}
-          setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards }}
+          data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers }}
+          setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers }}
           settings={settings} setSettings={setSettings}
           onResetFloatPosition={() => setFloatResetKey(k => k + 1)}
         />}
@@ -641,20 +631,29 @@ function reviewsByDate(syllabus) {
 
 function consistencyAlert(sessions) {
   // Rule-based, not predictive: compares the last 3 days' average focus time
-  // against the 7 days before that. A >40% drop with real prior data is flagged.
-  const avgOver = (start, end) => {
-    let total = 0;
-    for (let i = start; i < end; i++) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      total += sessions.filter(s => s.date === todayStr(d)).reduce((a, s) => a + s.minutes, 0);
-    }
-    return total / (end - start);
-  };
-  const recent = avgOver(0, 3);
-  const baseline = avgOver(3, 10);
+  // against the 7 days before that. Flags only when a sustained downward trend
+  // appears, not when a single light day or one-off dip happens.
+  const dailyTotals = Array.from({ length: 10 }, (_, idx) => {
+    const d = new Date();
+    d.setDate(d.getDate() - idx);
+    return sessions.filter(s => s.date === todayStr(d)).reduce((sum, s) => sum + s.minutes, 0);
+  });
+
+  const recent = dailyTotals.slice(0, 3).reduce((a, v) => a + v, 0) / 3;
+  const baseline = dailyTotals.slice(3).reduce((a, v) => a + v, 0) / 7;
   if (baseline < 15) return null; // not enough history to judge
-  const drop = (baseline - recent) / baseline;
-  if (drop > 0.4) return { drop: Math.round(drop * 100), recent: Math.round(recent), baseline: Math.round(baseline) };
+
+  const dropRatio = (baseline - recent) / baseline;
+  const sustainedDipDays = dailyTotals.slice(0, 3).filter(minutes => minutes < baseline * 0.7).length;
+  const isSustained = sustainedDipDays >= 2;
+
+  if (dropRatio > 0.4 && isSustained) {
+    return {
+      drop: Math.round(dropRatio * 100),
+      recent: Math.round(recent),
+      baseline: Math.round(baseline),
+    };
+  }
   return null;
 }
 
@@ -709,46 +708,6 @@ function computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp }) {
     { id: "question_century", label: "100 Questions", desc: "100+ practice questions solved", unlocked: totalQuestions >= 100 },
     { id: "error_hunter", label: "Error Hunter", desc: "Logged 10 mistakes to fix", unlocked: errors.length >= 10 },
   ];
-}
-
-function Sidebar({ tab, setTab, profile, onSignOut }) {
-  const days = daysBetween(new Date(), profile.targetDate);
-  return (
-    <div style={{ width: 232, background: COLORS.panel, borderRight: `1px solid ${COLORS.border}`, padding: "20px 14px", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 18px", borderBottom: `1px solid ${COLORS.border}`, marginBottom: 14 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 6, background: COLORS.ink, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <BookMarked size={14} color="#fff" />
-        </div>
-        <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 15 }}>Ledger</div>
-      </div>
-      <div style={{ padding: "0 8px 16px" }}>
-        <div style={{ fontSize: 10, letterSpacing: "0.08em", color: COLORS.faint, textTransform: "uppercase" }}>{profile.exam} · {days >= 0 ? "D-" + days : "Exam day"}</div>
-        <div style={{ fontSize: 13, color: COLORS.dim, marginTop: 2 }}>{profile.name}</div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV.map(n => {
-          const Icon = n.icon;
-          const active = tab === n.id;
-          return (
-            <div key={n.id} onClick={() => setTab(n.id)} style={{
-              display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 5, cursor: "pointer",
-              background: active ? COLORS.panel2 : "transparent", color: active ? COLORS.text : COLORS.dim,
-              border: active ? `1px solid ${COLORS.border}` : "1px solid transparent",
-              borderLeft: active ? `3px solid ${COLORS.ink}` : "3px solid transparent",
-              fontSize: 13, fontWeight: active ? 600 : 400,
-            }}>
-              <Icon size={15} />
-              {n.label}
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ marginTop: "auto", padding: "12px 8px 0", borderTop: `1px solid ${COLORS.border}`, fontSize: 10, color: COLORS.faint }}>
-        <div style={{ marginBottom: 8 }}>Your code: <span style={{ fontFamily: FONTS.mono, color: COLORS.dim }}>{profile.code}</span></div>
-        <div onClick={onSignOut} style={{ cursor: "pointer", color: COLORS.faint }}>Sign out</div>
-      </div>
-    </div>
-  );
 }
 
 function TopBar({ profile, sessions, tasks }) {
@@ -863,7 +822,7 @@ function Onboarding({ onDone }) {
 }
 
 // ---------------- DASHBOARD ----------------
-function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, errors, dpp, setTab }) {
+function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, errors, dpp, unlockedBadges, setTab }) {
   const allChapters = Object.values(syllabus).flat();
   const doneCount = allChapters.filter(c => c.status === "done" || c.status === "mastered").length;
   const pct = allChapters.length ? Math.round((doneCount / allChapters.length) * 100) : 0;
@@ -895,7 +854,8 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const backlog = allChapters.filter(c => c.status === "todo").length;
   const todayTasks = tasks.filter(t => t.date === todayStr());
   const xpInfo = useMemo(() => computeXP({ sessions, tasks, mocks, syllabus, dpp: dpp || [] }), [sessions, tasks, mocks, syllabus, dpp]);
-  const badges = useMemo(() => computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp: dpp || [] }), [sessions, tasks, mocks, syllabus, errors, dpp]);
+  const liveBadges = useMemo(() => computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp: dpp || [] }), [sessions, tasks, mocks, syllabus, errors, dpp]);
+  const badges = useMemo(() => liveBadges.map(b => ({ ...b, unlocked: b.unlocked || unlockedBadges.includes(b.id) })), [liveBadges, unlockedBadges]);
   const unlockedCount = badges.filter(b => b.unlocked).length;
 
   const subjectTime7 = useMemo(() => {
@@ -2002,10 +1962,10 @@ function Mocks({ mocks, setMocks, profile }) {
   };
   const removeMock = (id) => { if (window.confirm("Delete this mock test record?")) setMocks(prev => prev.filter(m => m.id !== id)); };
 
-  const trend = mocks.map((m, i) => ({ name: `T${i + 1}`, score: Math.round((m.total / m.max) * 100) }));
-  const avg = mocks.length ? Math.round(mocks.reduce((a, m) => a + (m.total / m.max) * 100, 0) / mocks.length) : 0;
-  const best = mocks.length ? Math.round(Math.max(...mocks.map(m => (m.total / m.max) * 100))) : 0;
-  const recentTrend = mocks.length >= 2 ? Math.round((mocks[mocks.length - 1].total / mocks[mocks.length - 1].max) * 100) - Math.round((mocks[mocks.length - 2].total / mocks[mocks.length - 2].max) * 100) : 0;
+  const trend = mocks.map((m, i) => ({ name: `T${i + 1}`, score: m.max ? Math.round((m.total / m.max) * 100) : 0 }));
+  const avg = mocks.length ? Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length) : 0;
+  const best = mocks.length ? Math.round(Math.max(...mocks.map(m => (m.max ? (m.total / m.max) * 100 : 0)))) : 0;
+  const recentTrend = mocks.length >= 2 ? Math.round((mocks[mocks.length - 1].max ? (mocks[mocks.length - 1].total / mocks[mocks.length - 1].max) * 100 : 0)) - Math.round((mocks[mocks.length - 2].max ? (mocks[mocks.length - 2].total / mocks[mocks.length - 2].max) * 100 : 0)) : 0;
 
   const subjectAvg = profile.subjects.map(sub => {
     const scores = mocks.map(m => m.subjectScores.find(s => s.subject === sub)).filter(Boolean);
@@ -2151,9 +2111,34 @@ function ErrorLog({ errors, setErrors, mocks }) {
 }
 
 // ---------------- PEERS ----------------
-function Peers({ profile, peers, setPeers, peerData, sessions }) {
+function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCreateGroup, onJoinGroup, onLeaveGroup }) {
   const [codeInput, setCodeInput] = useState("");
   const [copied, setCopied] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [joiningGroup, setJoiningGroup] = useState(false);
+
+  const handleCreateGroup = async () => {
+    if (!groupName.trim() || creatingGroup) return;
+    setCreatingGroup(true);
+    const code = genCode();
+    const result = await onCreateGroup(code, groupName.trim());
+    setCreatingGroup(false);
+    if (result) setGroupName("");
+  };
+
+  const handleJoinGroup = async () => {
+    const code = joinCode.trim().toUpperCase();
+    if (!code || joiningGroup) return;
+    setJoiningGroup(true);
+    setJoinError("");
+    const result = await onJoinGroup(code);
+    setJoiningGroup(false);
+    if (result) setJoinCode("");
+    else setJoinError("No group found with that code, or you're already a member.");
+  };
 
   const addPeer = () => {
     const c = codeInput.trim().toUpperCase();
@@ -2199,6 +2184,27 @@ function Peers({ profile, peers, setPeers, peerData, sessions }) {
           </div>
         ))}
       </Card>
+
+      <Card title="Study groups">
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <Input placeholder="New group name" value={groupName} onChange={e => setGroupName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} />
+          <Btn variant="ink" disabled={creatingGroup} onClick={handleCreateGroup}><Plus size={14} /> Create</Btn>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <Input placeholder="Join with a group code" value={joinCode} onChange={e => setJoinCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleJoinGroup()} />
+          <Btn variant="ghost" disabled={joiningGroup} onClick={handleJoinGroup}>Join</Btn>
+        </div>
+        {joinError && <div style={{ fontSize: 11, color: COLORS.danger }}>{joinError}</div>}
+        {Object.keys(groupDefs).length === 0 ? (
+          <div style={{ fontSize: 12, color: COLORS.faint }}>Not in any groups yet — create one or join with a code.</div>
+        ) : Object.values(groupDefs).map(g => (
+          <div key={g.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+            <div style={{ flex: 1 }}>{g.name}</div>
+            <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.faint }}>{g.code}</div>
+            <Btn variant="danger" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => onLeaveGroup(g.code)}>Leave</Btn>
+          </div>
+        ))}
+      </Card>
     </div>
   );
 }
@@ -2209,7 +2215,8 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
   const [importOk, setImportOk] = useState(false);
 
   const exportData = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const payload = { ...data, peers: data.peers || [], settings };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `ledger-export-${todayStr()}.json`; a.click();
@@ -2235,6 +2242,8 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
       if (Array.isArray(parsed.errors)) setters.setErrors(parsed.errors);
       if (Array.isArray(parsed.dpp)) setters.setDpp(parsed.dpp);
       if (Array.isArray(parsed.cards)) setters.setCards(parsed.cards);
+      if (Array.isArray(parsed.peers)) setters.setPeers(parsed.peers);
+      if (parsed.settings && typeof parsed.settings === "object") setSettings(parsed.settings);
       setImportOk(true);
       setTimeout(() => setImportOk(false), 4000);
     };
