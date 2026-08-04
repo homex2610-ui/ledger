@@ -14,6 +14,37 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+
+  /* Color tokens (default: dark theme to preserve existing look) */
+  --color-bg: #16110b;          /* page background */
+  --color-text: #ffffff;        /* primary text */
+  --color-panel: #1b1510;       /* surfaces / panels */
+  --color-panel2: #221b16;      /* secondary surfaces */
+  --color-border: #2a2320;      /* borders / dividers */
+  --color-shadow: rgba(0,0,0,0.4);
+  --color-accent: #f59e0b;
+}
+
+/* Light theme overrides */
+:root[data-theme="light"] {
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-panel: #ffffff;
+  --color-panel2: #f7f7f7;
+  --color-border: #e6e6e6;
+  --color-shadow: rgba(0,0,0,0.06);
+  --color-accent: #2563eb;
+}
+
+/* Dark theme explicit (optional) */
+:root[data-theme="dark"] {
+  --color-bg: #000000;
+  --color-text: #ffffff;
+  --color-panel: #0f0f0f;
+  --color-panel2: #111111;
+  --color-border: #222222;
+  --color-shadow: rgba(0,0,0,0.6);
+  --color-accent: #f59e0b;
 }
 
 /* Reset */
@@ -25,7 +56,8 @@ html, body, #root {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background: #16110b;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 body {
@@ -47,7 +79,7 @@ body {
   padding: var(--space-4) var(--space-5);
   overflow-y: auto;
   max-height: 900px;
-  background-image: linear-gradient(var(--color-border)2e 1px, transparent 1px);
+  background-image: linear-gradient(var(--color-border) 0.08, transparent 1px);
   background-size: 100% 30px;
   background-position-y: 8px;
 }
