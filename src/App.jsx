@@ -14,7 +14,6 @@ import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss, RANK_
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
-import ActivePage from "./components/layout/ActivePage";
 import WeakAreas from "./components/features/WeakAreas";
 
 const DEFAULT_SYLLABUS = {
