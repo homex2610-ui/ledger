@@ -10,7 +10,7 @@ import {
   ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
   CheckCircle2, Star, BookMarked, NotebookPen, Layers, Lock, Zap
 } from "lucide-react";
-import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss, RANK_COLORS, hexToRgba, darken } from "./lib/theme";
+import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, row, stack, center, between } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
@@ -217,9 +217,9 @@ function Bubble({ status, size = 20, onClick }) {
 
 function Card({ title, right, children, style }) {
   return (
-    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "16px 18px", ...style }}>
+    <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: `${SPACE.lg}px ${SPACE.xl}px`, ...style }}>
       {(title || right) && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.md }}>
           {title && <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>{title}</div>}
           {right}
         </div>
@@ -231,8 +231,8 @@ function Card({ title, right, children, style }) {
 
 function Stat({ label, value, sub }) {
   return (
-    <div style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "12px 14px" }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: 6 }}>{label}</div>
+    <div className="lg-card" style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
       <div style={{ fontFamily: FONTS.mono, fontSize: 22, fontWeight: 600, color: COLORS.text }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>{sub}</div>}
     </div>
@@ -245,22 +245,41 @@ function Stat({ label, value, sub }) {
 // worth top billing.
 function MiniFact({ label, value }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: SPACE.xs + 2 }}>
       <span style={{ fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase", color: COLORS.faint }}>{label}</span>
       <span style={{ fontFamily: FONTS.mono, fontSize: 13, fontWeight: 600, color: COLORS.text }}>{value}</span>
     </div>
   );
 }
 
+// Replaces bare "no data yet" gray text with an icon + copy + optional
+// action, per the empty-state guidance: contextual icon, explanatory copy,
+// explicit next step rather than a dead end.
+function EmptyState({ icon: Icon, message, action }) {
+  return (
+    <div style={{ ...center(), flexDirection: "column", gap: SPACE.sm, padding: `${SPACE.xl}px ${SPACE.md}px`, textAlign: "center" }}>
+      {Icon && <Icon size={20} color={COLORS.faint} />}
+      <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 260, lineHeight: 1.5 }}>{message}</div>
+      {action}
+    </div>
+  );
+}
+
 function Btn({ children, onClick, variant = "ghost", style, disabled, title }) {
-  const base = { fontFamily: FONTS.body, fontSize: 13, fontWeight: 500, padding: "8px 14px", borderRadius: 7, cursor: disabled ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid transparent", opacity: disabled ? 0.5 : 1 };
+  const base = { fontFamily: FONTS.body, fontSize: 13, fontWeight: 500, padding: `${SPACE.sm}px ${SPACE.md + 2}px`, borderRadius: RADIUS.control, cursor: disabled ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid transparent", opacity: disabled ? 0.5 : 1 };
   const variants = {
     ink: { background: COLORS.ink, color: "#fff" },
     ghost: { background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.text },
     danger: { background: "transparent", border: `1px solid ${COLORS.danger}55`, color: COLORS.danger },
     subtle: { background: COLORS.panel2, color: COLORS.text },
   };
-  return <button title={title} disabled={disabled} onClick={onClick} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
+  // lg-btn (base transitions/press) + a per-variant class picks up the real
+  // hover states defined in globalCss() — brightness lift on the filled
+  // "ink" button, a faint accent wash on "ghost". "danger"/"subtle" keep
+  // their existing look; they're low-frequency actions that don't need the
+  // same hover emphasis.
+  const variantClass = variant === "ink" ? "lg-btn-ink" : variant === "ghost" ? "lg-btn-ghost" : "";
+  return <button title={title} disabled={disabled} onClick={onClick} className={`lg-btn ${variantClass}`} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
 }
 
 function Input(props) {
@@ -799,14 +818,14 @@ function TopBar({ profile, sessions, tasks }) {
   const doneToday = todayTasks.filter(t => t.done).length;
   const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.xl, flexWrap: "wrap", gap: SPACE.md }}>
       <div>
-        <div style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 700 }}>
+        <div style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>
           {days >= 0 ? `${days} days to ${profile.exam}` : "Exam window is here"}
         </div>
         <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 2 }}>Target: {parseLocalDate(profile.targetDate).toDateString()}</div>
       </div>
-      <div style={{ display: "flex", gap: 10 }}>
+      <div style={{ display: "flex", gap: SPACE.md }}>
         <MiniStat icon={Flame} label="Streak" value={`${computeStreak(sessions)}d`} />
         <MiniStat icon={TimerIcon} label="Today" value={fmtMin(todayMin)} />
         <MiniStat icon={CheckCircle2} label="Tasks" value={`${doneToday}/${todayTasks.length}`} />
@@ -816,7 +835,7 @@ function TopBar({ profile, sessions, tasks }) {
 }
 function MiniStat({ icon: Icon, label, value }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px" }}>
+    <div className="lg-card" style={{ display: "flex", alignItems: "center", gap: SPACE.sm, borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.sm}px ${SPACE.md}px` }}>
       <Icon size={14} color={COLORS.ink} />
       <div>
         <div style={{ fontSize: 9, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
@@ -966,22 +985,22 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
       </div>
 
       <Card title="Progress ledger" right={<div style={{ fontSize: 11, color: COLORS.faint }}>{unlockedCount}/{badges.length} badges</div>}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-          <div style={{ width: 46, height: 46, borderRadius: 8, background: COLORS.inkSoft, border: `1px solid ${COLORS.ink}55`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: SPACE.lg, marginBottom: SPACE.lg, flexWrap: "wrap" }}>
+          <div style={{ width: 46, height: 46, borderRadius: RADIUS.control, background: COLORS.inkSoft, border: `1px solid ${COLORS.ink}55`, boxShadow: `0 4px 12px -6px ${COLORS.inkGlow}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Zap size={20} color={COLORS.ink} />
           </div>
           <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Level {xpInfo.level} — {xpInfo.title}</div>
-            <div style={{ height: 6, background: COLORS.panel2, borderRadius: 3, overflow: "hidden", marginTop: 6 }}>
-              <div style={{ width: `${xpInfo.levelPct}%`, height: "100%", background: COLORS.ink }} />
+            <div style={{ height: 6, background: COLORS.panel2, borderRadius: RADIUS.badge, overflow: "hidden", marginTop: SPACE.xs + 2 }}>
+              <div style={{ width: `${xpInfo.levelPct}%`, height: "100%", background: `linear-gradient(90deg, ${darken(COLORS.ink, 25)}, ${COLORS.ink})`, transition: "width 0.25s ease-out" }} />
             </div>
             <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 3 }}>{xpInfo.intoLevel}/{XP_PER_LEVEL} XP to level {xpInfo.level + 1} · {xpInfo.xp} XP total</div>
           </div>
         </div>
-        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: SPACE.sm }}>
           {badges.map(b => (
-            <div key={b.id} title={b.desc} style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "10px 6px", borderRadius: 8,
+            <div key={b.id} title={b.desc} className={b.unlocked ? "lg-card lg-card-interactive" : ""} style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: SPACE.xs, padding: `${SPACE.sm}px ${SPACE.xs}px`, borderRadius: RADIUS.control,
               background: b.unlocked ? COLORS.inkSoft : COLORS.panel2, border: `1px solid ${b.unlocked ? COLORS.ink + "55" : COLORS.border}`,
               opacity: b.unlocked ? 1 : 0.55,
             }}>
@@ -1015,35 +1034,46 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
       )}
 
       <Card title="30-day focus momentum">
-        <ResponsiveContainer width="100%" height={140}>
-          <AreaChart data={last30}>
-            <defs>
-              <linearGradient id="momentum" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={COLORS.ink} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={COLORS.ink} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="day" tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis hide />
-            <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: 6 }} labelStyle={{ color: COLORS.dim }} />
-            <Area type="monotone" dataKey="min" stroke={COLORS.ink} fill="url(#momentum)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
+        {last30.every(d => d.min === 0) ? (
+          <EmptyState
+            icon={TimerIcon}
+            message="No focus time logged in the last 30 days yet. Once you start tracking sessions, this chart fills in automatically."
+          />
+        ) : (
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={last30}>
+              <defs>
+                <linearGradient id="momentum" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS.ink} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={COLORS.ink} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="day" tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: RADIUS.control }} labelStyle={{ color: COLORS.dim }} />
+              <Area type="monotone" dataKey="min" stroke={COLORS.ink} fill="url(#momentum)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
       </Card>
 
       <Card title="Where your time went (last 7 days)">
         {subjectTime7.every(s => s.minutes === 0) ? (
-          <div style={{ fontSize: 12, color: COLORS.faint }}>No focus sessions logged yet this week — start the timer or add a manual entry.</div>
+          <EmptyState
+            icon={TimerIcon}
+            message="No focus sessions logged yet this week — start the timer or add a manual entry."
+            action={<Btn variant="ink" onClick={() => setTab("timer")}>Start focus timer</Btn>}
+          />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={stack(SPACE.sm + 2)}>
             {subjectTime7.map((s, i) => (
               <div key={s.subject}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                <div style={{ ...between(), fontSize: 12, marginBottom: SPACE.xs }}>
                   <span style={{ color: COLORS.text }}>{s.subject}</span>
                   <span style={{ color: COLORS.dim, fontFamily: FONTS.mono }}>{fmtMin(s.minutes)} · {s.pct}%</span>
                 </div>
-                <div style={{ height: 7, background: COLORS.panel2, borderRadius: 4, overflow: "hidden" }}>
-                  <div style={{ width: `${s.pct}%`, height: "100%", background: subjectColors[i % subjectColors.length], transition: "width 0.3s" }} />
+                <div style={{ height: 7, background: COLORS.panel2, borderRadius: RADIUS.badge, overflow: "hidden" }}>
+                  <div style={{ width: `${s.pct}%`, height: "100%", background: subjectColors[i % subjectColors.length], transition: `width ${MOTION.duration.slow}ms ${MOTION.easing.standard}` }} />
                 </div>
               </div>
             ))}
@@ -1051,12 +1081,16 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
         )}
       </Card>
 
-      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: SPACE.lg }}>
         <Card title="Today's plan" right={<Btn variant="ghost" onClick={() => setTab("tasks")}>Open <ChevronRight size={13} /></Btn>}>
           {todayTasks.length === 0 ? (
-            <div style={{ fontSize: 12, color: COLORS.faint }}>No targets set for today. Head to Task Planner.</div>
+            <EmptyState
+              icon={ClipboardList}
+              message="No targets set for today. Add a few tasks so Dashboard has something to track."
+              action={<Btn variant="ink" onClick={() => setTab("tasks")}>Open Task Planner</Btn>}
+            />
           ) : todayTasks.slice(0, 5).map(t => (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 13, borderBottom: `1px solid ${COLORS.border}` }}>
+            <div key={t.id} style={{ ...row(SPACE.sm), padding: `${SPACE.xs + 2}px 0`, fontSize: 13, borderBottom: `1px solid ${COLORS.border}` }}>
               {t.done ? <CheckCircle2 size={14} color={COLORS.done} /> : <Circle size={14} color={COLORS.faint} />}
               <span style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</span>
             </div>
@@ -1076,12 +1110,12 @@ function RealityCheck({ days }) {
   const lostHours = Math.max(0, days) * waste;
   return (
     <div>
-      <div style={{ fontSize: 12, color: COLORS.dim, marginBottom: 10 }}>If you waste <b style={{ color: COLORS.text }}>{waste}h/day</b> from here to exam day:</div>
+      <div style={{ fontSize: 12, color: COLORS.dim, marginBottom: SPACE.md }}>If you waste <b style={{ color: COLORS.text }}>{waste}h/day</b> from here to exam day:</div>
       <input type="range" min="0" max="6" step="0.5" value={waste} onChange={e => setWaste(parseFloat(e.target.value))} style={{ width: "100%" }} />
-      <div style={{ fontFamily: FONTS.mono, fontSize: 26, fontWeight: 600, color: COLORS.danger, marginTop: 10 }}>
+      <div style={{ fontFamily: FONTS.mono, fontSize: 26, fontWeight: 600, color: COLORS.danger, marginTop: SPACE.md }}>
         {Math.round(lostHours)} hours lost
       </div>
-      <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 4 }}>≈ {Math.round(lostHours / 8)} full study days, gone. {Math.max(0, days)} days remain either way — spend them or lose them.</div>
+      <div style={{ fontSize: 11, color: COLORS.faint, marginTop: SPACE.xs }}>≈ {Math.round(lostHours / 8)} full study days, gone. {Math.max(0, days)} days remain either way — spend them or lose them.</div>
     </div>
   );
 }
