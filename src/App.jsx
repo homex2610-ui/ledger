@@ -228,10 +228,16 @@ function Card({ title, right, children, style }) {
   );
 }
 
-function Stat({ label, value, sub }) {
+function Stat({ label, value, sub, onClick }) {
   return (
-    <div className="lg-card" style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
+    <div
+      className={onClick ? "lg-card lg-card-interactive" : "lg-card"}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+      style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}
+    >      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
       <div style={{ fontFamily: FONTS.mono, fontSize: 22, fontWeight: 600, color: COLORS.text }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>{sub}</div>}
     </div>
@@ -976,11 +982,11 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-        <Stat label="Syllabus complete" value={`${pct}%`} sub={`${doneCount}/${allChapters.length} chapters`} />
-        <Stat label="Backlog" value={backlog} sub="chapters untouched" />
-        <Stat label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length)}%` : "log your first"} />
-        <Stat label="Errors catalogued" value={errors.length} sub="patch these before D-day" />
-        <Stat label="Questions today" value={`${dppToday.solved}/${dppToday.target}`} sub="daily practice count" />
+        <Stat label="Syllabus complete" value={`${pct}%`} sub={`${doneCount}/${allChapters.length} chapters`} onClick={() => setTab("syllabus")} />
+        <Stat label="Backlog" value={backlog} sub="chapters untouched" onClick={() => setTab("syllabus")} />
+        <Stat label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length)}%` : "log your first"} onClick={() => setTab("mocks")} />
+        <Stat label="Errors catalogued" value={errors.length} sub="patch these before D-day" onClick={() => setTab("errors")} />
+        <Stat label="Questions today" value={`${dppToday.solved}/${dppToday.target}`} sub="daily practice count" onClick={() => setTab("tasks")} />
       </div>
 
       <Card title="Progress ledger" right={<div style={{ fontSize: 11, color: COLORS.faint }}>{unlockedCount}/{badges.length} badges</div>}>
@@ -1089,7 +1095,12 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
               action={<Btn variant="ink" onClick={() => setTab("tasks")}>Open Task Planner</Btn>}
             />
           ) : todayTasks.slice(0, 5).map(t => (
-            <div key={t.id} style={{ ...row(SPACE.sm), padding: `${SPACE.xs + 2}px 0`, fontSize: 13, borderBottom: `1px solid ${COLORS.border}` }}>
+            <div
+              key={t.id}
+              className="lg-row"
+              onClick={() => setTab("tasks")}
+              style={{ ...row(SPACE.sm), padding: `${SPACE.xs + 2}px 4px`, fontSize: 13, borderBottom: `1px solid ${COLORS.border}`, cursor: "pointer", borderRadius: RADIUS.badge }}
+            >
               {t.done ? <CheckCircle2 size={14} color={COLORS.done} /> : <Circle size={14} color={COLORS.faint} />}
               <span style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</span>
             </div>
