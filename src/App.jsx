@@ -8,9 +8,10 @@ import {
   Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
   Flame, Trophy, Play, Pause, Square, Plus, Trash2,
   ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
-  CheckCircle2, Star, BookMarked, NotebookPen, Layers, Lock, Zap
+  CheckCircle2, Star, BookMarked, NotebookPen, Layers, Lock, Zap,
+  Users, Crown, TrendingUp, Radio, ShieldCheck, Send
 } from "lucide-react";
-import { COLORS, FONTS, FONT_IMPORT, THEME_PRESETS, applyTheme, globalCss, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, row, stack, center, between } from "./lib/theme";
+import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, row, stack, center, between, elev } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
@@ -196,16 +197,17 @@ function useStorage(session) {
   }, [userId]);
   return { load, save };
 }
-function Bubble({ status, size = 20, onClick }) {
+function Bubble({ status, size = 20, onClick, disabled }) {
   const colorMap = { todo: COLORS.faint, doing: COLORS.warn, done: COLORS.done, mastered: COLORS.ink };
   const filled = status === "done" || status === "mastered";
-  const interactive = !!onClick;
+  const interactive = !!onClick && !disabled;
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" onClick={onClick}
+    <svg width={size} height={size} viewBox="0 0 20 20" onClick={interactive ? onClick : undefined}
       role={interactive ? "button" : undefined} tabIndex={interactive ? 0 : undefined}
+      aria-disabled={disabled || undefined}
       aria-label={interactive ? `Status: ${STATUS_LABEL[status] || status}` : undefined}
       onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
-      style={{ cursor: onClick ? "pointer" : "default", flexShrink: 0 }}>
+      style={{ cursor: interactive ? "pointer" : "default", flexShrink: 0, opacity: disabled ? 0.45 : 1 }}>
       <rect x="2" y="2" width="16" height="16" rx="4" fill={filled ? colorMap[status] : "transparent"} stroke={colorMap[status]} strokeWidth="1.5" />
       {status === "doing" && <rect x="2" y="10.5" width="16" height="7.5" rx="2" fill={COLORS.warn} opacity="0.85" />}
       {filled && <path d="M5.5 10.5l3 3 6-6.5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
@@ -228,17 +230,18 @@ function Card({ title, right, children, style }) {
   );
 }
 
-function Stat({ label, value, sub, onClick }) {
+function Stat({ label, value, sub, onClick, accent }) {
   return (
     <div
-      className={onClick ? "lg-card lg-card-interactive" : "lg-card"}
+      className={`lg-card ${onClick ? "lg-card-interactive" : ""}`}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
       style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}
-    >      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
-      <div style={{ fontFamily: FONTS.mono, fontSize: 22, fontWeight: 600, color: COLORS.text }}>{value}</div>
+    >
+      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
+      <div style={{ fontFamily: FONTS.mono, fontSize: 23, fontWeight: 600, color: accent || COLORS.text, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -260,13 +263,67 @@ function MiniFact({ label, value }) {
 // Replaces bare "no data yet" gray text with an icon + copy + optional
 // action, per the empty-state guidance: contextual icon, explanatory copy,
 // explicit next step rather than a dead end.
-function EmptyState({ icon: Icon, message, action }) {
+function EmptyState({ icon: Icon, message, action, art }) {
   return (
-    <div style={{ ...center(), flexDirection: "column", gap: SPACE.sm, padding: `${SPACE.xl}px ${SPACE.md}px`, textAlign: "center" }}>
-      {Icon && <Icon size={20} color={COLORS.faint} />}
-      <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 260, lineHeight: 1.5 }}>{message}</div>
+    <div style={{ ...center(), flexDirection: "column", gap: SPACE.md, padding: `${SPACE.xl}px ${SPACE.md}px`, textAlign: "center" }}>
+      {art ? <EmptyArt variant={art} /> : Icon ? (
+        <div className="lg-empty-icon">
+          <Icon size={18} color={COLORS.faint} />
+        </div>
+      ) : null}
+      <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 300, lineHeight: 1.6 }}>{message}</div>
       {action}
     </div>
+  );
+}
+
+// Hand-drawn SVG empty-state artwork — three motifs (grid = daily board,
+// track = momentum/streak, ring = circle/community) coded in the app's own
+// palette so it follows the theme without new assets. SVGs only: no
+// backdrop-filter surfaces, no lucide icon does this, no deps.
+function EmptyArt({ variant = "grid", width = 128, height = 76 }) {
+  const line = hexToRgba(COLORS.ink, 0.5);
+  const soft = hexToRgba(COLORS.ink, 0.2);
+  const faint = COLORS.faint;
+  const ink = COLORS.ink;
+  const cell = { fill: "none", strokeWidth: 1, vectorEffect: "non-scaling-stroke" };
+  return (
+    <svg width={width} height={height} viewBox="0 0 128 76" style={{ display: "block" }} aria-hidden="true">
+      {variant === "grid" && (
+        <>
+          <ellipse cx="64" cy="62" rx="58" ry="10" fill={hexToRgba(COLORS.ink, 0.07)} />
+          {[10, 28, 46, 64].map((y, row) =>
+            [10, 26, 42, 58, 74, 90, 106].map((x, col) => {
+              const key = row * 7 + col;
+              const lit = key === 3 || key === 10 || key === 17 || key === 24 || key === 25;
+              return <rect key={key} x={x} y={y} width="12" height="9" rx="2"
+                stroke={lit ? line : hexToRgba(COLORS.ink, 0.22)} strokeWidth="1"
+                fill={lit ? (key === 25 ? COLORS.ink : soft) : "none"} vectorEffect="non-scaling-stroke" />;
+            })
+          )}
+          <circle cx="70" cy="14.5" r="10" fill={hexToRgba(COLORS.ink, 0.25)} />
+        </>
+      )}
+      {variant === "track" && (
+        <>
+          <ellipse cx="64" cy="64" rx="54" ry="8" fill={hexToRgba(COLORS.ink, 0.07)} />
+          <polyline points="12,52 32,38 46,44 62,26 80,34 96,16 116,22" fill="none" stroke={soft} strokeWidth="1.5" strokeDasharray="0.1 5" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <polyline points="12,52 32,38 46,44 62,26 80,34 96,16 116,22" fill="none" stroke={line} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          <line x1="12" y1="52" x2="116" y2="52" stroke={hexToRgba(COLORS.ink, 0.25)} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <circle cx="116" cy="22" r="3.5" fill={faint} stroke={ink} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          <circle cx="96" cy="16" r="2" fill={COLORS.ink} />
+        </>
+      )}
+      {variant === "ring" && (
+        <>
+          <circle cx="64" cy="36" r="19" fill="none" stroke={soft} strokeWidth="1.5" strokeDasharray="3 6" vectorEffect="non-scaling-stroke" />
+          <circle cx="64" cy="36" r="19" fill="none" stroke={line} strokeWidth="1.5" strokeDasharray="86 33.4" transform="rotate(-90 64 36)" vectorEffect="non-scaling-stroke" />
+          <circle cx="64" cy="36" r="4.5" fill="none" stroke={COLORS.ink} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          <circle cx="74" cy="24" r="2.5" fill={COLORS.ink} />
+          <ellipse cx="64" cy="66" rx="46" ry="6" fill={hexToRgba(COLORS.ink, 0.07)} />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -288,10 +345,10 @@ function Btn({ children, onClick, variant = "ghost", style, disabled, title }) {
 }
 
 function Input(props) {
-  return <input {...props} style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
+  return <input {...props} className={`lg-input ${props.className || ""}`} style={{ background: hexToRgba(COLORS.panel2, 0.66), border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
 }
 function Select(props) {
-  return <select {...props} style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
+  return <select {...props} className={`lg-input ${props.className || ""}`} style={{ background: hexToRgba(COLORS.panel2, 0.66), border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
 }
 
 // Renamed from the default export: this is the actual app, mounted only
@@ -310,10 +367,11 @@ function Workspace({ session }) {
   const [peers, setPeers] = useState([]);
   const [peerData, setPeerData] = useState({});
   const [groupDefs, setGroupDefs] = useState({});
+  const [groupRoster, setGroupRoster] = useState({});
   const [dpp, setDpp] = useState([]);
   const [cards, setCards] = useState([]);
   const [unlockedBadges, setUnlockedBadges] = useState([]);
-  const [settings, setSettings] = useState({ theme: "ledger", floatingTimer: true });
+  const [settings, setSettings] = useState({ theme: "glass-light", floatingTimer: true });
   const [floatResetKey, setFloatResetKey] = useState(0);
   const appRef = useRef(null);
 
@@ -388,7 +446,54 @@ function Workspace({ session }) {
     })();
   }, [userId]);
 
-  applyTheme(settings.theme);
+  // fetch each group's member roster + their latest leaderboard rows —
+  // read-only, mirrors the peer-data query (shared kv_store rows keyed by
+  // the 6-char code inside each payload; most-recent row wins per code).
+  // Drives the per-group mini leaderboards on the Community tab.
+  useEffect(() => {
+    const codes = Object.keys(groupDefs);
+    if (codes.length === 0) {
+      setGroupRoster({});
+      return;
+    }
+    let live = true;
+    (async () => {
+      const next = {};
+      for (const code of codes) {
+        try {
+          const { data: members, error } = await supabase
+            .from("group_members")
+            .select("profile_code")
+            .eq("group_code", code);
+          const memberCodes = (members || []).map(m => m.profile_code).filter(Boolean);
+          let rows = [];
+          if (memberCodes.length > 0) {
+            const { data, error: kvError } = await supabase
+              .from("kv_store")
+              .select("owner_id, value, updated_at")
+              .eq("shared", true)
+              .in("value->>code", memberCodes);
+            if (!kvError) {
+              const byCode = {};
+              (data || []).forEach(r => {
+                const c = r?.value?.code;
+                if (!c) return;
+                if (!byCode[c] || new Date(r.updated_at) > new Date(byCode[c].updated_at)) byCode[c] = r;
+              });
+              rows = Object.values(byCode).map(r => ({ ...(r.value || {}), _updated_at: r.updated_at }));
+            }
+          }
+          next[code] = { memberCodes, rows };
+        } catch (e) {
+          console.error("[groups] failed to fetch roster for", code, e);
+        }
+      }
+      if (live) setGroupRoster(next);
+    })();
+    return () => { live = false; };
+  }, [groupDefs, userId, profile?.code, ready]);
+
+  applyTheme(normalizeTheme(settings.theme));
 
   // Timer state lives here, not inside the Deep Work tab component, so it
   // keeps running (and stays visible via the floating widget) when you
@@ -565,9 +670,15 @@ function Workspace({ session }) {
       const [p, s, t, se, m, er, pe, dq, cd, ub, st] = await Promise.all([
         load("profile", null), load("syllabus", {}), load("tasks", []),
         load("sessions", []), load("mocks", []), load("errors", []), load("peers", []),
-        load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", { theme: "ledger", floatingTimer: true }),
+        load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", { theme: "glass-light", floatingTimer: true }),
       ]);
-      setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(st);
+      // Migrate any persisted pre-Glass theme id (or an unknown/undefined id)
+      // to the equivalent Glass variant so the app never renders an undefined
+      // theme. If the stored value needed migrating we pass the corrected
+      // settings forward; the existing settings-save effect persists it.
+      const stTheme = normalizeTheme(st && st.theme);
+      const stSafe = st && st.theme === stTheme ? st : { ...(st || {}), theme: stTheme };
+      setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(stSafe);
       setTimerSubject((p && p.subjects && p.subjects[0]) || null);
       setReady(true);
     })();
@@ -648,10 +759,21 @@ function Workspace({ session }) {
   }, [peers, ready, userId, sessions]);
 
   if (!ready) {
-    return <div style={{ background: COLORS.bg, minHeight: 400, display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body }}>
-      <style>{FONT_IMPORT}</style>
-      Loading your workspace…
-    </div>;
+    return (
+      <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body, padding: 24 }}>
+        <style>{globalCss()}</style>
+        <div style={{ width: "100%", maxWidth: 560, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="lg-skeleton" style={{ height: 22, width: 200 }} />
+          <div className="lg-skeleton" style={{ height: 90 }} />
+          <div className="lg-skeleton" style={{ height: 90 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            <div className="lg-skeleton" style={{ height: 70 }} />
+            <div className="lg-skeleton" style={{ height: 70 }} />
+            <div className="lg-skeleton" style={{ height: 70 }} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!profile) {
@@ -673,34 +795,36 @@ function Workspace({ session }) {
   const timer = { mode: timerMode, running: timerRunning, elapsed: timerElapsed, subject: timerSubject, pomoMinutes, pomoTarget, phase: pomoPhase, phaseTarget, breakTarget, cycle: pomoCycle, completedFlash };
 
   return (
-    <div ref={appRef} className="app-shell" style={{ border: `1px solid ${COLORS.border}` }}>
+    <div ref={appRef} className="app-shell lg-shell" style={{ border: `1px solid ${COLORS.border}` }}>
       <style>{globalCss()}</style>
 
       <Sidebar tab={tab} setTab={setTab} profile={profile} onSignOut={() => supabase.auth.signOut()} />
 
-      <div className="app-main">
+      <div className="app-main lg-main">
         <Header />
-        <TopBar profile={profile} sessions={sessions} tasks={tasks} />
-        {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} unlockedBadges={unlockedBadges} setTab={setTab} />}
-        {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} />}
-        {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} />}
-        {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} />}
-        {tab === "timer" && <FocusTimer profile={profile} sessions={sessions} setSessions={setSessions} timer={timer}
-          setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
-          onStart={() => { unlockAudio(); setTimerRunning(true); }} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak} />}
-        {tab === "tasks" && <Tasks tasks={tasks} setTasks={setTasks} profile={profile} dpp={dpp} setDpp={setDpp} />}
-        {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} />}
-        {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} />}
-        {tab === "weak" && <WeakAreas syllabus={syllabus} mocks={mocks} errors={errors} setTab={setTab} />}
-        {tab === "peers" && <Peers profile={profile} peers={peers} setPeers={setPeers} peerData={peerData} sessions={sessions}
-          groupDefs={groupDefs} onCreateGroup={createGroup} onJoinGroup={joinGroup} onLeaveGroup={leaveGroup} />}
-        {tab === "settings" && <SettingsTab
-          profile={profile} setProfile={setProfile}
-          data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers }}
-          setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers }}
-          settings={settings} setSettings={setSettings}
-          onResetFloatPosition={() => setFloatResetKey(k => k + 1)}
-        />}
+        <TopBar profile={profile} sessions={sessions} tasks={tasks} showFull={tab === "dashboard"} />
+        <div className="lg-page" key={tab}>
+          {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} unlockedBadges={unlockedBadges} setTab={setTab} />}
+          {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} />}
+          {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} />}
+          {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} />}
+          {tab === "timer" && <FocusTimer profile={profile} sessions={sessions} setSessions={setSessions} timer={timer}
+            setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
+            onStart={() => { unlockAudio(); setTimerRunning(true); }} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak} />}
+          {tab === "tasks" && <Tasks tasks={tasks} setTasks={setTasks} profile={profile} dpp={dpp} setDpp={setDpp} />}
+          {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} />}
+          {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} />}
+          {tab === "weak" && <WeakAreas syllabus={syllabus} mocks={mocks} errors={errors} setTab={setTab} />}
+          {tab === "peers" && <Peers profile={profile} peers={peers} setPeers={setPeers} peerData={peerData} sessions={sessions}
+            groupDefs={groupDefs} groupRoster={groupRoster} onCreateGroup={createGroup} onJoinGroup={joinGroup} onLeaveGroup={leaveGroup} />}
+          {tab === "settings" && <SettingsTab
+            profile={profile} setProfile={setProfile}
+            data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers }}
+            setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers }}
+            settings={settings} setSettings={setSettings}
+            onResetFloatPosition={() => setFloatResetKey(k => k + 1)}
+          />}
+        </div>
       </div>
 
       {settings.floatingTimer !== false && (
@@ -803,49 +927,353 @@ function computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp }) {
   const totalQuestions = dpp.reduce((a, d) => a + (d.solved || 0), 0);
   const masteredAny = allChapters.some(c => c.status === "mastered");
   const donePct = allChapters.length ? (allChapters.filter(c => c.status === "done" || c.status === "mastered").length / allChapters.length) * 100 : 0;
-  return [
-    { id: "first_session", label: "First Session", desc: "Logged your first focus session", unlocked: sessions.length >= 1 },
-    { id: "week_streak", label: "7-Day Streak", desc: "Studied 7 days in a row", unlocked: streak >= 7 },
-    { id: "month_streak", label: "30-Day Streak", desc: "Studied 30 days in a row", unlocked: streak >= 30 },
-    { id: "century_hours", label: "100 Hours", desc: "100 hours of focused study logged", unlocked: focusHours >= 100 },
-    { id: "first_mock", label: "First Mock", desc: "Logged your first mock test", unlocked: mocks.length >= 1 },
-    { id: "five_mocks", label: "5 Mocks Logged", desc: "Tested yourself 5 times", unlocked: mocks.length >= 5 },
-    { id: "mastered", label: "Chapter Master", desc: "Fully retained a chapter", unlocked: masteredAny },
-    { id: "halfway", label: "Halfway There", desc: "50% of syllabus covered", unlocked: donePct >= 50 },
-    { id: "question_century", label: "100 Questions", desc: "100+ practice questions solved", unlocked: totalQuestions >= 100 },
-    { id: "error_hunter", label: "Error Hunter", desc: "Logged 10 mistakes to fix", unlocked: errors.length >= 10 },
+  const defs = [
+    { id: "first_session", label: "First Session", desc: "Logged your first focus session", unlocked: sessions.length >= 1, current: sessions.length, target: 1 },
+    { id: "week_streak", label: "7-Day Streak", desc: "Studied 7 days in a row", unlocked: streak >= 7, current: streak, target: 7 },
+    { id: "month_streak", label: "30-Day Streak", desc: "Studied 30 days in a row", unlocked: streak >= 30, current: streak, target: 30 },
+    { id: "century_hours", label: "100 Hours", desc: "100 hours of focused study logged", unlocked: focusHours >= 100, current: Math.floor(focusHours), target: 100 },
+    { id: "first_mock", label: "First Mock", desc: "Logged your first mock test", unlocked: mocks.length >= 1, current: mocks.length, target: 1 },
+    { id: "five_mocks", label: "5 Mocks Logged", desc: "Tested yourself 5 times", unlocked: mocks.length >= 5, current: mocks.length, target: 5 },
+    { id: "mastered", label: "Chapter Master", desc: "Fully retained a chapter", unlocked: masteredAny, current: null, target: null },
+    { id: "halfway", label: "Halfway There", desc: "50% of syllabus covered", unlocked: donePct >= 50, current: Math.round(donePct), target: 50 },
+    { id: "question_century", label: "100 Questions", desc: "100+ practice questions solved", unlocked: totalQuestions >= 100, current: totalQuestions, target: 100 },
+    { id: "error_hunter", label: "Error Hunter", desc: "Logged 10 mistakes to fix", unlocked: errors.length >= 10, current: errors.length, target: 10 },
   ];
+  return defs.map(b => ({
+    ...b,
+    progressLabel: (!b.unlocked && b.target != null) ? `${b.current}/${b.target}` : null,
+  }));
 }
-
-function TopBar({ profile, sessions, tasks }) {
+function TopBar({ profile, sessions, tasks, showFull }) {
   const days = daysBetween(new Date(), profile.targetDate);
   const todayTasks = tasks.filter(t => t.date === todayStr());
   const doneToday = todayTasks.filter(t => t.done).length;
-  const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
+  const urgent = days >= 0 && days <= 21;
+
+  const numGrad = urgent
+    ? `linear-gradient(180deg, ${COLORS.danger}, ${darken(COLORS.danger, 26)})`
+    : `linear-gradient(180deg, ${COLORS.text}, ${hexToRgba(COLORS.text, 0.5)})`;
+
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.xl, flexWrap: "wrap", gap: SPACE.md }}>
-      <div>
-        <div style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>
-          {days >= 0 ? `${days} days to ${profile.exam}` : "Exam window is here"}
+    <div className="lg-hero" style={{ padding: "32px 36px", marginBottom: SPACE.xl, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: SPACE.lg }}>
+      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: SPACE.xl }}>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: COLORS.ink, fontWeight: 600, marginBottom: 8 }}>
+            {profile.exam}
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <div key={days} className="lg-tick" style={{ fontFamily: FONTS.display, fontSize: "clamp(27px, 3.2vw, 32px)", fontWeight: 700, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums", backgroundImage: numGrad, WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", position: "relative" }}>
+              {days >= 0 ? days : "0"}
+              {urgent && (
+                <span style={{ position: "absolute", left: 0, right: 0, top: "40%", bottom: -14, background: `radial-gradient(60% 100% at 50% 50%, ${hexToRgba(COLORS.danger, 0.22)}, transparent 70%)`, filter: "blur(2px)", pointerEvents: "none" }} />
+              )}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.dim }}>
+              {days >= 0 ? (days === 1 ? "day" : "days") : "days"} to exam day
+            </div>
+          </div>
+          <div style={{ width: 72, height: 3, borderRadius: 2, marginTop: 10, background: `linear-gradient(90deg, ${COLORS.ink}, ${hexToRgba(COLORS.ink, 0.1)})`, boxShadow: `0 0 12px ${COLORS.inkGlow}` }} />
+          <div style={{ fontSize: 11.5, color: COLORS.faint, marginTop: 10 }}>
+            Target · {parseLocalDate(profile.targetDate).toDateString()}
+          </div>
+          <div style={{ display: "flex", gap: SPACE.sm, marginTop: SPACE.md }}>
+            <MiniStat icon={Flame} label="Streak" value={`${computeStreak(sessions)}d`} />
+            <MiniStat icon={CheckCircle2} label="Tasks" value={`${doneToday}/${todayTasks.length}`} />
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 2 }}>Target: {parseLocalDate(profile.targetDate).toDateString()}</div>
+        </div>
+      {showFull && (
+        <div style={{ flex: 1, minWidth: 320, display: "flex", justifyContent: "center", flexShrink: 1 }}>
+          <PrepProgressGrid profile={profile} sessions={sessions} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Today's focus vs your own best single day — a quiet ring, lit by real data.
+//   empty   → no logged sessions yet: dashed ring, "no data", never fake progress
+//   beatBest → today ≥ best day: clamps at 100% and says so
+//   else    → progress toward your historical best
+function FocusRing({ pct, todayMin, bestDay, beatBest, empty }) {
+  const size = 96, stroke = 8;
+  const r = size / 2 - stroke / 2 - 3;
+  const c = 2 * Math.PI * r;
+  const dash = Math.max(2, Math.round(pct * c));
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ display: "block" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={COLORS.border} strokeWidth={stroke} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none"
+          stroke={empty ? COLORS.faint : beatBest ? COLORS.done : COLORS.ink}
+          strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={empty ? "3 6" : `${dash} ${c - dash}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{
+            transition: "stroke-dasharray 0.7s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.4s ease-out",
+            filter: empty ? "none" : `drop-shadow(0 0 5px ${hexToRgba(beatBest ? COLORS.done : COLORS.ink, 0.45)})`,
+          }}
+        />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1 }}>
+        <div style={{ fontFamily: FONTS.display, fontSize: 19, fontWeight: 700, lineHeight: 1, color: COLORS.text, fontVariantNumeric: "tabular-nums" }}>
+          {empty ? "—" : fmtMin(todayMin)}
+        </div>
+        <div style={{ fontSize: 7.5, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>
+          {empty ? "no data yet" : beatBest ? "personal best!" : "vs best day"}
+        </div>
       </div>
-      <div style={{ display: "flex", gap: SPACE.md }}>
-        <MiniStat icon={Flame} label="Streak" value={`${computeStreak(sessions)}d`} />
-        <MiniStat icon={TimerIcon} label="Today" value={fmtMin(todayMin)} />
-        <MiniStat icon={CheckCircle2} label="Tasks" value={`${doneToday}/${todayTasks.length}`} />
-      </div>
+      {!empty && (
+        <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap", fontSize: 10, color: COLORS.faint, fontFamily: FONTS.mono }}>
+          best {fmtMin(bestDay)}
+        </div>
+      )}
     </div>
   );
 }
 function MiniStat({ icon: Icon, label, value }) {
   return (
-    <div className="lg-card" style={{ display: "flex", alignItems: "center", gap: SPACE.sm, borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.sm}px ${SPACE.md}px` }}>
-      <Icon size={14} color={COLORS.ink} />
+    <div className="lg-card" style={{ display: "flex", alignItems: "center", gap: SPACE.sm, borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.sm}px ${SPACE.md}px`, boxShadow: elev("e1") }}>
+      <div className="lg-empty-icon" style={{ width: 30, height: 30, borderRadius: 9 }}>
+        <Icon size={14} color={COLORS.ink} />
+      </div>
       <div>
         <div style={{ fontSize: 9, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
         <div style={{ fontFamily: FONTS.mono, fontSize: 13, fontWeight: 600 }}>{value}</div>
       </div>
+    </div>
+  );
+}
+
+// "How far through my prep window am I?" — a full-year, GitHub-style activity
+// grid (52-53 week columns x 7 rows) anchored at the prep start, covering
+// 365 days of the window regardless of prep length. Day zero = profile
+// creation when available (real data, no new field); otherwise the window is
+// anchored on the target date. Past days are filled (session minutes add a
+// heatmap tint), today glows, the exam day stays outlined, days after the
+// exam are dimmed. Purely presentational: no persistence, no new settings.
+function PrepProgressGrid({ profile, sessions = [] }) {
+  const target = profile.targetDate ? parseLocalDate(profile.targetDate) : null;
+  if (!target || isNaN(target.getTime())) return null;
+
+  let start = profile.createdAt ? parseLocalDate(profile.createdAt) : null;
+  if (!start || isNaN(start.getTime()) || start > target) {
+    start = parseLocalDate(addDays(profile.targetDate, -179));
+  }
+
+  const gridDays = 365;
+  const lead = start.getDay();
+  const cols = Math.ceil((lead + gridDays) / 7);
+  const todayKey = todayStr();
+
+  const perDay = useMemo(() => {
+    const m = {};
+    sessions.forEach(s => { m[s.date] = (m[s.date] || 0) + s.minutes; });
+    return m;
+  }, [sessions]);
+
+  const dateAt = (i) => {
+    const d = parseLocalDate(start);
+    d.setDate(d.getDate() + i - lead);
+    return d;
+  };
+  const dayTitle = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  // Dot fills sit on the SAME light glass surface as the sibling panels —
+  // no dark stage. Passed dots are a solid mixed blue (accent blended at
+  // medium strength toward the panel, never an alpha wash), Upcoming dots
+  // carry a faint hairline and no fill, Today stays full accent, Target an
+  // accent ring. One blue family only.
+  const DOT = {
+    passed: ["rgb(154,170,255)", "rgb(134,150,255)", "rgb(112,130,255)", COLORS.ink],
+    future: "transparent",
+    bare: "transparent",
+  };
+  const passedFill = (lv) => DOT.passed[Math.min(3, lv)];
+
+  const passed = Math.max(0, Math.min(gridDays, daysBetween(start, new Date()) + 1));
+  const remaining = Math.max(0, gridDays - passed);
+
+  const cells = [];
+  for (let w = 0; w < cols; w++) {
+    for (let j = 0; j < 7; j++) {
+      const i = w * 7 + j;
+      const di = i - lead;
+      const d = dateAt(i);
+      const key = todayStr(d);
+      let state, lv = 0;
+      if (di < 0) state = "lead";
+      else if (key === todayKey) state = "today";
+      else if (key < todayKey) {
+        state = "past";
+        const min = perDay[key] || 0;
+        lv = min >= 100 ? 3 : min >= 40 ? 2 : min > 0 ? 1 : 0;
+      } else if (key <= todayStr(target)) state = "future";
+      else state = "post";
+      cells.push({
+        key: `c${i}`,
+        title: `${dayTitle(d)} · ${
+          state === "lead" ? "before prep started"
+          : state === "past" ? `${perDay[key] || 0} min focused`
+          : state === "today" ? "today"
+          : state === "future" ? (key === todayStr(target) ? "exam target day" : "upcoming")
+          : "after exam"
+        }`,
+        state,
+        lv,
+        isTarget: key === todayStr(target),
+      });
+    }
+  }
+
+  const fill = (state, lv, isTarget) =>
+    isTarget && state === "future"
+      ? "transparent"
+      : state === "today"
+        ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})`
+        : state === "past"
+          ? passedFill(lv)
+          : "transparent";
+  const edge = (state, isTarget) =>
+    state === "future" && isTarget
+      ? `0 0 0 2px ${hexToRgba(COLORS.ink, 0.85)}, 0 0 6px ${hexToRgba(COLORS.ink, 0.28)}`
+      : state === "today"
+        ? `0 0 0 1.5px ${hexToRgba(COLORS.ink, 0.9)}, 0 0 8px ${hexToRgba(COLORS.ink, 0.45)}`
+        : state === "future"
+          ? `inset 0 0 0 1px ${hexToRgba(COLORS.text, 0.13)}`
+          : undefined;
+
+  return (
+    <div className="lg-card" style={{
+      width: "min(720px, 100%)", display: "flex", flexDirection: "column", gap: 8, flexShrink: 1, minWidth: 220,
+      borderRadius: RADIUS.card,
+      padding: "14px 16px 12px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+        <span style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>Prep progress</span>
+        <span style={{ marginLeft: "auto", fontFamily: FONTS.mono, fontSize: 10, color: COLORS.dim, fontVariantNumeric: "tabular-nums" }}>
+          {passed}/{gridDays}
+        </span>
+      </div>
+      <div
+        role="img"
+        aria-label={`${gridDays}-day preparation window: ${passed} ${passed === 1 ? "day" : "days"} completed, ${remaining} ${remaining === 1 ? "day" : "days"} remaining.`}
+        style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(9px, 1fr))`, gap: 2.5, width: "100%" }}
+      >
+        {cells.map(c => (
+          <div
+            key={c.key}
+            title={c.title}
+            aria-hidden="true"
+            className="lg-pcell"
+            style={{ aspectRatio: "1", borderRadius: "50%", background: fill(c.state, c.lv, c.isTarget), boxShadow: edge(c.state, c.isTarget), transition: "filter 0.15s ease-out" }}
+          />
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 9.5, color: COLORS.faint, letterSpacing: "0.04em" }}>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", background: passedFill(0), boxShadow: `inset 0 0 0 1px ${hexToRgba(COLORS.text, 0.13)}` }} />
+        <span>Passed</span>
+        {cells.some(c => c.state === "today") && (
+          <>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", background: COLORS.ink, boxShadow: `0 0 4px ${hexToRgba(COLORS.ink, 0.5)}`, marginLeft: 6 }} />
+            <span>Today</span>
+          </>
+        )}
+        <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", boxShadow: `inset 0 0 0 1px ${hexToRgba(COLORS.text, 0.13)}`, marginLeft: 6 }} />
+        <span>Upcoming</span>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", boxShadow: `0 0 0 1.5px ${hexToRgba(COLORS.ink, 0.85)}`, marginLeft: 6 }} />
+        <span>Target</span>
+      </div>
+    </div>
+  );
+}
+
+// Hierarchy-aware stat tiles: `primary` dominates (large display number,
+// accent edge + glow), secondary tiles stay quieter but elevated. All real
+// numbers, just weighted differently.
+function StatTile({ icon: Icon, tint = COLORS.ink, label, value, sub, onClick, primary }) {
+  const interactive = onClick ? { onClick, role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } } : {};
+  const hue = primary ? COLORS.ink : tint;
+  return (
+    <div
+      className={`lg-card lg-card-interactive`}
+      {...interactive}
+      style={{
+        borderRadius: RADIUS.card,
+        border: `1px solid ${hexToRgba(hue, primary ? 0.4 : 0.24)}`,
+        background: `radial-gradient(170px 96px at 88% -44%, ${hexToRgba(hue, 0.12)}, transparent 72%), linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.7)}, ${hexToRgba(COLORS.panel2, 0.54)})`,
+        backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.18)`,
+        WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.18)`,
+        boxShadow: elev("e2"),
+        padding: primary ? `${SPACE.lg}px` : `${SPACE.md}px ${SPACE.lg}px`,
+        position: "relative",
+        minHeight: primary ? 116 : 88,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        gap: SPACE.xs,
+      }}
+    >
+      {primary && (
+        <div style={{ position: "absolute", left: 0, top: 16, bottom: 16, width: 3, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.ink}, ${darken(COLORS.ink, 24)})`, boxShadow: `0 0 8px ${COLORS.inkGlow}` }} />
+      )}
+      <div style={{ ...row(SPACE.sm), justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ fontSize: 9.5, letterSpacing: "0.09em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>{label}</div>
+        <div style={{ width: primary ? 40 : 34, height: primary ? 40 : 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: hexToRgba(hue, 0.1), border: `1px solid ${hexToRgba(hue, 0.3)}`, color: hue, boxShadow: `0 6px 16px -8px ${hexToRgba(hue, 0.55)}` }}>
+          <Icon size={primary ? 19 : 15} />
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: primary ? 6 : 3 }}>
+        <div style={{ fontFamily: primary ? FONTS.display : FONTS.mono, fontSize: primary ? 38 : 22, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", color: COLORS.text, marginTop: 2 }}>{value}</div>
+        {sub && <div style={{ fontSize: 11, color: COLORS.dim }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Lowest tier — deliberately borderless/open; value + label + optional note
+// reads as a stat, not a card.
+function FlatStat({ icon, tint = COLORS.ink, label, value, sub, onClick }) {
+  const interactive = onClick ? { onClick, role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } } : {};
+  return (
+    <div
+      {...interactive}
+      className="lg-row"
+      style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: RADIUS.control, cursor: onClick ? "pointer" : "default" }}
+    >
+      <div style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: hexToRgba(tint, 0.08), border: `1px solid ${hexToRgba(tint, 0.25)}`, color: tint }}>{icon}</div>
+      <div>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 16, fontWeight: 700, lineHeight: 1.1, fontVariantNumeric: "tabular-nums", color: COLORS.text }}>{value}</div>
+        <div style={{ fontSize: 9.5, letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600, marginTop: 2 }}>{label}</div>
+      </div>
+      {sub && <span style={{ marginLeft: "auto", fontSize: 10.5, color: COLORS.dim, maxWidth: 150, textAlign: "right" }}>{sub}</span>}
+    </div>
+  );
+}
+
+// Quick actions — one dock, four lit cells, all just navigational.
+function QuickDock({ setTab }) {
+  const actions = [
+    { id: "timer", icon: TimerIcon, tint: COLORS.ink, label: "Start Focus", line: "Deep work, pomodoro & breaks", primary: true },
+    { id: "tasks", icon: ClipboardList, tint: "#8B7CF8", label: "Daily Targets", line: "Tasks & practice questions" },
+    { id: "cards", icon: Layers, tint: "#5B8CFF", label: "Recall Deck", line: "Spaced-repetition reviews" },
+    { id: "mocks", icon: TrendingUp, tint: "#52B788", label: "Test Trends", line: "Mock scores & history" },
+  ];
+  return (
+    <div className="lg-dock" role="group" aria-label="Quick actions">
+      {actions.map(a => {
+        const Icon = a.icon;
+        return (
+          <button key={a.id} className={`lg-dock-item${a.primary ? " primary" : ""}`} onClick={() => setTab(a.id)}>
+            <span className="lg-dock-icon" style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: hexToRgba(a.tint, 0.12), border: `1px solid ${hexToRgba(a.tint, 0.32)}`, color: a.tint }}>
+              <Icon size={15} />
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{a.label}</span>
+            <span style={{ fontSize: 10.5, color: COLORS.faint, lineHeight: 1.35 }}>{a.line}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -866,8 +1294,9 @@ function Onboarding({ onDone }) {
   const canContinue = step === 0 ? name.trim().length > 0 : step === 1 ? subjects.length > 0 : true;
 
   return (
-    <div style={{ background: COLORS.bg, borderRadius: 14, border: `1px solid ${COLORS.border}`, maxWidth: 560, margin: "0 auto", padding: "32px 34px", fontFamily: FONTS.body, color: COLORS.text }}>
-      <style>{FONT_IMPORT}</style>
+    <div style={{ minHeight: "100vh", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.body, color: COLORS.text, padding: 20 }}>
+      <style>{globalCss()}</style>
+      <div className="lg-card" style={{ borderRadius: 16, border: `1px solid ${COLORS.border}`, maxWidth: 560, width: "100%", padding: "32px 34px" }}>
       <div style={{ fontSize: 10, letterSpacing: "0.1em", color: COLORS.ink, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Step {step + 1} of 3</div>
       <div style={{ fontFamily: FONTS.display, fontSize: 24, fontWeight: 700, marginBottom: 18 }}>
         {step === 0 && "Who are you?"}
@@ -923,6 +1352,7 @@ function Onboarding({ onDone }) {
         ) : (
           <Btn variant="ink" onClick={() => onDone({ name: name.trim(), exam, subjects, targetDate, code: genCode(), createdAt: todayStr() })}>Start tracking <ChevronRight size={14} /></Btn>
         )}
+      </div>
       </div>
     </div>
   );
@@ -980,37 +1410,57 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const subjectColors = ["#C98A3E", "#6FA287", "#5B8CFF", "#E88DA0", "#D9A441", "#8B7FE8"];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-        <Stat label="Syllabus complete" value={`${pct}%`} sub={`${doneCount}/${allChapters.length} chapters`} onClick={() => setTab("syllabus")} />
-        <Stat label="Backlog" value={backlog} sub="chapters untouched" onClick={() => setTab("syllabus")} />
-        <Stat label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length)}%` : "log your first"} onClick={() => setTab("mocks")} />
-        <Stat label="Errors catalogued" value={errors.length} sub="patch these before D-day" onClick={() => setTab("errors")} />
-        <Stat label="Questions today" value={`${dppToday.solved}/${dppToday.target}`} sub="daily practice count" onClick={() => setTab("tasks")} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 20 }}>
+        <StatTile primary icon={Layers} label="Backlog" value={backlog} sub="chapters untouched" onClick={() => setTab("syllabus")} />
+        <StatTile icon={BookMarked} tint="#5B8CFF" label="Syllabus complete" value={`${pct}%`} sub={`${doneCount}/${allChapters.length} chapters`} onClick={() => setTab("syllabus")} />
+        <StatTile icon={CheckCircle2} tint="#8B7CF8" label="Questions today" value={`${dppToday.solved}/${dppToday.target}`} sub="daily practice count" onClick={() => setTab("tasks")} />
       </div>
 
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <FlatStat icon={<Trophy size={15} />} tint="#E8A23D" label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length)}%` : "log your first"} onClick={() => setTab("mocks")} />
+        <FlatStat icon={<AlertTriangle size={15} />} tint={COLORS.danger} label="Errors catalogued" value={errors.length} sub="patch these before D-day" onClick={() => setTab("errors")} />
+      </div>
+
+      <QuickDock setTab={setTab} />
+
       <Card title="Progress ledger" right={<div style={{ fontSize: 11, color: COLORS.faint }}>{unlockedCount}/{badges.length} badges</div>}>
-        <div style={{ display: "flex", alignItems: "center", gap: SPACE.lg, marginBottom: SPACE.lg, flexWrap: "wrap" }}>
-          <div style={{ width: 46, height: 46, borderRadius: RADIUS.control, background: COLORS.inkSoft, border: `1px solid ${COLORS.ink}55`, boxShadow: `0 4px 12px -6px ${COLORS.inkGlow}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Zap size={20} color={COLORS.ink} />
-          </div>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Level {xpInfo.level} — {xpInfo.title}</div>
-            <div style={{ height: 6, background: COLORS.panel2, borderRadius: RADIUS.badge, overflow: "hidden", marginTop: SPACE.xs + 2 }}>
-              <div style={{ width: `${xpInfo.levelPct}%`, height: "100%", background: `linear-gradient(90deg, ${darken(COLORS.ink, 25)}, ${COLORS.ink})`, transition: "width 0.25s ease-out" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: SPACE.lg, marginBottom: SPACE.xl, flexWrap: "wrap" }}>
+          <div style={{ position: "relative", width: 52, height: 52, borderRadius: RADIUS.card, background: `radial-gradient(120px 60px at 50% -40%, ${COLORS.inkGlow}, transparent 70%), ${COLORS.panel2}`, border: `1px solid ${hexToRgba(COLORS.ink, 0.45)}`, boxShadow: elev("e3"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Zap size={24} color={COLORS.ink} />
+            <div style={{ position: "absolute", top: -7, right: -7, width: 22, height: 22, borderRadius: "50%", background: COLORS.ink, color: COLORS.bg, fontFamily: FONTS.mono, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 10px -4px ${COLORS.inkGlow}` }}>
+              {xpInfo.level}
             </div>
-            <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 3 }}>{xpInfo.intoLevel}/{XP_PER_LEVEL} XP to level {xpInfo.level + 1} · {xpInfo.xp} XP total</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontFamily: FONTS.display, fontSize: 18, fontWeight: 700, color: COLORS.text }}>Level {xpInfo.level} — {xpInfo.title}</div>
+              <div style={{ fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.faint }}>{xpInfo.intoLevel}/{XP_PER_LEVEL} XP</div>
+            </div>
+            <div className="lg-progress" style={{ height: 9, marginTop: SPACE.sm, position: "relative", overflow: "visible" }}>
+              <div className="lg-progress-fill" style={{ width: `${xpInfo.levelPct}%`, height: "100%" }} />
+              <div style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, display: "flex", justifyContent: "space-between", pointerEvents: "none" }}>
+                {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ width: 1, height: "100%", background: hexToRgba(COLORS.panel, 0.55), opacity: i === 0 || i === 4 ? 0 : 1 }} />)}
+              </div>
+            </div>
+            <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 4 }}>{xpInfo.xp} XP total · {xpInfo.levelPct}% toward level {Math.min(xpInfo.level + 1, LEVEL_TITLES.length + 1)}</div>
           </div>
         </div>
-        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: SPACE.sm }}>
+        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: SPACE.sm }}>
           {badges.map(b => (
-            <div key={b.id} title={b.desc} className={b.unlocked ? "lg-card lg-card-interactive" : ""} style={{
+            <div key={b.id} title={b.unlocked ? b.desc : (b.progressLabel ? `${b.desc} — ${b.progressLabel}` : b.desc)} className={`lg-card${b.unlocked ? " lg-card-interactive" : ""}`} style={{
               display: "flex", flexDirection: "column", alignItems: "center", gap: SPACE.xs, padding: `${SPACE.sm}px ${SPACE.xs}px`, borderRadius: RADIUS.control,
-              background: b.unlocked ? COLORS.inkSoft : COLORS.panel2, border: `1px solid ${b.unlocked ? COLORS.ink + "55" : COLORS.border}`,
-              opacity: b.unlocked ? 1 : 0.55,
+              background: b.unlocked ? `radial-gradient(130px 60px at 50% -40%, ${COLORS.inkGlow}, transparent 70%), linear-gradient(170deg, ${COLORS.panel}, ${COLORS.panel2})` : COLORS.panel2,
+              border: `1px solid ${b.unlocked ? hexToRgba(COLORS.ink, 0.4) : COLORS.border}`,
+              boxShadow: b.unlocked ? elev("e2") : "none",
+              filter: b.unlocked ? "none" : "grayscale(0.9)",
+              opacity: b.unlocked ? 1 : 0.5,
             }}>
-              {b.unlocked ? <Award size={16} color={COLORS.ink} /> : <Lock size={14} color={COLORS.faint} />}
+              {b.unlocked ? <Award size={17} color={COLORS.ink} /> : <Lock size={14} color={COLORS.faint} />}
               <div style={{ fontSize: 9.5, textAlign: "center", color: b.unlocked ? COLORS.text : COLORS.faint, lineHeight: 1.3 }}>{b.label}</div>
+              {b.progressLabel && !b.unlocked && (
+                <div style={{ fontSize: 8.5, fontFamily: FONTS.mono, color: COLORS.faint }}>{b.progressLabel}</div>
+              )}
             </div>
           ))}
         </div>
@@ -1038,12 +1488,20 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
         </Card>
       )}
 
-      <Card title="30-day focus momentum">
+      <Card title="30-day focus momentum" right={<div style={{ fontSize: 10, color: COLORS.faint }}>daily focus minutes</div>}>
         {last30.every(d => d.min === 0) ? (
-          <EmptyState
-            icon={TimerIcon}
-            message="No focus time logged in the last 30 days yet. Once you start tracking sessions, this chart fills in automatically."
-          />
+          <div style={{ position: "relative", height: 150, borderRadius: RADIUS.card, overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 6, padding: "16px 16px 14px", background: `linear-gradient(180deg, ${hexToRgba(COLORS.ink, 0.05)}, transparent 72%)` }}>
+            {[0.12, 0.2, 0.16, 0.28, 0.22, 0.34, 0.26, 0.42, 0.3, 0.5, 0.38, 0.26, 0.46, 0.34, 0.28, 0.5, 0.4, 0.3, 0.2].map((h, i) => (
+              <div key={i} style={{ flex: 1, maxWidth: 26, height: `${h * 100}%`, borderRadius: 4, background: hexToRgba(COLORS.ink, 0.05 + (i % 3) * 0.02), border: `1px solid ${hexToRgba(COLORS.ink, 0.09)}` }} />
+            ))}
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, textAlign: "center", padding: 20 }}>
+              <EmptyArt variant="track" width={148} height={84} />
+              <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 340, lineHeight: 1.6 }}>
+                The momentum curve draws itself from real sessions. Log your first focus days and this chart fills in automatically.
+              </div>
+              <Btn variant="ink" onClick={() => setTab("timer")}><Play size={12} /> Start focus timer</Btn>
+            </div>
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={last30}>
@@ -1065,7 +1523,7 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
       <Card title="Where your time went (last 7 days)">
         {subjectTime7.every(s => s.minutes === 0) ? (
           <EmptyState
-            icon={TimerIcon}
+            art="grid"
             message="No focus sessions logged yet this week — start the timer or add a manual entry."
             action={<Btn variant="ink" onClick={() => setTab("timer")}>Start focus timer</Btn>}
           />
@@ -1074,11 +1532,14 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
             {subjectTime7.map((s, i) => (
               <div key={s.subject}>
                 <div style={{ ...between(), fontSize: 12, marginBottom: SPACE.xs }}>
-                  <span style={{ color: COLORS.text }}>{s.subject}</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: COLORS.text }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: subjectColors[i % subjectColors.length], boxShadow: `0 0 6px ${hexToRgba(subjectColors[i % subjectColors.length], 0.55)}` }} />
+                    {s.subject}
+                  </span>
                   <span style={{ color: COLORS.dim, fontFamily: FONTS.mono }}>{fmtMin(s.minutes)} · {s.pct}%</span>
                 </div>
-                <div style={{ height: 7, background: COLORS.panel2, borderRadius: RADIUS.badge, overflow: "hidden" }}>
-                  <div style={{ width: `${s.pct}%`, height: "100%", background: subjectColors[i % subjectColors.length], transition: `width ${MOTION.duration.slow}ms ${MOTION.easing.standard}` }} />
+                <div className="lg-progress" style={{ height: 7 }}>
+                  <div style={{ width: `${s.pct}%`, height: "100%", background: `linear-gradient(90deg, ${darken(subjectColors[i % subjectColors.length], 25)}, ${subjectColors[i % subjectColors.length]})`, borderRadius: 999, transition: `width ${MOTION.duration.slow}ms ${MOTION.easing.standard}` }} />
                 </div>
               </div>
             ))}
@@ -1197,11 +1658,14 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
             <Btn variant="ghost" onClick={() => setCursor(c => { const n = new Date(c); n.setMonth(n.getMonth() + 1); return n; })}><ChevronRight size={14} /></Btn>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 11, color: COLORS.dim, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "5px 10px" }}>Focused <b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{fmtMin(monthStats.totalMin)}</b> this month</div>
-          <div style={{ fontSize: 11, color: COLORS.dim, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "5px 10px" }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.activeDays}</b> active days</div>
-          <div style={{ fontSize: 11, color: COLORS.dim, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "5px 10px" }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.tasksDone}</b> targets completed</div>
-          <div style={{ fontSize: 11, color: COLORS.dim, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "5px 10px" }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.mocksTaken}</b> mocks taken</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 11, color: COLORS.dim, display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: 2, background: COLORS.ink, boxShadow: `0 0 6px ${hexToRgba(COLORS.ink, 0.6)}` }} />Focused <b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{fmtMin(monthStats.totalMin)}</b> this month</div>
+          <span style={{ width: 1, height: 14, background: COLORS.border }} />
+          <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.activeDays}</b> active days</div>
+          <span style={{ width: 1, height: 14, background: COLORS.border }} />
+          <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.tasksDone}</b> targets completed</div>
+          <span style={{ width: 1, height: 14, background: COLORS.border }} />
+          <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.mocksTaken}</b> mocks taken</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
           {WEEKDAY_LABELS.map((w, i) => <div key={i} style={{ textAlign: "center", fontSize: 10, color: COLORS.faint, textTransform: "uppercase", padding: "2px 0" }}>{w}</div>)}
@@ -1216,8 +1680,8 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
             const dateNum = parseInt(ds.slice(-2), 10);
             const intensity = info.studyMin === 0 ? 0 : info.studyMin < 30 ? 0.3 : info.studyMin < 90 ? 0.6 : 1;
             return (
-              <div key={ds} onClick={() => setSelected(ds)} style={{
-                aspectRatio: "1", borderRadius: 6, cursor: "pointer", padding: "5px 6px", position: "relative",
+              <div key={ds} className="lg-cell" onClick={() => setSelected(ds)} style={{
+                aspectRatio: "1", borderRadius: 7, cursor: "pointer", padding: "5px 6px", position: "relative",
                 background: isSelected ? COLORS.inkSoft : intensity > 0 ? `${COLORS.ink}${Math.round(intensity * 30).toString(16).padStart(2, "0")}` : COLORS.panel2,
                 border: `1px solid ${isSelected ? COLORS.ink : isExam ? COLORS.danger : COLORS.border}`,
                 display: "flex", flexDirection: "column", justifyContent: "space-between",
@@ -1363,9 +1827,10 @@ function Syllabus({ syllabus, setSyllabus, profile }) {
 
       {view === "list" ? (
         <Card title={`${activeSubject} — ${doneN}/${chapters.length} covered`} right={
-          <div style={{ display: "flex", gap: 10, fontSize: 11 }}>
+<div style={{ display: "flex", gap: 10, fontSize: 10, color: COLORS.faint, margin: 0 }} title="Legend — colour of the square on each row is that chapter's status; the squares here are not buttons">
+  <span style={{ letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Status legend</span>
             {STATUS_ORDER.map(s => (
-              <div key={s} style={{ display: "flex", alignItems: "center", gap: 4, color: COLORS.dim }}>
+              <div key={s} style={{ display: "flex", alignItems: "center", gap: 4, color: COLORS.faint }} title={STATUS_LABEL[s]}>
                 <Bubble status={s} size={12} /> {STATUS_LABEL[s]}
               </div>
             ))}
@@ -1378,18 +1843,23 @@ function Syllabus({ syllabus, setSyllabus, profile }) {
             {visibleChapters.map(c => {
               const unlocked = isUnlocked(c.name);
               const deps = (DEPENDENCIES[activeSubject] || {})[c.name];
+              const missing = !unlocked ? deps.filter(d => !(byName[d] && (byName[d].status === "done" || byName[d].status === "mastered"))) : [];
               return (
                 <div key={c.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px" }}>
-                    <Bubble status={c.status} onClick={() => cycleStatus(c)} />
-                    <div onClick={() => setExpanded(expanded === c.id ? null : c.id)} style={{ flex: 1, fontSize: 13, cursor: "pointer", color: c.status === "todo" ? COLORS.dim : COLORS.text, opacity: unlocked ? 1 : 0.55 }}>
-                      {c.name}
-                      {!unlocked && <span style={{ fontSize: 10, color: COLORS.warn, marginLeft: 8 }}>needs {deps.filter(d => !(byName[d] && (byName[d].status === "done" || byName[d].status === "mastered"))).join(", ")}</span>}
+                    <Bubble status={c.status} onClick={unlocked ? () => cycleStatus(c) : undefined} disabled={!unlocked} />
+                    <div onClick={() => setExpanded(expanded === c.id ? null : c.id)} style={{ flex: "0 1 460px", minWidth: 200, fontSize: 13, cursor: "pointer", color: c.status === "todo" ? COLORS.dim : COLORS.text, opacity: unlocked ? 1 : 0.55 }}>
+                      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom", maxWidth: "100%" }}>{c.name}</span>
+                      {!unlocked && <span style={{ fontSize: 10, color: COLORS.warn, marginLeft: 8 }}>Locked · needs {missing.join(", ")}</span>}
                     </div>
                     {c.notes && c.notes.trim() && <NotebookPen size={12} color={COLORS.faint} title="Has notes" />}
-                    {c.confidence > 0 && <div style={{ display: "flex" }}>{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={11} color={i < c.confidence ? COLORS.warn : COLORS.border} fill={i < c.confidence ? COLORS.warn : "none"} />)}</div>}
-                    <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", minWidth: 70, textAlign: "right" }}>{STATUS_LABEL[c.status]}</div>
-                    <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeChapter(c.id)} />
+                    {c.confidence > 0 && <div style={{ display: "flex", flexShrink: 0 }}>{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={11} color={i < c.confidence ? COLORS.warn : COLORS.border} fill={i < c.confidence ? COLORS.warn : "none"} />)}</div>}
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginLeft: 14, flexShrink: 0 }}>
+                      <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", minWidth: 70, textAlign: "right" }}>
+                        {unlocked ? STATUS_LABEL[c.status] : <span style={{ color: COLORS.warn }}>Locked</span>}
+                      </div>
+                      <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeChapter(c.id)} />
+                    </div>
                   </div>
                   {expanded === c.id && (
                     <div style={{ padding: "10px 4px 16px 32px", display: "flex", flexDirection: "column", gap: 10, background: COLORS.panel2, borderRadius: 8, marginBottom: 8 }}>
@@ -1694,7 +2164,7 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 5 }}>
           {heatmap.map(h => {
             const intensity = h.min === 0 ? 0 : h.min < 30 ? 0.35 : h.min < 90 ? 0.65 : 1;
-            return <div key={h.date} title={`${h.date}: ${fmtMin(h.min)}`} style={{ aspectRatio: "1", borderRadius: 4, background: intensity === 0 ? COLORS.panel2 : COLORS.ink, opacity: intensity === 0 ? 1 : 0.25 + intensity * 0.75, border: `1px solid ${COLORS.border}` }} />;
+            return <div key={h.date} className="lg-cell" title={`${h.date}: ${fmtMin(h.min)}`} style={{ aspectRatio: "1", borderRadius: 4, background: intensity === 0 ? COLORS.panel2 : COLORS.ink, opacity: intensity === 0 ? 1 : 0.25 + intensity * 0.75, border: `1px solid ${COLORS.border}` }} />;
           })}
         </div>
       </Card>
@@ -1912,8 +2382,8 @@ function Tasks({ tasks, setTasks, profile, dpp, setDpp }) {
               <span>{record.solved} / {record.target} questions</span>
               <span style={{ color: COLORS.ink, fontFamily: FONTS.mono }}>{dppPct}%</span>
             </div>
-            <div style={{ height: 8, background: COLORS.panel2, borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ width: `${dppPct}%`, height: "100%", background: dppPct >= 100 ? COLORS.done : COLORS.ink, transition: "width 0.2s" }} />
+            <div className="lg-progress" style={{ height: 8 }}>
+              <div className="lg-progress-fill" style={{ width: `${dppPct}%`, height: "100%", background: dppPct >= 100 ? `linear-gradient(90deg, ${darken(COLORS.done, 25)}, ${COLORS.done})` : undefined }} />
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -2168,7 +2638,12 @@ function Mocks({ mocks, setMocks, profile }) {
             </div>
           </div>
         ))}
-        {mocks.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No mocks logged yet.</div>}
+        {mocks.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: SPACE.sm, padding: "8px 0 4px" }}>
+            <EmptyArt variant="ring" width={116} height={64} />
+            <div style={{ fontSize: 12, color: COLORS.faint }}>No mocks logged yet — log your first test above.</div>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -2218,7 +2693,7 @@ function ErrorLog({ errors, setErrors, mocks }) {
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie data={profileData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name} (${value})`} labelLine={false}>
-                  {profileData.map((d, i) => <Cell key={i} fill={ERROR_COLORS[d.name]} />)}
+                  {profileData.map((d, i) => <Cell key={i} fill={hexToRgba(ERROR_COLORS[d.name], 0.3)} stroke={ERROR_COLORS[d.name]} strokeWidth={1.2} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: 6 }} />
               </PieChart>
@@ -2244,9 +2719,11 @@ function ErrorLog({ errors, setErrors, mocks }) {
 }
 
 // ---------------- PEERS ----------------
-function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCreateGroup, onJoinGroup, onLeaveGroup }) {
+function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupRoster, onCreateGroup, onJoinGroup, onLeaveGroup }) {
   const [codeInput, setCodeInput] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
+  const [copiedGroup, setCopiedGroup] = useState("");
   const [groupName, setGroupName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
@@ -2281,6 +2758,8 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
   };
   const removePeer = (c) => setPeers(prev => prev.filter(p => p !== c));
 
+  const copyText = (text, done) => { navigator.clipboard?.writeText(text); done(true); setTimeout(() => done(false), 1500); };
+
   const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
   const board = [
     { code: profile.code, name: `${profile.name} (you)`, minutes: Math.round(todayMin), streak: computeStreak(sessions), stale: false },
@@ -2313,32 +2792,150 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
     return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
   };
 
+  const seatName = (name) => name.replace(/\s*\(you\)\s*$/, "");
+  const isSelf = (p) => p.code === profile.code;
+  const myStreak = computeStreak(sessions);
+  const myRank = board.findIndex(p => isSelf(p)) + 1;
+  const syncedPeers = peers.filter(c => peerData[c] && peerData[c].date === todayStr()).length;
+  const combinedToday = board.reduce((a, p) => a + p.minutes, 0);
+  const podium = board.filter(p => p.minutes > 0).slice(0, 3);
+  const streakLeaders = board.filter(p => p.streak > 0).sort((a, b) => b.streak - a.streak).slice(0, 6);
+  const shareLine = `Focused ${fmtMin(todayMin)} today${myStreak > 0 ? ` · ${myStreak}-day streak` : ""} in Ledger${combinedToday > 0 ? ` — our circle logged ${fmtMin(combinedToday)} combined.` : ". Join me."}`;
+  const groups = Object.values(groupDefs);
+
+  const heroLabel = {
+    fontSize: 9,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    color: COLORS.faint,
+    fontWeight: 600,
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Card title="Your identity code">
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: 20, letterSpacing: "0.15em", background: COLORS.panel2, padding: "8px 16px", borderRadius: 7, border: `1px solid ${COLORS.border}` }}>{profile.code}</div>
-          <Btn variant="ghost" onClick={() => { navigator.clipboard?.writeText(profile.code); setCopied(true); setTimeout(() => setCopied(false), 1500); }}><Copy size={13} /> {copied ? "Copied" : "Copy"}</Btn>
+    <div style={stack(SPACE.xl)}>
+      {/* HERO — your identity + today's live standing, all real numbers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+        <div style={{ borderRadius: RADIUS.modal, position: "relative", overflow: "hidden", padding: "24px 26px", border: `1px solid ${COLORS.border}`, background: `radial-gradient(620px 200px at 10% -10%, ${hexToRgba(COLORS.ink, 0.1)}, transparent 66%), linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.82)}, ${hexToRgba(COLORS.panel2, 0.66)})`, backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, boxShadow: elev("e3") }}>
+          <div style={{ position: "absolute", right: -42, top: -46, width: 210, height: 210, borderRadius: "50%", background: hexToRgba(COLORS.ink, 0.05) }} />
+          <div style={{ position: "absolute", right: 34, bottom: -64, width: 150, height: 150, borderRadius: "50%", background: hexToRgba(COLORS.ink, 0.04) }} />
+          <div style={{ ...row(6), marginBottom: 14 }}>
+            <Radio size={13} color={COLORS.ink} />
+            <span style={{ ...heroLabel, color: COLORS.ink }}>Your circle · live</span>
+            <span style={{ marginLeft: "auto", ...row(5) }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.done, boxShadow: `0 0 8px ${COLORS.done}` }} />
+              <span style={{ fontSize: 10, color: COLORS.dim }}>{syncedPeers} of {peers.length} peers synced</span>
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ ...heroLabel, marginBottom: 3 }}>Your identity code</div>
+              <div style={{ ...row(8), marginTop: 2, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONTS.mono, fontSize: 23, letterSpacing: "0.16em", color: COLORS.text, fontWeight: 600 }}>{profile.code}</span>
+                <Btn variant="ghost" style={{ padding: "5px 10px", fontSize: 11 }} onClick={() => copyText(profile.code, setCopied)}><Copy size={11} /> {copied ? "Copied" : "Copy"}</Btn>
+              </div>
+              <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 8, lineHeight: 1.5, maxWidth: 300 }}>
+                Share it with a study partner. Your name, today's focus minutes and streak live in a shared table anyone with the code can read — nothing else.
+              </div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={heroLabel}>Focused today</div>
+              <div style={{ fontFamily: FONTS.mono, fontSize: 32, fontWeight: 700, color: COLORS.ink, lineHeight: 1.05, letterSpacing: "-0.02em", textShadow: `0 4px 18px ${hexToRgba(COLORS.ink, 0.35)}` }}>{fmtMin(todayMin)}</div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 18, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
+            {[
+              { label: "Streak", value: myStreak > 0 ? `${myStreak}d` : "Start today" },
+              { label: "Your rank", value: myRank > 0 ? `#${myRank}` : "—" },
+              { label: "Circle total", value: fmtMin(combinedToday) },
+            ].map(s => (
+              <div key={s.label} style={{ minWidth: 0 }}>
+                <div style={heroLabel}>{s.label}</div>
+                <div style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 600, color: COLORS.text, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 10 }}>
-          Share this with a study partner. Their leaderboard entry — name, today's focus minutes, streak — is stored in a shared table anyone with the code can read; nothing else about your account is exposed.
-        </div>
-      </Card>
 
-      <Card title="Add a peer">
-        <div style={{ display: "flex", gap: 8 }}>
-          <Input placeholder="Enter their 6-character code" value={codeInput} onChange={e => setCodeInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addPeer()} />
-          <Btn variant="ink" onClick={addPeer}><Plus size={14} /> Add</Btn>
+        <div className="lg-card" style={{ borderRadius: RADIUS.modal, border: `1px solid ${COLORS.border}`, padding: "24px 26px", ...stack(14), justifyContent: "center" }}>
+          <div style={{ ...row(8) }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, ...center() }}>
+              <ShieldCheck size={16} color={COLORS.done} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>Your code is your room key</div>
+              <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 1 }}>No friend requests, no strangers — only codes you hand out.</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: COLORS.dim, lineHeight: 1.65 }}>
+            Everything in this section is built from real records: your focus sessions, peers' published leaderboard rows (name, today's minutes, streak), and the study groups you're actually in. If a peer hasn't opened Ledger today, the board says so instead of guessing.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", ...row(8) }}>
+            <Btn variant="ghost" onClick={() => copyText(shareLine, setCopiedShare)}><Send size={12} /> {copiedShare ? "Copied!" : "Copy a status to share"}</Btn>
+            <div style={{ flex: 1, minWidth: 180, fontSize: 10.5, color: COLORS.faint, fontFamily: FONTS.mono, background: COLORS.panel2, border: `1px dashed ${COLORS.border}`, borderRadius: RADIUS.control, padding: "6px 9px", alignSelf: "stretch", display: "flex", alignItems: "center" }}>{shareLine}</div>
+          </div>
         </div>
-      </Card>
+      </div>
 
-      <Card title="Leaderboard — today's focus time" right={<div style={{ fontSize: 10, color: COLORS.faint }}>Resets at midnight</div>}>
-        <div className="lg-card" style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+      {/* STAT STRIP — derived only from real sessions + shared rows */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16 }}>
+        <Stat label="Focused today" value={fmtMin(todayMin)} sub="your minutes logged" />
+        <Stat label="Streak" value={myStreak > 0 ? `${myStreak}d` : "0d"} sub={myStreak > 0 ? "consecutive days" : "log today to start one"} />
+        <Stat label="Circle" value={peers.length} sub={syncedPeers > 0 ? `${syncedPeers} synced today` : "no peers added yet"} />
+        <Stat label="Together today" value={fmtMin(combinedToday)} sub={combinedToday > 0 ? "you + peers combined" : "be the first to log"} accent={combinedToday > 0 ? COLORS.ink : undefined} />
+      </div>
+
+      {/* LEADERBOARD — your circle's today's real numbers, podium + full standings */}
+      <Card title="Your circle's today leaderboard" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><TrendingUp size={11} color={COLORS.ink} /> Resets at midnight</div>}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 16 }}>
+          {[0, 1, 2].map(i => {
+            const p = podium[i];
+            if (!p) {
+              return (
+                <div key={i} style={{ borderRadius: RADIUS.card, border: `1.5px dashed ${COLORS.border}`, padding: "14px", ...center(), flexDirection: "column", gap: 6, textAlign: "center", minHeight: 132 }}>
+                  <div style={{ ...center(), width: 30, height: 30, borderRadius: "50%", border: `1.5px dashed ${COLORS.faint}`, color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 11 }}>{i + 1}</div>
+                  <div style={{ fontSize: 11, color: COLORS.faint, maxWidth: 170, lineHeight: 1.5 }}>{i === 0 ? "Nobody has logged focus today — take the crown." : "Open slot — invite a peer to race for it."}</div>
+                </div>
+              );
+            }
+            const isTop = i === 0;
+            const medal = RANK_COLORS[i];
+            return (
+              <div key={p.code} style={{ borderRadius: RADIUS.card, border: `1px solid ${hexToRgba(medal, 0.55)}`, background: `linear-gradient(160deg, ${hexToRgba(medal, 0.14)}, transparent 55%)`, padding: "14px", position: "relative", minHeight: 132 }}>
+                {i === 0 && <div style={{ position: "absolute", top: 10, right: 10 }}><Crown size={15} color={medal} /></div>}
+                <div style={{ ...row(8) }}>
+                  <div style={{ width: 30, height: 30, borderRadius: "50%", ...center(), fontFamily: FONTS.display, fontWeight: 700, fontSize: 13, color: medal, border: `1.5px solid ${medal}`, boxShadow: `0 0 0 3px ${hexToRgba(medal, 0.14)}` }}>{i + 1}</div>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, ...center(), fontFamily: FONTS.display, fontWeight: 600, fontSize: 12, color: COLORS.bg, background: isSelf(p) ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` : `linear-gradient(150deg, ${medal}, ${darken(medal, 22)})` }}>{initialsOf(p.name)}</div>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {seatName(p.name)}
+                    {isSelf(p) && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: COLORS.ink, marginLeft: 6 }}>YOU</span>}
+                  </div>
+                  <div style={{ fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.faint, marginTop: 2, ...row(5) }}>
+                    {p.streak > 0 && <><Flame size={10} color={COLORS.warn} /> {p.streak}d streak</>}
+                    {p.stale && <span>{p.streak > 0 ? " · " : ""}not synced today</span>}
+                  </div>
+                </div>
+                <div style={{ position: "absolute", bottom: 12, right: 14, textAlign: "right" }}>
+                  <div style={{ fontFamily: FONTS.mono, fontSize: 17, fontWeight: 700, color: isTop ? medal : COLORS.text }}>{fmtMin(p.minutes)}</div>
+                  <div style={{ fontSize: 8.5, letterSpacing: "0.1em", color: COLORS.faint }}>MIN</div>
+                </div>
+                <div style={{ position: "absolute", left: 14, right: 14, bottom: 18 }}>
+                  <div style={{ height: 4, background: hexToRgba(COLORS.text, 0.1), borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, Math.round((p.minutes / Math.max(1, leaderMinutes)) * 100))}%`, background: `linear-gradient(90deg, ${darken(medal, 25)}, ${medal})`, borderRadius: 3 }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="lg-card" style={{ borderRadius: RADIUS.card, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
           {board.map((p, i) => {
             const rank = i + 1;
             const isTop3 = rank <= 3;
             const stampColor = isTop3 ? RANK_COLORS[i] : COLORS.faint;
-            const isSelf = p.code === profile.code;
+            const self = isSelf(p);
             const pct = leaderMinutes > 0 ? Math.min(100, Math.round((p.minutes / leaderMinutes) * 100)) : 0;
             return (
               <div
@@ -2352,10 +2949,10 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
                   padding: "10px 12px",
                   borderBottom: i < board.length - 1 ? `1px solid ${COLORS.border}` : "none",
                   position: "relative",
-                  background: isSelf ? hexToRgba(COLORS.ink, 0.08) : "transparent",
+                  background: self ? hexToRgba(COLORS.ink, 0.08) : "transparent",
                 }}
               >
-                {isSelf && (
+                {self && (
                   <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: COLORS.ink }} />
                 )}
                 <div
@@ -2378,7 +2975,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
                       width: 30, height: 30, borderRadius: 8, flexShrink: 0,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontFamily: FONTS.display, fontWeight: 600, fontSize: 12, color: COLORS.bg,
-                      background: isSelf
+                      background: self
                         ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})`
                         : `linear-gradient(150deg, ${COLORS.faint}, ${darken(COLORS.faint, 20)})`,
                     }}
@@ -2387,7 +2984,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {p.name}
+                      {seatName(p.name)}
                     </div>
                     <div style={{ fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.faint, display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
                       {p.streak > 0 && <><Flame size={10} color={COLORS.warn} /> {p.streak}d</>}
@@ -2404,7 +3001,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
                 <div style={{ fontFamily: FONTS.mono, fontSize: 14, fontWeight: 600, color: COLORS.text, textAlign: "right" }}>
                   {fmtMin(p.minutes)}
                 </div>
-                {!isSelf ? (
+                {!self ? (
                   <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(p.code)} />
                 ) : <span />}
               </div>
@@ -2413,36 +3010,163 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
         </div>
       </Card>
 
-      <Card title="Study groups">
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <Input placeholder="New group name" value={groupName} onChange={e => setGroupName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} />
+      {/* STUDY GROUPS — real rooms/group_members tables, each with its own
+          mini leaderboard derived from the members' published rows. The
+          board is the hub: your circle is one of the rooms you race in. */}
+      <Card title="Study groups" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><Users size={11} color={COLORS.ink} /> {groups.length} {groups.length === 1 ? "group" : "groups"}</div>}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <Input placeholder="New group name" value={groupName} onChange={e => setGroupName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} style={{ flex: 1, minWidth: 170 }} />
           <Btn variant="ink" disabled={creatingGroup} onClick={handleCreateGroup}><Plus size={14} /> Create</Btn>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <Input placeholder="Join with a group code" value={joinCode} onChange={e => setJoinCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleJoinGroup()} />
+          <Input placeholder="Join with a 6-character code" value={joinCode} onChange={e => setJoinCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleJoinGroup()} style={{ flex: 1, minWidth: 190 }} />
           <Btn variant="ghost" disabled={joiningGroup} onClick={handleJoinGroup}>Join</Btn>
         </div>
-        {joinError && <div style={{ fontSize: 11, color: COLORS.danger }}>{joinError}</div>}
-        {Object.keys(groupDefs).length === 0 ? (
-          <div style={{ fontSize: 12, color: COLORS.faint }}>Not in any groups yet — create one or join with a code.</div>
+        {joinError && <div style={{ fontSize: 11, color: COLORS.danger, marginBottom: 10 }}>{joinError}</div>}
+        {groups.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: `0 0 ${SPACE.xs}px`, textAlign: "center" }}>
+            <EmptyArt variant="grid" width={128} height={72} />
+            <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 340, lineHeight: 1.6 }}>
+              No study groups yet. Create one and hand the code to your batchmates — every group gets its own leaderboard.
+            </div>
+          </div>
         ) : (
-          <div className="lg-card" style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
-            {Object.values(groupDefs).map((g, i, arr) => (
-              <div
-                key={g.code}
-                className="lg-row"
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: i < arr.length - 1 ? `1px solid ${COLORS.border}` : "none" }}
-              >
-                <div style={{ width: 30, height: 30, borderRadius: 8, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Award size={14} color={COLORS.ink} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+            {groups.map(g => {
+              const roster = groupRoster[g.code] || { memberCodes: [], rows: [] };
+              const gRows = roster.rows.map(r => {
+                const stale = r.date !== todayStr();
+                return { code: r.code, name: r.name, minutes: stale ? 0 : (r.minutes || 0), streak: r.streak || 0, stale };
+              });
+              if (!gRows.some(r => r.code === profile.code)) {
+                gRows.push({ code: profile.code, name: profile.name, minutes: todayMin, streak: myStreak, stale: false });
+              }
+              gRows.sort((a, b) => b.minutes - a.minutes);
+              const gTop = gRows.slice(0, 3);
+              const youInTop = gTop.some(r => r.code === profile.code);
+              const gLeaderMin = gRows[0]?.minutes || 0;
+              const avatars = gRows.slice(0, 4);
+              return (
+                <div key={g.code} className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: 18, position: "relative", overflow: "hidden" }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: COLORS.ink }} />
+                  <div style={{ ...between(), marginBottom: 12 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: `radial-gradient(80px 40px at 50% -20%, ${COLORS.inkGlow}, transparent 70%), ${COLORS.panel2}`, border: `1px solid ${hexToRgba(COLORS.ink, 0.4)}`, ...center() }}>
+                      <Award size={15} color={COLORS.ink} />
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", color: COLORS.done, background: hexToRgba(COLORS.done, 0.12), border: `1px solid ${hexToRgba(COLORS.done, 0.3)}`, padding: "3px 7px", borderRadius: RADIUS.badge }}>JOINED</div>
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: FONTS.display, color: COLORS.text }}>{g.name}</div>
+                  <div style={{ ...row(8), marginTop: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.faint, letterSpacing: "0.08em", background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.badge, padding: "3px 8px" }}>{g.code}</span>
+                    <button onClick={() => copyText(g.code, (v) => setCopiedGroup(v ? g.code : ""))} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, color: COLORS.dim, background: "transparent", border: "none", cursor: "pointer", padding: 3 }}>
+                      <Copy size={11} /> {copiedGroup === g.code ? "Copied" : "Copy code"}
+                    </button>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+                    <div style={{ ...row(5), fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>
+                      <TrendingUp size={11} color={COLORS.ink} /> Today's focus
+                    </div>
+                    <div style={{ ...row(2), alignItems: "center" }}>
+                      {avatars.map((m, i) => (
+                        <div key={m.code + i} title={seatName(m.name)} style={{ width: 22, height: 22, borderRadius: "50%", ...center(), fontFamily: FONTS.mono, fontSize: 9, fontWeight: 600, color: COLORS.bg, background: m.code === profile.code ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` : `linear-gradient(150deg, ${COLORS.faint}, ${darken(COLORS.faint, 20)})`, border: `2px solid ${COLORS.panel2}`, boxSizing: "border-box" }}>
+                          {initialsOf(m.name)}
+                        </div>
+                      ))}
+                      <span style={{ fontSize: 10.5, color: COLORS.dim, fontWeight: 600, marginLeft: 3 }}>{roster.memberCodes.length}</span>
+                    </div>
+                  </div>
+
+                  {gRows.some(r => r.minutes > 0) ? (
+                    <div style={{ marginTop: 8 }}>
+                      {gTop.map((m, i) => {
+                        const medal = RANK_COLORS[i];
+                        const self = m.code === profile.code;
+                        return (
+                          <div key={m.code} className="lg-row" style={{ ...row(8), padding: "6px 8px", borderRadius: 6 }}>
+                            <span style={{ fontFamily: FONTS.mono, fontSize: 10, fontWeight: i === 0 ? 700 : 600, color: medal, width: 13, textAlign: "center" }}>{i + 1}</span>
+                            <span style={{ width: 22, height: 22, borderRadius: 7, ...center(), fontFamily: FONTS.display, fontWeight: 600, fontSize: 10, color: COLORS.bg, background: self ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` : `linear-gradient(150deg, ${medal}, ${darken(medal, 22)})` }}>{initialsOf(m.name)}</span>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: self ? COLORS.ink : COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {seatName(m.name)}
+                            </span>
+                            <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, fontWeight: 600, color: COLORS.text }}>{fmtMin(m.minutes)}</span>
+                          </div>
+                        );
+                      })}
+                      {!youInTop && (
+                        <div className="lg-row" style={{ ...row(8), padding: "6px 8px", borderTop: `1px dashed ${COLORS.border}` }}>
+                          <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: COLORS.faint, width: 13, textAlign: "center" }}>…</span>
+                          <span style={{ width: 22, height: 22, borderRadius: 7, ...center(), fontFamily: FONTS.mono, fontWeight: 600, fontSize: 10, color: COLORS.bg, background: `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` }}>{initialsOf(profile.name)}</span>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: COLORS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>you</span>
+                          <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, fontWeight: 600, color: COLORS.text }}>{fmtMin(todayMin)}</span>
+                        </div>
+                      )}
+                      <div style={{ height: 3, background: hexToRgba(COLORS.text, 0.1), borderRadius: 2, marginTop: 8, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${gLeaderMin > 0 ? 100 : 0}%`, background: `linear-gradient(90deg, ${darken(COLORS.ink, 25)}, ${COLORS.ink})` }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 0 4px", textAlign: "center" }}>
+                      <EmptyArt variant="ring" width={104} height={56} />
+                      <div style={{ fontSize: 11, color: COLORS.faint, lineHeight: 1.5 }}>No focus logged in this group today yet.</div>
+                    </div>
+                  )}
+
+                  <div style={{ ...row(8), marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+                    <Btn variant="danger" style={{ padding: "5px 10px", fontSize: 11.5 }} onClick={() => onLeaveGroup(g.code)}>Leave</Btn>
+                    <div style={{ fontSize: 10.5, color: COLORS.faint }}>Codes are real room keys — anyone with it can join.</div>
+                  </div>
                 </div>
-                <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>{g.name}</div>
-                <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.faint, letterSpacing: "0.05em" }}>{g.code}</div>
-                <Btn variant="danger" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => onLeaveGroup(g.code)}>Leave</Btn>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 14 }}>
+          Group boards read only the members' published rows — name, today's focus minutes, and streak. Nothing else about accounts is exposed.
+        </div>
+      </Card>
+
+      {/* STREAK RAIL — longest real streaks in your circle */}
+      <Card title="Streak leaders" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><Flame size={11} color={COLORS.warn} /> longest burns in your circle</div>}>
+        {streakLeaders.length === 0 ? (
+          <div style={{ fontSize: 12, color: COLORS.faint }}>No streaks yet in your circle — your own run starts the moment you log a second consecutive day.</div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {streakLeaders.map((p, i) => (
+              <div key={p.code} style={{ ...row(8), padding: "8px 12px", borderRadius: RADIUS.control, background: COLORS.panel2, border: `1px solid ${COLORS.border}` }}>
+                <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: i === 0 ? COLORS.warn : COLORS.faint, fontWeight: 600 }}>#{i + 1}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>{seatName(p.name)}</span>
+                <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.warn, fontWeight: 600 }}>{p.streak}d</span>
               </div>
             ))}
           </div>
         )}
+      </Card>
+
+      {/* INVITE A PEER — add real codes from the shared table */}
+      <Card title="Grow your circle" right={<div style={{ fontSize: 10, color: COLORS.faint }}>peer codes, not friend requests</div>}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Input placeholder="Enter their 6-character code" value={codeInput} onChange={e => setCodeInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addPeer()} />
+          <Btn variant="ink" onClick={addPeer}><Plus size={14} /> Add</Btn>
+        </div>
+        {peers.length > 0 && (
+          <div className="lg-card" style={{ marginTop: 12, borderRadius: RADIUS.control, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+            {peers.map((c, i, arr) => {
+              const d = peerData[c];
+              return (
+                <div key={c} className="lg-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: i < arr.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
+                  <Users size={13} color={COLORS.ink} />
+                  <span style={{ fontFamily: FONTS.mono, fontSize: 12.5, color: COLORS.text, letterSpacing: "0.06em" }}>{c}</span>
+                  <span style={{ flex: 1, fontSize: 11, color: d ? COLORS.dim : COLORS.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {d ? `${d.name} · synced ${d.date === todayStr() ? "today" : d.date}` : "pending first sync…"}
+                  </span>
+                  <Trash2 size={12} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(c)} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 10 }}>
+          Peers see only what's published to the shared table — name, today's focus minutes, and streak. Nothing else about your account is exposed.
+        </div>
       </Card>
     </div>
   );
@@ -2452,6 +3176,28 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, onCrea
 function SettingsTab({ profile, setProfile, data, setters, settings, setSettings, onResetFloatPosition }) {
   const [importError, setImportError] = useState("");
   const [importOk, setImportOk] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyText = (text, done) => { navigator.clipboard?.writeText(text); done(true); setTimeout(() => done(false), 1500); };
+
+  const daysLeft = profile.targetDate ? daysBetween(new Date(), profile.targetDate) : null;
+  const initials = (profile.name || "")
+    .replace(/\(.*?\)/g, "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0])
+    .join("")
+    .toUpperCase() || "?";
+
+  const previewFont = (t) => (FONT_PRESETS[t.font] || FONT_PRESETS.ledger).display;
+
+  const Chip = ({ icon: Icon }) => (
+    <div style={{ ...center(), width: 22, height: 22, borderRadius: 6, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, flexShrink: 0 }}>
+      <Icon size={11} color={COLORS.ink} />
+    </div>
+  );
 
   const exportData = () => {
     const payload = { ...data, peers: data.peers || [], settings };
@@ -2491,78 +3237,162 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 500 }}>
-      <Card title="Profile">
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div>
-            <label style={{ fontSize: 11, color: COLORS.dim }}>Display name</label>
-            <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: COLORS.dim }}>Target date</label>
-            <Input type="date" value={profile.targetDate} onChange={e => setProfile({ ...profile, targetDate: e.target.value })} />
-          </div>
-        </div>
-      </Card>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 640 }}>
 
-      <Card title="Theme">
-        <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 10 }}>Each theme is a full palette — background, panels, and typeface all change together, not just an accent color.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-          {Object.entries(THEME_PRESETS).map(([id, t]) => (
-            <div key={id} onClick={() => setSettings(s => ({ ...s, theme: id }))} style={{
-              cursor: "pointer", borderRadius: 9, padding: "10px 10px 9px", border: `1.5px solid ${settings.theme === id ? t.accent : COLORS.border}`,
-              background: t.panel,
-            }}>
-              <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-                <div style={{ flex: 1, height: 18, borderRadius: 4, background: t.bg, border: `1px solid ${t.border}` }} />
-                <div style={{ width: 18, height: 18, borderRadius: 4, background: t.accent, flexShrink: 0 }} />
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{t.label}</div>
-              {settings.theme === id && <div style={{ fontSize: 10, color: t.accent, marginTop: 2 }}>Active</div>}
+      {/* IDENTITY STRIP — read-only snapshot of real profile data */}
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, background: `radial-gradient(560px 180px at 10% -40%, ${hexToRgba(COLORS.ink, 0.1)}, transparent 66%), linear-gradient(165deg, ${hexToRgba(COLORS.panel, 0.9)}, ${hexToRgba(COLORS.panel2, 0.74)})`, backdropFilter: `blur(26px) saturate(1.3)`, WebkitBackdropFilter: `blur(26px) saturate(1.3)`, boxShadow: elev("e3"), padding: "16px 18px" }}>
+        <div style={{ position: "absolute", right: -38, top: -52, width: 180, height: 180, borderRadius: "50%", background: hexToRgba(COLORS.ink, 0.05) }} />
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ ...center(), width: 46, height: 46, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(150deg, ${hexToRgba(COLORS.ink, 0.2)}, ${COLORS.panel2})`, border: `1px solid ${hexToRgba(COLORS.ink, 0.45)}`, boxShadow: `0 2px 12px ${hexToRgba(COLORS.ink, 0.3)}` }}>
+            <span style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 700, color: COLORS.text }}>{initials}</span>
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontFamily: FONTS.display, fontSize: 16, fontWeight: 700, color: COLORS.text, lineHeight: 1.2 }}>{profile.name || "Study partner"}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 3, fontSize: 11, color: COLORS.faint }}>
+              <span>{profile.exam || "Prep campaign"}</span>
+              {profile.exam && (
+                <>
+                  <span style={{ width: 3, height: 3, borderRadius: "50%", background: COLORS.border }} />
+                  <span style={{ fontFamily: FONTS.mono, fontWeight: 600, color: daysLeft !== null && daysLeft <= 0 ? COLORS.ink : COLORS.dim }}>
+                    {daysLeft === null ? "no date yet" : daysLeft > 0 ? `D-${daysLeft}` : daysLeft === 0 ? "D-day" : `D+${-1 * daysLeft}`}
+                  </span>
+                </>
+              )}
             </div>
-          ))}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>Your code</div>
+              <div style={{ fontFamily: FONTS.mono, fontSize: 15, letterSpacing: "0.14em", fontWeight: 600, color: COLORS.text, marginTop: 2 }}>{profile.code}</div>
+            </div>
+            <Btn variant="ghost" style={{ padding: "5px 9px", fontSize: 11 }} onClick={() => copyText(profile.code, setCopied)}>
+              <Copy size={11} /> {copied ? "Copied" : "Copy"}
+            </Btn>
+          </div>
         </div>
-      </Card>
+      </div>
+      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+          <Chip icon={Target} />
+          <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Profile &amp; prep plan</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>Shown in your header</span>
+        </div>
+        <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", flexWrap: "wrap" }}>
+          <div style={{ width: "100%", maxWidth: 300 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>Display name</div>
+            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2 }}>How you appear in your circle.</div>
+          </div>
+          <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 180 }} />
+        </div>
+        <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", flexWrap: "wrap", borderTop: `1px solid ${COLORS.border}` }}>
+          <div style={{ width: "100%", maxWidth: 300 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>Target date</div>
+            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2 }}>
+              {daysLeft === null ? "Set a date and the countdown runs from here." : daysLeft === 0 ? "Exam day is today." : daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to go.` : `${-1 * daysLeft} days since — revise your goals?`}
+            </div>
+          </div>
+          <Input type="date" value={profile.targetDate} onChange={e => setProfile({ ...profile, targetDate: e.target.value })} style={{ flex: "1 1 200px", minWidth: 180 }} />
+        </div>
+      </div>
 
-      <Card title="Focus timer">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>Floating timer badge</div>
-            <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 2, maxWidth: 340 }}>Shows a small draggable badge with the running time when you leave Deep Work for another section of Ledger.</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 2px 0" }}>
+        <Chip icon={Layers} />
+        <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Appearance</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>One design, two rooms</span>
+      </div>
+      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "14px 16px" }}>
+        <div style={{ fontSize: 11, color: COLORS.faint, lineHeight: 1.5, marginBottom: 12 }}>One Glass design system in two moods — same surfaces, typography and accent, just light or dark. Picking either repaints the whole app.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+          {Object.entries(THEME_PRESETS).map(([id, t]) => {
+            const active = settings.theme === id;
+            const preview = previewFont(t);
+            return (
+              <div
+                key={id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={active}
+                aria-label={`Use the ${t.label} theme`}
+                className="lg-card lg-card-interactive"
+                onClick={() => setSettings(s => ({ ...s, theme: id }))}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSettings(s => ({ ...s, theme: id })); } }}
+                style={{ borderRadius: RADIUS.control, padding: 10, border: `1px solid ${active ? t.accent : t.border}`, background: `linear-gradient(170deg, ${t.panel}, ${t.panel2})`, boxShadow: active ? `0 0 0 2px ${hexToRgba(t.accent, 0.35)}, 0 14px 28px -16px ${hexToRgba(t.accent, 0.7)}` : undefined }}
+              >
+                <div style={{ border: `1px solid ${t.border}`, background: t.bg, borderRadius: 7, padding: "8px 9px", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 7 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 3, background: t.accent, boxShadow: `0 0 6px ${hexToRgba(t.accent, 0.8)}` }} />
+                    <span style={{ width: "46%", height: 3, borderRadius: 2, background: t.dim }} />
+                  </div>
+                  <div style={{ fontFamily: preview, fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.15 }}>Aa — {t.label}</div>
+                  <div style={{ marginTop: 8, height: 3, borderRadius: 2, background: t.border }} />
+                  <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: t.border, width: "62%" }} />
+                  <div style={{ marginTop: 8, height: 4, borderRadius: 2, width: "76%", background: `linear-gradient(90deg, ${t.accent}, ${hexToRgba(t.accent, 0.25)})` }} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{t.label}</span>
+                  {active && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700, color: t.accent }}>
+                      <CheckCircle2 size={11} /> Active
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+          <Chip icon={TimerIcon} />
+          <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Focus timer</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>Optional floating badge</span>
+        </div>
+        <div className="lg-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 18px", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 200, flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>Floating timer badge</div>
+            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2, maxWidth: 380, lineHeight: 1.5 }}>Shows a small draggable badge with the running time when you leave Deep Work for another section of Ledger.</div>
           </div>
           <label style={{ position: "relative", display: "inline-block", width: 40, height: 22, flexShrink: 0, cursor: "pointer" }}>
             <input type="checkbox" checked={settings.floatingTimer !== false} onChange={e => setSettings(s => ({ ...s, floatingTimer: e.target.checked }))} style={{ opacity: 0, width: 0, height: 0 }} />
-            <span style={{ position: "absolute", inset: 0, borderRadius: 22, background: settings.floatingTimer !== false ? COLORS.ink : COLORS.panel2, border: `1px solid ${COLORS.border}`, transition: "background 0.15s" }} />
-            <span style={{ position: "absolute", top: 2, left: settings.floatingTimer !== false ? 20 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.15s" }} />
+            <span style={{ position: "absolute", inset: 0, borderRadius: 22, background: settings.floatingTimer !== false ? COLORS.ink : COLORS.panel2, border: settings.floatingTimer !== false ? "1px solid transparent" : `1px solid ${COLORS.border}`, boxShadow: settings.floatingTimer !== false ? `0 0 10px ${hexToRgba(COLORS.ink, 0.45)}` : "inset 0 1px 2px rgba(0,0,0,0.3)", transition: "background 0.15s, box-shadow 0.15s" }} />
+            <span style={{ position: "absolute", top: 2, left: settings.floatingTimer !== false ? 20 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.35)", transition: "left 0.15s" }} />
           </label>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontSize: 11, color: COLORS.faint, maxWidth: 340 }}>Dragged the badge somewhere awkward? Snap it back to the bottom-right corner.</div>
-          <Btn variant="ghost" onClick={onResetFloatPosition}>Reset position</Btn>
+        <div className="lg-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: 11, color: COLORS.faint, maxWidth: 380, lineHeight: 1.5 }}>Dragged the badge somewhere awkward? Snap it back to the bottom-right corner.</div>
+          <Btn variant="ghost" onClick={onResetFloatPosition} style={{ flexShrink: 0 }}>Reset position</Btn>
         </div>
-        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11, color: COLORS.faint, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
           <b style={{ color: COLORS.dim }}>Heads up:</b> Ledger runs inside a sandboxed panel in your browser, so it can't render on top of other apps or other browser tabs (like a video call or YouTube). The badge only floats within Ledger itself. If you switch away entirely, the timer keeps its place — it'll show the correct elapsed time the moment you come back — but it won't be visible while you're elsewhere.
         </div>
-      </Card>
+      </div>
 
-      <Card title="Data">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+          <Chip icon={ClipboardList} />
+          <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Data — export &amp; restore</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>JSON, scoped to your account</span>
+        </div>
+        <div className="lg-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "13px 18px" }}>
           <Btn variant="ghost" onClick={exportData}><Download size={14} /> Export all data (JSON)</Btn>
           <input id="ledger-import-input" type="file" accept="application/json" onChange={handleImportFile} style={{ display: "none" }} />
           <Btn variant="ghost" onClick={() => document.getElementById("ledger-import-input").click()}><ClipboardList size={14} /> Import from JSON</Btn>
         </div>
-        {importError && <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 10 }}>{importError}</div>}
-        {importOk && <div style={{ fontSize: 11, color: COLORS.done, marginTop: 10 }}>Import complete — your data has been restored.</div>}
-        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 10 }}>
+        {importError && <div style={{ fontSize: 11, color: COLORS.danger, padding: "0 18px 12px" }}>{importError}</div>}
+        {importOk && <div style={{ fontSize: 11, color: COLORS.done, padding: "0 18px 12px" }}>Import complete — your data has been restored.</div>}
+        <div style={{ fontSize: 11, color: COLORS.faint, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
           Your data lives in Supabase, scoped to your account. Export regularly if you want an offline backup, and import that same file here to restore it.
         </div>
-      </Card>
+      </div>
 
-      <Card title="About this build">
-        <div style={{ fontSize: 12, color: COLORS.dim, lineHeight: 1.7 }}>
-          Ledger — real syllabus tracking, real timers, real accounts and persistent storage.
-        </div>
-      </Card>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 2px 0" }}>
+        <Chip icon={ShieldCheck} />
+        <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>About this build</span>
+      </div>
+      <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.7, padding: "0 2px" }}>
+        Ledger — real syllabus tracking, real timers, real accounts and persistent storage. No invented numbers: every surface here is built from your own data.
+      </div>
     </div>
   );
 }
@@ -2605,14 +3435,14 @@ function AuthScreen({ onDemo }) {
   };
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.body, color: COLORS.text }}>
-      <style>{FONT_IMPORT}</style>
-      <div style={{ width: 360, background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "32px 30px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 22 }}>
-          <div style={{ width: 26, height: 26, borderRadius: 6, background: COLORS.ink, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <BookMarked size={14} color="#fff" />
+    <div style={{ background: "transparent", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.body, color: COLORS.text, padding: 20 }}>
+      <style>{globalCss()}</style>
+      <div className="lg-card" style={{ width: 360, borderRadius: 16, border: `1px solid ${COLORS.border}`, padding: "32px 30px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
+          <div className="lg-brand-plate">
+            <BookMarked size={15} color="#fff" />
           </div>
-          <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 17 }}>Ledger</div>
+          <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 18 }}>Ledger</div>
         </div>
         {sent ? (
           <div style={{ fontSize: 13, color: COLORS.dim, lineHeight: 1.6 }}>
@@ -2671,7 +3501,13 @@ export default function AuthGate() {
   }, []);
 
   if (session === undefined) {
-    return <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body }}>Loading…</div>;
+    return <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body }}>
+      <style>{globalCss()}</style>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <div className="lg-brand-plate"><BookMarked size={15} color="#fff" /></div>
+        <div className="lg-skeleton" style={{ height: 14, width: 220 }} />
+      </div>
+    </div>;
   }
   if (!session) return <AuthScreen onDemo={() => setSession({ user: { id: "demo-user", email: "demo@ledger.app" } })} />;
   return <Workspace session={session} />;

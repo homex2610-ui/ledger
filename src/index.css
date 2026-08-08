@@ -4,16 +4,16 @@
   --radius-sm: 5px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --sidebar-width: 240px;
+  --sidebar-width: 268px;
   --header-height: 56px;
   --content-max-width: 1180px;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
+  --space-4: 24px;
+  --space-5: 28px;
+  --space-6: 32px;
 
   /* Color tokens (default: dark theme to preserve existing look) */
   --color-bg: #16110b;          /* page background */
@@ -56,7 +56,11 @@ html, body, #root {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background: var(--color-bg);
+  /* The themed atmospheric gradient is painted by the injected globalCss on
+     <body> (see src/lib/theme.js). These containers must stay transparent so
+     nothing opaque ever sits between that gradient and the glass panels —
+     backdrop-filter has nothing to reveal if a flat layer occludes it. */
+  background: transparent;
   color: var(--color-text);
 }
 
@@ -79,7 +83,7 @@ body {
   padding: var(--space-4) var(--space-5);
   overflow-y: auto;
   max-height: 900px;
-  background-image: linear-gradient(var(--color-border) 0.08, transparent 1px);
+  background-image: linear-gradient(var(--color-border) 0.09, transparent 3px);
   background-size: 100% 30px;
   background-position-y: 8px;
 }

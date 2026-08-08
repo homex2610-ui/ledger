@@ -24,70 +24,64 @@ export default function Sidebar({ tab, setTab, profile = {}, onSignOut }) {
   const days = daysBetween(new Date(), profile?.targetDate || new Date());
 
   return (
-    <div className="sidebar">
-      {/* Brand Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 8px 18px", borderBottom: `1px solid ${COLORS.border || "#2d2d2d"}`, marginBottom: 16 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 6, background: COLORS.ink || "#d97706", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <nav className="sidebar lg-sidebar" aria-label="Primary">
+      {/* Brand */}
+      <div className="lg-sidebar-brand" style={{ padding: "8px 10px 22px", borderBottom: `1px solid ${COLORS.border || "#2d2d2d"}`, marginBottom: 16 }}>
+        <div className="lg-brand-plate" style={{ width: 28, height: 28 }}>
           <BookMarked size={14} color="#fff" />
         </div>
         <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 17, color: COLORS.text }}>Ledger</div>
+        <div className="lg-sidebar-meta" style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint, fontFamily: FONTS.mono }}>
+          {days}D
+        </div>
       </div>
 
       {/* Navigation */}
-      <div className="sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div className="lg-sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, padding: "0 10px" }}>
         {NAV.map(n => {
           const Icon = n.icon;
           const active = tab === n.id;
           return (
-            <div
+            <button
               key={n.id}
               onClick={() => setTab(n.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 12px",
-                borderRadius: 7,
-                cursor: "pointer",
-                fontSize: 13,
-                fontFamily: FONTS.body,
-                fontWeight: active ? 600 : 400,
-                color: active ? COLORS.text : COLORS.dim,
-                background: active ? (COLORS.panel2 || "rgba(255,255,255,0.06)") : "transparent",
-                transition: "all 0.15s ease",
-              }}
+              className={`lg-nav-item${active ? " active" : ""}`}
+              style={{ border: "none", width: "100%", textAlign: "left" }}
             >
-              <Icon size={15} style={{ color: active ? COLORS.ink || "#d97706" : COLORS.dim }} />
+              <Icon size={15} style={{ color: active ? COLORS.ink || "#d97706" : COLORS.dim, flexShrink: 0 }} />
               <span>{n.label}</span>
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* Footer */}
-      <div className="sidebar-foot" style={{ marginTop: "auto", paddingTop: 14, borderTop: `1px solid ${COLORS.border || "#2d2d2d"}` }}>
+      <div className="lg-sidebar-foot" style={{ marginTop: "auto", padding: "16px 10px 0", borderTop: `1px solid ${COLORS.border || "#2d2d2d"}` }}>
         <div style={{ marginBottom: 8, fontSize: 12, color: COLORS.dim, fontFamily: FONTS.body }}>
           Your code: <span style={{ fontFamily: FONTS.mono, color: COLORS.text, fontWeight: 600 }}>{profile?.code || "QANFT6"}</span>
         </div>
-        <div
+        <button
           onClick={onSignOut}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            cursor: "pointer",
-            color: COLORS.faint || "#888",
-            fontSize: 12,
-            fontFamily: FONTS.body,
-            transition: "color 0.15s ease",
-          }}
+          className="lg-nav-item"
+          style={{ border: "none", width: "100%", textAlign: "left", fontSize: 12, color: COLORS.faint, transition: "color 0.15s ease" }}
           onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.danger || "#ef4444")}
           onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.faint || "#888")}
         >
           <LogOut size={13} />
           <span>Sign out</span>
-        </div>
+        </button>
       </div>
-    </div>
+
+      {/* Mobile-only sign out */}
+      <button
+        onClick={onSignOut}
+        className="lg-signout-mobile"
+        aria-label="Sign out"
+        title="Sign out"
+        style={{ border: `1px solid ${COLORS.border}`, background: COLORS.panel2, color: COLORS.faint, borderRadius: 7, padding: "6px 8px", cursor: "pointer", display: "none", flexShrink: 0 }}
+      >
+        <LogOut size={14} />
+      </button>
+    </nav>
   );
 }

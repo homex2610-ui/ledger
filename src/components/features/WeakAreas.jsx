@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
-import { COLORS, FONTS } from "../../lib/theme";
+import { COLORS, FONTS, hexToRgba } from "../../lib/theme";
 
 // Small local Card, identical to the one in App.jsx — duplicated rather than
 // imported from App.jsx to avoid a circular import (App.jsx will import this
@@ -8,7 +8,7 @@ import { COLORS, FONTS } from "../../lib/theme";
 // pattern), swap this for a shared import.
 function Card({ title, right, children, style }) {
   return (
-    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "16px 18px", minWidth: 0, ...style }}>
+    <div className="lg-card" style={{ background: `linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.7)}, ${hexToRgba(COLORS.panel2, 0.54)})`, backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.18)`, WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.18)`, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "16px 18px", minWidth: 0, ...style }}>
       {(title || right) && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
           {title && <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>{title}</div>}
