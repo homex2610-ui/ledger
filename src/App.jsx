@@ -10,12 +10,12 @@ Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
   ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
   CheckCircle2, Star, NotebookPen, Layers, Zap,
   Crown, TrendingUp, Radio, ShieldCheck, Send, Search, ArrowUp, ArrowDown,
-  ChevronUp, ChevronDown, Pencil,
+  ChevronUp, ChevronDown, Check, Pencil,
   PictureInPicture2, Maximize2, BookOpen, LogOut,
   Settings, Palette, SlidersHorizontal, Type, Eye, Monitor, Bell,
   RefreshCw, User as UserIcon, Users, Lock
 } from "lucide-react";
-import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
+import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, VIEW, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import { pipSupported, openPipWindow, closePipWindow } from "./lib/pipTimer";
 import Sidebar from "./components/layout/Sidebar";
@@ -287,7 +287,7 @@ function Card({ title, right, children, style, id }) {
   );
 }
 
-function Stat({ label, value, sub, onClick, accent }) {
+function Stat({ label, value, sub, onClick, accent, trend }) {
   return (
     <div
       className={`lg-card ${onClick ? "lg-card-interactive" : ""}`}
@@ -298,7 +298,15 @@ function Stat({ label, value, sub, onClick, accent }) {
       style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}
     >
       <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
-      <div style={{ fontFamily: FONTS.mono, fontSize: 23, fontWeight: 600, color: accent || COLORS.text, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{value}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 23, fontWeight: 600, color: accent || COLORS.text, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{value}</div>
+        {trend && (
+          <span title="vs the prior period"
+            style={{ fontFamily: FONTS.mono, fontSize: 10.5, fontWeight: 700, color: trend.color }}>
+            {trend.up ? "↑" : "↓"} {trend.pct}%
+          </span>
+        )}
+      </div>
       {sub && <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -428,8 +436,112 @@ function Btn({ children, onClick, variant = "ghost", style, disabled, title, cla
 const Input = React.forwardRef((props, ref) =>
   <input ref={ref} {...props} className={`lg-input ${props.className || ""}`} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />
 );
-function Select(props) {
-  return <select {...props} className={`lg-input ${props.className || ""}`} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
+// ---------------- CUSTOM SELECT ----------------
+// Native dropdowns are unstylable and visually break the system chrome, so
+// every <select> in the app renders as a custom listbox instead. The
+// contract mirrors a native select: value + onChange(newValue) + options
+// [{ value, label, color? }] with full keyboard support and ARIA wiring.
+const subjOpts = (subjects) => (subjects || []).map(s => ({ value: s, label: s, color: subjectColor(s) }));
+const PRIO_OPTS = PRIORITY_ORDER.map(p => ({ value: p, label: PRIORITY_LABEL[p] }));
+
+function SelectBox({ value, onChange, options, disabled = false, ariaLabel, style, listWidth }) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(-1);
+  const wrapRef = useRef(null);
+  const listRef = useRef(null);
+  const opts = options || [];
+  const cur = opts.find(o => o.value === value) || opts[0] || null;
+  const idx = opts.findIndex(o => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onEsc = (e) => {
+      if (e.key === "Escape") { setOpen(false); wrapRef.current && wrapRef.current.querySelector("button").focus(); }
+    };
+    document.addEventListener("pointerdown", onDoc);
+    document.addEventListener("keydown", onEsc);
+    return () => { document.removeEventListener("pointerdown", onDoc); document.removeEventListener("keydown", onEsc); };
+  }, [open]);
+
+  // Keep the highlighted option in view as arrows move through the list.
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.querySelector('[data-active="true"]');
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [open, hi]);
+
+  const pick = (v) => { onChange(v); setOpen(false); };
+  const move = (dir) => setHi(h => {
+    const base = h >= 0 ? h : (idx >= 0 ? idx : 0);
+    return Math.max(0, Math.min(opts.length - 1, base + dir));
+  });
+  const onTriggerKey = (e) => {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+        e.preventDefault(); setOpen(true); setHi(idx >= 0 ? idx : 0);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === "Home") { e.preventDefault(); setHi(0); }
+    else if (e.key === "End") { e.preventDefault(); setHi(opts.length - 1); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (hi >= 0 && opts[hi]) pick(opts[hi].value); }
+  };
+  const onListKey = (e) => {
+    if (e.key === "Tab") setOpen(false);
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", display: "inline-block", verticalAlign: "middle", ...style }}>
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel} disabled={disabled}
+        onClick={() => { setOpen(o => !o); if (!open) setHi(idx); }}
+        onKeyDown={onTriggerKey}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 8, width: "100%", height: 34, boxSizing: "border-box",
+          padding: "0 10px", background: disabled ? "rgba(255,255,255,0.025)" : COLORS.glassFill,
+          border: `1px solid ${open ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`,
+          borderRadius: 7, color: disabled ? COLORS.faint : COLORS.text, fontSize: 12.5, fontFamily: FONTS.mono,
+          cursor: disabled ? "not-allowed" : "pointer", textAlign: "left",
+          transition: "border-color 0.14s ease-out, background 0.14s ease-out",
+          outline: open ? `1px solid ${hexToRgba(COLORS.accentFocus, 0.25)}` : "none",
+        }}>
+        {cur && cur.color && <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: cur.color }} />}
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
+          {cur ? cur.label : ""}
+        </span>
+        <ChevronDown size={13} color={COLORS.faint} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.18s ease-out" }} />
+      </button>
+      {open && (
+        <div role="listbox" ref={listRef} aria-label={ariaLabel} onKeyDown={onListKey}
+          style={{ position: "absolute", top: "calc(100% + 5px)", left: 0, zIndex: 90,
+            minWidth: "100%", maxWidth: listWidth || 240, maxHeight: 260, overflowY: "auto", padding: 4,
+            borderRadius: 10, background: COLORS.glassFillStrong, border: `1px solid ${COLORS.borderStrong}`,
+            boxShadow: `0 16px 40px -14px ${COLORS.shadowStrong}`, backdropFilter: "blur(14px)" }}>
+          {opts.map((o, i) => {
+            const active = i === hi;
+            const sel = o.value === value;
+            return (
+              <div key={o.value} role="option" aria-selected={sel} data-active={active}
+                onMouseEnter={() => setHi(i)}
+                onClick={() => pick(o.value)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "6px 9px", borderRadius: 7,
+                  cursor: "pointer", background: active ? COLORS.hoverOverlay : "transparent",
+                  color: sel ? COLORS.accentFocus : COLORS.text, whiteSpace: "nowrap",
+                  fontSize: 12.5, fontFamily: FONTS.mono,
+                }}>
+                {o.color && <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: o.color }} />}
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</span>
+                {sel && <Check size={13} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Renamed from the default export: this is the actual app, mounted only
@@ -1316,9 +1428,8 @@ function Onboarding({ onDone }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Target exam</label>
-            <Select value={exam} onChange={e => setExam(e.target.value)}>
-              {Object.keys(EXAM_SUBJECTS).map(k => <option key={k} value={k}>{k === "Both" ? "JEE + NEET" : k}</option>)}
-            </Select>
+            <SelectBox value={exam} onChange={setExam} ariaLabel="Target exam"
+              options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: k === "Both" ? "JEE + NEET" : k }))} />
           </div>
           {exam === "Custom" ? (
             <div>
@@ -1922,9 +2033,7 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
               <Input value={newText} onChange={e => setNewText(e.target.value)} placeholder="Add a target…" onKeyDown={e => e.key === "Enter" && addTaskForSelected()} />
               <Btn variant="ink" onClick={addTaskForSelected}><Plus size={13} /></Btn>
             </div>
-            <Select value={newSubject} onChange={e => setNewSubject(e.target.value)} style={{ marginBottom: 8 }}>
-              {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </Select>
+            <SelectBox value={newSubject} onChange={setNewSubject} ariaLabel="Target subject" options={subjOpts(profile.subjects)} style={{ width: "100%", marginBottom: 8 }} />
             {selInfo.tasks.length === 0 ? (
               <div style={{ fontSize: 12, color: COLORS.faint }}>Nothing planned yet.</div>
             ) : selInfo.tasks.map(t => (
@@ -2129,13 +2238,9 @@ const recommendation = (c) => {
             ))}
           </div>
           {view === "list" && (
-            <Select value={sortKey} onChange={e => { if (e.target.value !== sortKey) { setSortKey(e.target.value); setSortDir(1); } }} style={{ width: 128, height: 34, padding: "0 8px", fontSize: 12.5 }}>
-              <option value="order">Order</option>
-              <option value="name">Name</option>
-              <option value="pct">Progress</option>
-              <option value="status">Status</option>
-              <option value="review">Next review</option>
-            </Select>
+            <SelectBox value={sortKey} onChange={(v) => { if (v !== sortKey) { setSortKey(v); setSortDir(1); } }} ariaLabel="Sort chapters"
+              options={[{ value: "order", label: "Order" }, { value: "name", label: "Name" }, { value: "pct", label: "Progress" }, { value: "status", label: "Status" }, { value: "review", label: "Next review" }]}
+              style={{ width: 128 }} />
           )}
         </div>
       </div>
@@ -2350,7 +2455,8 @@ function fmtClock(s) {
 // break length). In Flow mode there's no fixed target, so it instead shows
 // a slow lap against a rolling 90-minute reference — still communicates
 // "how long have I been at this" without pretending there's a deadline.
-function RingTimer({ mode, phase, elapsed, phaseTarget, running, size = 180 }) {
+function RingTimer({ mode, phase, elapsed, phaseTarget, running, size = 180, state = "ready" }) {
+  const cx = size / 2, cy = size / 2;
   const r = (size - 16) / 2;
   const c = 2 * Math.PI * r;
   const frac = mode === "pomodoro" ? Math.min(1, elapsed / phaseTarget) : (elapsed % 5400) / 5400;
@@ -2360,12 +2466,44 @@ function RingTimer({ mode, phase, elapsed, phaseTarget, running, size = 180 }) {
   const label = mode === "pomodoro"
     ? (phase !== "focus" ? (phase === "long_break" ? "LONG BREAK" : "SHORT BREAK") : (running ? "FOCUSING" : elapsed > 0 ? "PAUSED" : "READY"))
     : (running ? "FOCUSING" : elapsed > 0 ? "PAUSED" : "READY");
+  const isFocusPhase = mode !== "pomodoro" || phase === "focus";
+  // State-aware glow: breathing while focusing, a still flash on completion,
+  // a subdued static glow otherwise. Reduced motion kills the animation
+  // classes via the global motion rules, leaving the static fallback.
+  const ringClass = state === "complete" ? "lg-ring-flash"
+    : (state === "focusing" && isFocusPhase && running ? "lg-ring-breathe" : "");
+  const staticFilter = state === "focusing"
+    ? `drop-shadow(0 0 10px ${hexToRgba(ringColor, running ? 0.5 : 0.2)})`
+    : (state === "paused" ? `drop-shadow(0 0 3px ${hexToRgba(ringColor, 0.2)})` : `drop-shadow(0 0 5px ${hexToRgba(ringColor, 0.3)})`);
+  // Tick ring: one mark per minute, brighter every 5 — the instrumentation.
+  const ticks = [];
+  for (let i = 0; i < 60; i++) {
+    const a = (i / 60) * 2 * Math.PI;
+    const major = i % 5 === 0;
+    const len = major ? 6 : 3;
+    const r1 = r - 2, r2 = r1 - len;
+    ticks.push(<line key={i} x1={cx + r1 * Math.cos(a)} y1={cy + r1 * Math.sin(a)} x2={cx + r2 * Math.cos(a)} y2={cy + r2 * Math.sin(a)}
+      stroke={major ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.055)"} strokeWidth={major ? 1.3 : 1} />);
+  }
   return (
     <svg width={size} height={size} style={{ display: "block", margin: "0 auto" }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={ringColor} strokeWidth="9" strokeLinecap="round"
-        strokeDasharray={`${dash} ${c - dash}`} transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: "stroke-dasharray 0.9s linear", opacity: running ? 1 : 0.55, filter: `drop-shadow(0 0 8px ${hexToRgba(ringColor, 0.55)})` }} />
+      <defs>
+        <linearGradient id={`lg-rg-${size}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={ringColor} />
+          <stop offset="100%" stopColor={darken(ringColor, 34)} />
+        </linearGradient>
+      </defs>
+      {/* Outer depth ring */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+      {/* Minute ticks */}
+      {ticks}
+      {/* Progress ring */}
+      <circle cx={cx} cy={cy} r={r - 14} fill="none" stroke={`url(#lg-rg-${size})`} strokeWidth="4" strokeLinecap="round"
+        strokeDasharray={`${dash} ${c - dash}`} transform={`rotate(-90 ${cx} ${cy})`}
+        className={ringClass}
+        style={{ transition: "stroke-dasharray 0.9s linear", opacity: running ? 1 : 0.55, filter: staticFilter }} />
+      {/* Inner highlight ring */}
+      <circle cx={cx} cy={cy} r={r - 21} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
       <text x="50%" y="47%" textAnchor="middle" fontFamily={FONTS.mono} fontSize={size * 0.15} fontWeight={700} fill={COLORS.text} style={{ fontVariantNumeric: "tabular-nums" }}>
         {fmtClock(remaining)}
       </text>
@@ -2566,12 +2704,8 @@ function TargetPicker({ tasks, setTasks, profile, focusSubject, running, selecte
               <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Rotational Motion revision"
                 onKeyDown={e => e.key === "Enter" && addTarget()} aria-label="New target name" />
               <div style={{ display: "flex", gap: 6 }}>
-                <Select value={newSubject} onChange={e => setNewSubject(e.target.value)} aria-label="Target subject" style={{ flex: 1 }}>
-                  {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                </Select>
-                <Select value={newPriority} onChange={e => setNewPriority(e.target.value)} aria-label="Target priority" style={{ width: 96 }}>
-                  {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-                </Select>
+                <SelectBox value={newSubject} onChange={setNewSubject} ariaLabel="Target subject" options={subjOpts(profile.subjects)} style={{ flex: 1 }} />
+                <SelectBox value={newPriority} onChange={setNewPriority} ariaLabel="Target priority" options={PRIO_OPTS} style={{ width: 96 }} />
                 <Btn variant="ink" onClick={addTarget} title="Add target" style={{ flexShrink: 0 }}><Plus size={13} /></Btn>
               </div>
             </div>
@@ -2589,6 +2723,8 @@ function TargetPicker({ tasks, setTasks, profile, focusSubject, running, selecte
 // data. Motion is CSS-only so the existing lg-motion-off shell class and
 // the prefers-reduced-motion media query suppress it automatically.
 function focusCss() {
+  const isLight = COLORS.isLight;
+  const hiTop = isLight ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.07)";
   return `
 @keyframes lg-focusIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .lg-focus-in { animation: lg-focusIn 0.32s cubic-bezier(0.2,0.8,0.2,1) both; }
@@ -2620,6 +2756,87 @@ function focusCss() {
    animation is gated on the element having content (inline animation). */
 .lg-focus-panel .lg-progress, .lg-focus-taskpanel .lg-progress { background: rgba(255,255,255,0.09); }
 .lg-focus-panel .lg-progress-fill, .lg-focus-taskpanel .lg-progress-fill { background: linear-gradient(90deg, ${darken(COLORS.accentFocus, 18)}, ${COLORS.accentFocus}); box-shadow: 0 0 8px ${hexToRgba(COLORS.accentFocus, 0.4)}; }
+
+/* ===== HERO ELEVATION — the timer is the highest surface on this screen.
+   Strongest fill + top-edge highlight + a soft drop; Tasks/Analytics stay
+   on the standard lg-card tier below it. ===== */
+.lg-focus-hero {
+  position: relative;
+  border-radius: ${RADIUS.modal}px;
+  border: 1px solid ${COLORS.border};
+  background: linear-gradient(168deg, ${COLORS.glassFillStrong}, ${COLORS.glassFill});
+  box-shadow: inset 0 1px 0 ${hiTop}, 0 18px 44px -18px ${COLORS.shadowStrong};
+  transition: box-shadow 0.4s ease-out, border-color 0.4s ease-out;
+}
+.lg-focus-hero::after {
+  content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, ${hexToRgba(COLORS.accentFocus, 0.45)}, transparent);
+  pointer-events: none;
+}
+/* READY — calm, muted glow. */
+.lg-focus-hero.state-ready { box-shadow: inset 0 1px 0 ${hiTop}, 0 0 44px -16px ${hexToRgba(COLORS.accentFocus, 0.16 * VIEW.glow)}, 0 18px 44px -18px ${COLORS.shadowStrong}; }
+/* FOCUSING — slow ambient breathing on a multi-second cycle. */
+@keyframes lg-focusBreathe {
+  0%, 100% { box-shadow: inset 0 1px 0 ${hiTop}, 0 0 44px -16px ${hexToRgba(COLORS.accentFocus, 0.2 * VIEW.glow)}, 0 18px 44px -18px ${COLORS.shadowStrong}; }
+  50% { box-shadow: inset 0 1px 0 ${hiTop}, 0 0 64px -12px ${hexToRgba(COLORS.accentFocus, 0.42 * VIEW.glow)}, 0 18px 44px -18px ${COLORS.shadowStrong}; }
+}
+.lg-focus-hero.state-focusing { animation: lg-focusBreathe 4.2s ease-in-out infinite; }
+/* PAUSED — glow subdued, ring stilled. */
+.lg-focus-hero.state-paused { box-shadow: inset 0 1px 0 ${hiTop}, 0 8px 26px -18px ${COLORS.shadowStrong}; }
+/* COMPLETED — one brief flash of cyan, then it settles onto the ready glow. */
+@keyframes lg-focusFlash {
+  0% { box-shadow: inset 0 1px 0 ${hiTop}, 0 0 20px -8px ${hexToRgba(COLORS.accentFocus, 0.35 * VIEW.glow)}, 0 18px 44px -18px ${COLORS.shadowStrong}; }
+  35% { box-shadow: inset 0 1px 0 ${hiTop}, 0 0 70px -10px ${hexToRgba(COLORS.accentFocus, 0.7 * VIEW.glow)}, 0 18px 44px -18px ${COLORS.shadowStrong}; }
+  100% { box-shadow: inset 0 1px 0 ${hiTop}, 0 0 44px -16px ${hexToRgba(COLORS.accentFocus, 0.16 * VIEW.glow)}, 0 18px 44px -18px ${COLORS.shadowStrong}; }
+}
+.lg-focus-hero.state-complete { animation: lg-focusFlash 0.5s cubic-bezier(0.2,0.8,0.2,1) both; }
+/* Ring breathing during the focus phase — keyed to the cyan accent so the
+   glow always belongs to the arc. Breaks keep a static softer glow. */
+@keyframes lg-ringBreathe {
+  0%, 100% { filter: drop-shadow(0 0 5px ${hexToRgba(COLORS.accentFocus, 0.35)}) drop-shadow(0 0 16px ${hexToRgba(COLORS.accentFocus, 0.14)}); }
+  50% { filter: drop-shadow(0 0 9px ${hexToRgba(COLORS.accentFocus, 0.6)}) drop-shadow(0 0 24px ${hexToRgba(COLORS.accentFocus, 0.26)}); }
+}
+.lg-ring-breathe { animation: lg-ringBreathe 4.2s ease-in-out infinite; }
+@keyframes lg-ringFlash {
+  0% { filter: drop-shadow(0 0 6px ${hexToRgba(COLORS.accentFocus, 0.4)}); }
+  40% { filter: drop-shadow(0 0 22px ${hexToRgba(COLORS.accentFocus, 0.8)}); }
+  100% { filter: drop-shadow(0 0 8px ${hexToRgba(COLORS.accentFocus, 0.3)}); }
+}
+.lg-ring-flash { animation: lg-ringFlash 0.55s cubic-bezier(0.2,0.8,0.2,1) both; }
+/* Focus column dims the side surfaces just slightly while a session runs,
+   centering attention on the timer — reversible the moment it ends. */
+.lg-focus-side { transition: opacity 0.32s ease-out; }
+.lg-focus-top.is-running .lg-focus-side { opacity: 0.88; }
+/* Ambient glow pool behind the hero while running — felt, not seen. */
+.lg-focus-glow {
+  position: absolute; left: 50%; top: 42%; width: 560px; height: 560px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, ${hexToRgba(COLORS.accentFocus, 0.12 * VIEW.glow)}, transparent 70%);
+  border-radius: 50%; opacity: 0; transition: opacity 0.6s ease-out;
+  pointer-events: none; z-index: 0;
+}
+.lg-focus-top.is-running .lg-focus-glow { opacity: 1; }
+
+/* ===== BUTTON FAMILY — one coherent press language. ===== */
+.lg-focus-btn {
+  transition: transform 0.16s cubic-bezier(0.2,0.8,0.2,1), filter 0.16s ease-out,
+    box-shadow 0.16s ease-out, background 0.16s ease-out, border-color 0.16s ease-out, color 0.16s ease-out;
+}
+.lg-focus-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.lg-focus-btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+.lg-focus-btn:disabled { cursor: default; }
+.lg-focus-btn-primary {
+  background: linear-gradient(150deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 26)});
+  color: #fff; border: none;
+  box-shadow: 0 10px 26px -10px ${hexToRgba(COLORS.accentFocus, 0.5 * VIEW.glow)}, inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.lg-focus-btn-primary:hover:not(:disabled) { filter: brightness(1.07); box-shadow: 0 12px 30px -10px ${hexToRgba(COLORS.accentFocus, 0.62 * VIEW.glow)}, inset 0 1px 0 rgba(255,255,255,0.2); }
+.lg-focus-btn-primary:active:not(:disabled) { box-shadow: 0 5px 14px -8px ${hexToRgba(COLORS.accentFocus, 0.5 * VIEW.glow)}; }
+.lg-focus-btn-ghost { background: transparent; border: 1px solid ${COLORS.border}; color: ${COLORS.faint}; }
+.lg-focus-btn-ghost:hover:not(:disabled) { background: ${COLORS.hoverOverlay}; border-color: ${hexToRgba(COLORS.accentFocus, 0.4)}; color: ${COLORS.text}; }
+.lg-focus-btn-danger:hover:not(:disabled) { filter: brightness(1.2); }
+.lg-focus-btn-util { background: transparent; border: 1px solid ${COLORS.border}; color: ${COLORS.dim}; }
+.lg-focus-btn-util:hover:not(:disabled) { background: ${COLORS.hoverOverlay}; border-color: ${hexToRgba(COLORS.accentFocus, 0.35)}; color: ${COLORS.dim}; }
 `;
 }
 
@@ -2639,7 +2856,7 @@ function SubjectBadge({ subject }) {
 // it reads as Ledger rather than a generic chart library. Legend hover
 // highlights the matching segment; nothing flashes.
 function TimeDonut({ dist, total, hoverIdx, onHover }) {
-  const size = 118, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const size = 118, stroke = 11, r = (size - stroke) / 2, c = 2 * Math.PI * r;
   // Entrance-only draw-in: segments grow from 0 to their share once, on
   // mount. The whole transition is suppressed by lg-motion-off / the
   // reduced-motion media query (they force transition-duration to ~0).
@@ -2785,7 +3002,10 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
   return (
     <div className="lg-card lg-focus-taskpanel" style={{ padding: "20px 18px 14px", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
-        <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>TASKS / TO DO</span>
+        <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>TODAY'S QUEUE</span>
+        <span className="num" style={{ fontSize: 9, letterSpacing: "0.14em", color: COLORS.faint }}>
+          {tasks.length} TASK{tasks.length === 1 ? "" : "S"} · {tasks.filter(t => t.priority === "high" && !t.done).length} HIGH PRIORITY
+        </span>
         <Btn variant="ghost" style={{ padding: "5px 11px", fontSize: 11 }} onClick={() => { addInputRef.current && addInputRef.current.focus(); }}>
           <Plus size={13} /> Add task
         </Btn>
@@ -2795,14 +3015,8 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
         <Input ref={addInputRef} value={newText} onChange={e => setNewText(e.target.value)} aria-label="New task"
           placeholder="What needs to get done?" style={{ flex: 1, padding: "7px 10px", fontSize: 12.5 }}
           onKeyDown={e => e.key === "Enter" && add()} />
-        <Select value={newSubject} onChange={e => setNewSubject(e.target.value)} aria-label="Task subject"
-          style={{ width: 128, padding: "7px 10px", fontSize: 12.5, flexShrink: 0 }}>
-          {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-        </Select>
-        <Select value={newPriority} onChange={e => setNewPriority(e.target.value)} aria-label="Task priority"
-          style={{ width: 92, padding: "7px 10px", fontSize: 12.5, flexShrink: 0 }}>
-          {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-        </Select>
+        <SelectBox value={newSubject} onChange={setNewSubject} ariaLabel="Task subject" options={subjOpts(profile.subjects)} style={{ width: 128, flexShrink: 0 }} />
+        <SelectBox value={newPriority} onChange={setNewPriority} ariaLabel="Task priority" options={PRIO_OPTS} style={{ width: 92, flexShrink: 0 }} />
         <Btn variant="ink" onClick={add} title="Add task" style={{ flexShrink: 0 }}><Plus size={13} /></Btn>
       </div>
 
@@ -2816,7 +3030,7 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
         {tasks.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "26px 10px", textAlign: "center" }}>
             <EmptyArt variant="grid" width={122} height={72} />
-            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.faint }}>NO TASKS YET</span>
+            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.faint }}>YOUR QUEUE IS CLEAR</span>
             <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 260, lineHeight: 1.6 }}>Add something you want to complete today — then pick it as your working target and start a focus session.</div>
             <Btn variant="ghost" style={{ marginTop: 6 }} onClick={() => { addInputRef.current && addInputRef.current.focus(); }}><Plus size={13} /> Add task</Btn>
           </div>
@@ -2832,27 +3046,35 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
               boxShadow: t.id === selectedTargetId ? `inset 2px 0 0 ${COLORS.accentFocus}` : "none",
             }}>
             <Bubble status={t.done ? "done" : "todo"} size={18} onClick={() => toggle(t.id)} />
-            {editingId === t.id ? (
-              <Input autoFocus value={editText} onChange={e => setEditText(e.target.value)} aria-label="Edit task"
-                onKeyDown={e => { if (e.key === "Enter") commitEdit(t.id); if (e.key === "Escape") setEditingId(null); }}
-                onBlur={() => commitEdit(t.id)}
-                style={{ flex: 1, padding: "4px 8px", fontSize: 12.5 }} />
-            ) : (
-              <button className="lg-row-title" onClick={() => setSelectedTargetId(t.id)}
-                title={t.done ? "Completed — uncheck to reactivate" : "Set as the working target for Focus"}
-                style={{
-                  flex: 1, textAlign: "left", background: "transparent", border: "none", cursor: "pointer", padding: "1px 0",
-                  fontSize: 13, textDecoration: t.done ? "line-through" : "none",
-                  color: t.done ? COLORS.faint : COLORS.text, opacity: t.done ? 0.75 : 1,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                {t.text}
-              </button>
-            )}
-            {t.subject && <SubjectBadge subject={t.subject} />}
-            <span title={`Priority: ${PRIORITY_LABEL[t.priority] || "Medium"}`}
-              style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: PRIORITY_COLORS[t.priority || "medium"] }} />
-            <span className="num" style={{ fontSize: 9, color: dueLabel(t).color, flexShrink: 0 }}>{dueLabel(t).text}</span>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+              {editingId === t.id ? (
+                <Input autoFocus value={editText} onChange={e => setEditText(e.target.value)} aria-label="Edit task"
+                  onKeyDown={e => { if (e.key === "Enter") commitEdit(t.id); if (e.key === "Escape") setEditingId(null); }}
+                  onBlur={() => commitEdit(t.id)}
+                  style={{ flex: 1, padding: "4px 8px", fontSize: 12.5 }} />
+              ) : (
+                <button className="lg-row-title" onClick={() => setSelectedTargetId(t.id)}
+                  title={t.done ? "Completed — uncheck to reactivate" : "Set as the working target for Focus"}
+                  style={{
+                    textAlign: "left", background: "transparent", border: "none", cursor: "pointer", padding: 0,
+                    fontSize: 13.5, fontWeight: 600, letterSpacing: "-0.01em",
+                    textDecoration: t.done ? "line-through" : "none",
+                    color: t.done ? COLORS.faint : COLORS.text, opacity: t.done ? 0.75 : 1,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                  {t.text}
+                </button>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 7, minHeight: 14 }}>
+                {t.subject && <SubjectBadge subject={t.subject} />}
+                <span title={`Priority: ${PRIORITY_LABEL[t.priority] || "Medium"}`}
+                  style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: PRIORITY_COLORS[t.priority || "medium"] }} />
+                <span className="num" style={{ fontSize: 9.5, color: dueLabel(t).color }}>{dueLabel(t).text}</span>
+                {t.id === selectedTargetId && !t.done && (
+                  <span className="sys" style={{ fontSize: 7.5, letterSpacing: "0.14em", color: COLORS.accentFocus }}>WORKING</span>
+                )}
+              </div>
+            </div>
             <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0 }}>
               <button onClick={() => beginEdit(t)} title="Edit task" aria-label="Edit task"
                 style={{ display: "flex", padding: 2, background: "transparent", border: "none", cursor: "pointer", opacity: 0.7, transition: "opacity 0.14s ease-out" }}>
@@ -2870,7 +3092,7 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
 
       <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 12, paddingTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 7 }}>
-          <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.faint }}>PROGRESS</span>
+          <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.faint }}>TODAY</span>
           <span className="num" style={{ fontSize: 11.5, color: COLORS.text }}>
             {doneCount} of {tasks.length} task{tasks.length === 1 ? "" : "s"} completed
             <span style={{ color: COLORS.faint, marginLeft: 6 }}>{pct}%</span>
@@ -2929,6 +3151,28 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
   const streak = computeStreak(sessions);
   const longest = longestStreak(sessions);
 
+  // Honest trends — shown only when BOTH the current and the previous period
+  // genuinely have logged data. With a day or two of history the comparison
+  // window is empty, so nothing appears rather than a fabricated number.
+  const prevWindowSessions = useMemo(() => {
+    const start = addDays(today, -(n - 1) - n);
+    return sessions.filter(s => s.date >= start && s.date < addDays(today, -(n - 1)));
+  }, [sessions, today, n]);
+  const prevTotal = prevWindowSessions.reduce((a, s) => a + s.minutes, 0);
+  const prevAvg = Math.round(prevTotal / n);
+  const yesterday = addDays(today, -1);
+  const yesterdayMin = sessions.filter(s => s.date === yesterday).reduce((a, s) => a + s.minutes, 0);
+  const yesterdayCount = sessions.filter(s => s.date === yesterday).length;
+  const trendOf = (cur, prev) => {
+    if (!(prev > 0 && cur > 0)) return null;
+    const diff = ((cur - prev) / prev) * 100;
+    if (Math.abs(diff) < 1) return null;
+    return { up: diff > 0, pct: Math.abs(Math.round(diff)), color: diff > 0 ? COLORS.done : COLORS.danger };
+  };
+  const trendToday = trendOf(todayMin, yesterdayMin);
+  const trendSessions = trendOf(todayCount, yesterdayCount);
+  const trendAvg = trendOf(avg, prevAvg);
+
   const dist = useMemo(() => {
     const totals = {};
     profile.subjects.forEach(s => { totals[s] = 0; });
@@ -2970,8 +3214,8 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
         </div>
 
         <div className="lg-grid" style={{ gap: 12 }}>
-          <Stat label="Focus time" value={fmtMin(todayMin)} sub="TODAY" />
-          <Stat label="Sessions" value={todayCount} sub="TODAY" />
+          <Stat label="Focus time" value={fmtMin(todayMin)} sub="TODAY" trend={trendToday} />
+          <Stat label="Sessions" value={todayCount} sub="TODAY" trend={trendSessions} />
           <div className="lg-card" style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px`, minWidth: 0 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>Streak</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2984,13 +3228,13 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
             </div>
             <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>CURRENT · LONGEST {longest}d</div>
           </div>
-          <Stat label="7-day avg" value={fmtMin(avg)} sub={`LAST ${range}D`} />
+          <Stat label="Daily avg" value={fmtMin(avg)} sub={`LAST ${range}D`} trend={trendAvg} />
         </div>
 
         <div className="lg-focus-grid2" style={{ marginTop: 16 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-              <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.2em", color: COLORS.dim }}>FOCUS TIME — LAST {range} DAYS</span>
+              <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.2em", color: COLORS.dim }}>FOCUS TIME · LAST {range} DAYS</span>
               <span className="sys" style={{ fontSize: 8.5, color: COLORS.faint }}>{windowCount} SESSION{windowCount === 1 ? "" : "S"}</span>
             </div>
             {windowTotal === 0 ? (
@@ -2999,7 +3243,7 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
                 <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.7, flex: 1, minWidth: 180 }}>
                   {sessions.length === 0 ? (
                     <>
-                      <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.faint, display: "block", marginBottom: 6 }}>NO FOCUS DATA YET</span>
+                      <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.faint, display: "block", marginBottom: 6 }}>YOUR FOCUS HISTORY STARTS HERE</span>
                       Start your first focus session and your analytics will appear here.
                     </>
                   ) : (
@@ -3010,13 +3254,29 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
             ) : (
               <div role="img" aria-label={`Focus minutes per day for the last ${range} days. Total ${fmtMin(windowTotal)}.`} className="lg-bar-grow">
                 <ResponsiveContainer width="100%" height={170}>
-                  <BarChart data={days.map(d => ({ label: d.date.slice(5), min: d.min }))} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <BarChart data={days.map(d => ({ date: d.date, label: d.date.slice(5), min: d.min }))} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="lgBarGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={COLORS.accentFocus} stopOpacity={0.95} />
+                        <stop offset="100%" stopColor={COLORS.accentFocus} stopOpacity={0.3} />
+                      </linearGradient>
+                      <linearGradient id="lgBarGradToday" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={COLORS.accentFocus} stopOpacity={1} />
+                        <stop offset="100%" stopColor={COLORS.accentFocus} stopOpacity={0.55} />
+                      </linearGradient>
+                    </defs>
                     <XAxis dataKey="label" tick={{ fill: COLORS.faint, fontSize: 9.5 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={20} />
                     <YAxis tick={{ fill: COLORS.faint, fontSize: 9.5 }} axisLine={false} tickLine={false} width={46}
                       tickFormatter={v => (v >= 60 ? `${Math.round(v / 60)}h` : `${v}m`)} />
                     <Tooltip content={<FocusTip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                    <Bar dataKey="min" fill={COLORS.accentFocus} radius={[3, 3, 0, 0]} maxBarSize={24} isAnimationActive={false}
-                      background={{ fill: "rgba(255,255,255,0.07)", radius: 3 }} />
+                    <Bar dataKey="min" radius={[3, 3, 0, 0]} maxBarSize={24} isAnimationActive={false}
+                      background={{ fill: "rgba(255,255,255,0.07)", radius: 3 }}>
+                      {days.map(d => {
+                        const isToday = d.date === today;
+                        return <Cell key={d.date} fill={isToday ? "url(#lgBarGradToday)" : "url(#lgBarGrad)"}
+                          stroke={isToday ? hexToRgba(COLORS.accentFocus, 0.9) : "transparent"} strokeWidth={1} />;
+                      })}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -3043,9 +3303,7 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px", marginBottom: 10, borderRadius: 10, border: `1px solid ${COLORS.border}`, background: COLORS.glassFill2 }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Input type="date" value={logDate} max={today} onChange={e => setLogDate(e.target.value)} aria-label="Session date" style={{ width: 150, flexShrink: 0, padding: "6px 9px", fontSize: 12 }} />
-                <Select value={logSubject} onChange={e => setLogSubject(e.target.value)} aria-label="Session subject" style={{ flex: 1, minWidth: 120, padding: "6px 9px", fontSize: 12 }}>
-                  {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                </Select>
+                <SelectBox value={logSubject} onChange={setLogSubject} ariaLabel="Session subject" options={subjOpts(profile.subjects)} style={{ flex: 1, minWidth: 120 }} />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Input type="number" min="0" step="1" placeholder="Hrs" value={logHours} onChange={e => setLogHours(e.target.value)} aria-label="Session hours" style={{ flex: 1, padding: "6px 9px", fontSize: 12 }} />
@@ -3057,21 +3315,36 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
           )}
           {recentSessions.length === 0 ? (
             <div style={{ fontSize: 12, color: COLORS.faint, padding: "8px 2px" }}>Nothing logged yet.</div>
-          ) : recentSessions.map(s => (
-            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 2px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 12 }}>
-              <span style={subjectDot(s.subject)} />
-              <div style={{ flex: 1, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.subject}
-                {s.targetId && targetById[s.targetId] && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
-              </div>
-              {s.manual && <span style={{ fontSize: 8.5, color: COLORS.faint, border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: "1px 5px", letterSpacing: "0.08em" }}>manual</span>}
-              <span className="num" style={{ color: COLORS.faint, fontSize: 10 }}>{s.date.slice(5)}</span>
-              <span className="num" style={{ color: COLORS.text, minWidth: 40, textAlign: "right" }}>{fmtMin(s.minutes)}</span>
-              <button onClick={() => deleteSession(s.id)} aria-label="Delete session" title="Delete session"
-                className="lg-row-del" style={{ display: "flex", padding: 2, background: "transparent", border: "none", cursor: "pointer" }}>
-                <Trash2 size={12} />
-              </button>
+          ) : (
+            <div>
+              {recentSessions.map((s, i) => (
+                <div key={s.id} style={{ display: "flex", gap: 12 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 10, flexShrink: 0 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: subjectColor(s.subject), boxShadow: `0 0 0 3px ${hexToRgba(subjectColor(s.subject), 0.14)}`, marginTop: 5, flexShrink: 0 }} />
+                    {i < recentSessions.length - 1 && (
+                      <span style={{ width: 1, flex: 1, background: COLORS.border, marginTop: 4, minHeight: 16 }} />
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, paddingBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="num" style={{ fontSize: 9.5, color: COLORS.faint, fontVariantNumeric: "tabular-nums" }}>{s.date.slice(5)}</span>
+                      {s.manual && <span style={{ fontSize: 8.5, color: COLORS.faint, border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: "1px 5px", letterSpacing: "0.08em" }}>manual</span>}
+                      <div style={{ flex: 1 }} />
+                      <span className="num" style={{ color: COLORS.text, fontWeight: 700, fontSize: 11.5 }}>{fmtMin(s.minutes)}</span>
+                      <button onClick={() => deleteSession(s.id)} aria-label="Delete session" title="Delete session"
+                        className="lg-row-del" style={{ display: "flex", padding: 2, background: "transparent", border: "none", cursor: "pointer" }}>
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <div style={{ color: COLORS.text, fontSize: 12.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.subject}
+                      {s.targetId && targetById[s.targetId] && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </Card>
     </div>
   );
@@ -3080,31 +3353,56 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
 function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak, tasks, setTasks, selectedTargetId, setSelectedTargetId, pipOk = false, pipOpen = false, onOpenPip, onOpenImmersive, autoBreaks = true }) {
   const { mode, running, elapsed, subject, pomoMinutes, phase, phaseTarget, cycle, completedFlash } = timer;
   const isBreak = mode === "pomodoro" && phase !== "focus";
+  const ringState = completedFlash ? "complete" : !running ? (elapsed > 0 ? "paused" : "ready") : "focusing";
 
-return (
+  // The one global keyboard shortcut: Space starts/pauses the session. It
+  // stands down while typing, when a listbox option is focused, or when a
+  // button is focused (Space on a focused button is already its native
+  // click — double-firing would toggle twice).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== "Space") return;
+      const ae = document.activeElement;
+      if (ae && (["INPUT", "TEXTAREA", "SELECT"].includes(ae.tagName) || ae.isContentEditable || ae.getAttribute("role") === "option" || ae.getAttribute("role") === "listbox" || ae.tagName === "BUTTON")) return;
+      e.preventDefault();
+      if (!running) onStart(); else onPause();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [running, isBreak, onStart, onPause]);
+
+  return (
     <div style={{ maxWidth: 1120, margin: "0 auto", padding: "26px 8px 64px", display: "flex", flexDirection: "column", gap: 22 }}>
       {/* TWO-COLUMN TOP — timer workspace (left) + task panel (right) */}
-      <div className="lg-focus-top">
-        <div className="lg-focus-in" style={{ animationDelay: "0ms" }}>
-          {/* THE TIMER — the whole room belongs to it */}
+      <div className={`lg-focus-top${running ? " is-running" : ""}`}>
+        <div className="lg-focus-in" style={{ animationDelay: "0ms", position: "relative" }}>
+          {/* Ambient glow pool behind the hero — only felt while running */}
+          <div className="lg-focus-glow" />
+          {/* THE TIMER — the highest-elevation surface on this screen */}
+          <div className={`lg-focus-hero state-${ringState}`} style={{ padding: "26px 26px 22px" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ position: "relative", display: "inline-flex", gap: 2, padding: 3, borderRadius: 9, background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <span aria-hidden style={{ position: "absolute", top: 3, bottom: 3, left: 3, width: "calc(50% - 5px)", borderRadius: 7,
+            background: hexToRgba(COLORS.accentFocus, 0.14), border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.4)}`,
+            boxShadow: `0 4px 14px -6px ${hexToRgba(COLORS.accentFocus, 0.35)}`,
+            transform: mode === "flow" ? "translateX(0)" : "translateX(calc(100% + 4px))",
+            transition: "transform 0.22s cubic-bezier(0.2,0.8,0.2,1)", pointerEvents: "none" }} />
           {["flow", "pomodoro"].map(m => (
-            <div key={m} onClick={() => setMode(m)}
+            <button key={m} type="button" onClick={() => setMode(m)}
               title={running ? "Stop the current session to change mode" : ""}
               style={{
-                padding: "6px 16px", borderRadius: 7, fontSize: 10, letterSpacing: "0.16em",
-                textTransform: "uppercase", fontWeight: 600,
-                cursor: running ? "not-allowed" : "pointer",
-                background: mode === m ? hexToRgba(COLORS.accentFocus, 0.1) : "transparent",
+                position: "relative", zIndex: 1, flex: 1, minWidth: 88, padding: "6px 16px", borderRadius: 7,
+                fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 600,
+                fontFamily: FONTS.body, cursor: running ? "not-allowed" : "pointer",
+                background: "transparent", border: "none",
                 color: mode === m ? COLORS.accentFocus : COLORS.faint,
-                border: `1px solid ${mode === m ? hexToRgba(COLORS.accentFocus, 0.4) : "rgba(255,255,255,0.08)"}`,
                 opacity: running && mode !== m ? 0.4 : 1,
-              }}>{m}</div>
+                transition: "color 0.18s ease-out",
+              }}>{m}</button>
           ))}
         </div>
 
-        <RingTimer mode={mode} phase={phase} elapsed={elapsed} phaseTarget={phaseTarget} running={running} />
+        <RingTimer mode={mode} phase={phase} elapsed={elapsed} phaseTarget={phaseTarget} running={running} state={ringState} />
 
         {completedFlash && (
           <div style={{ fontSize: 11.5, color: completedFlash.kind === "break" ? COLORS.warn : COLORS.done, letterSpacing: "0.04em" }}>
@@ -3128,16 +3426,14 @@ return (
         )}
         {mode === "pomodoro" && (
           <div className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>
-            {isBreak ? "BREAK — NEXT FOCUS SESSION WAITING" : autoBreaks ? `CYCLE ${cycle + 1}/4 · LONG BREAK AFTER 4` : "FOCUS SESSION — AUTO BREAK OFF"}
+            {isBreak ? "Break — next focus session waiting" : autoBreaks ? `Cycle ${cycle + 1}/4 · long break after 4` : "Focus session — auto breaks off"}
           </div>
         )}
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
-          <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>SUBJECT</span>
-          <Select value={subject || ""} onChange={e => setSubject(e.target.value)} disabled={running}
-            style={{ minWidth: 180, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 12, fontFamily: FONTS.mono, cursor: running ? "not-allowed" : "pointer" }}>
-            {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-          </Select>
+          <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>WORKING ON</span>
+          <SelectBox value={subject || ""} onChange={setSubject} disabled={running} ariaLabel="Focus subject"
+            options={subjOpts(profile.subjects)} style={{ minWidth: 180 }} />
           {running && <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.faint }}>LOCKED</span>}
         </div>
 
@@ -3146,31 +3442,28 @@ return (
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
           {!running ? (
-            <button onClick={onStart} style={{
+            <button onClick={onStart} className="lg-focus-btn lg-focus-btn-primary" style={{
               display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 26px", borderRadius: 9,
-              background: hexToRgba(COLORS.accentFocus, 0.14), border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.45)}`,
-              color: COLORS.accentFocus, fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 700,
+              fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 700,
               fontFamily: FONTS.mono, cursor: "pointer",
             }}><Play size={13} /> {isBreak ? "Start break" : elapsed > 0 ? "Resume" : "Start focus"}</button>
           ) : (
-            <button onClick={onPause} style={{
+            <button onClick={onPause} className="lg-focus-btn lg-focus-btn-ghost" style={{
               display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 26px", borderRadius: 9,
-              background: "rgba(255,255,255,0.05)", border: `1px solid ${COLORS.border}`,
-              color: COLORS.text, fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 700,
+              fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 700,
               fontFamily: FONTS.mono, cursor: "pointer",
             }}>
               <Pause size={13} /> Pause
             </button>
           )}
           {isBreak ? (
-            <button onClick={onSkipBreak} style={{
-              padding: "11px 18px", borderRadius: 9, background: "transparent", border: `1px solid ${COLORS.border}`,
-              color: COLORS.faint, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: FONTS.mono, cursor: "pointer",
+            <button onClick={onSkipBreak} className="lg-focus-btn lg-focus-btn-ghost" style={{
+              padding: "11px 18px", borderRadius: 9, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: FONTS.mono, cursor: "pointer",
             }}>Skip break</button>
           ) : (
-            <button onClick={onStop} disabled={elapsed === 0 && !running} style={{
+            <button onClick={onStop} disabled={elapsed === 0 && !running} className="lg-focus-btn lg-focus-btn-danger" style={{
               display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 18px", borderRadius: 9,
-              background: "transparent", border: `1px solid ${elapsed > 0 || running ? hexToRgba(COLORS.danger, 0.4) : COLORS.border}`,
+              border: `1px solid ${elapsed > 0 || running ? hexToRgba(COLORS.danger, 0.4) : COLORS.border}`,
               color: elapsed > 0 || running ? hexToRgba(COLORS.danger, 0.9) : COLORS.faint,
               fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: FONTS.mono, cursor: elapsed === 0 && !running ? "default" : "pointer",
             }}>
@@ -3178,12 +3471,16 @@ return (
             </button>
           )}
         </div>
-        <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.14em", color: COLORS.faint }}>KEEPS RUNNING BETWEEN SECTIONS — WATCH THE FLOATING BADGE</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <kbd style={{ padding: "2px 7px", borderRadius: 5, border: `1px solid ${COLORS.borderStrong}`, background: COLORS.glassFill, color: COLORS.dim, fontSize: 9.5, fontFamily: FONTS.mono, boxShadow: `0 1px 0 ${COLORS.borderStrong}` }}>Space</kbd>
+          <span style={{ fontSize: 9.5, letterSpacing: "0.12em", color: COLORS.faint, textTransform: "uppercase", fontFamily: FONTS.mono }}>starts / pauses the session</span>
+        </div>
+        <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.14em", color: COLORS.faint }}>Keeps running between sections — watch the floating badge</div>
 
         {/* Alternate ways to see the SAME timer — float it above other apps,
             or take over the whole screen. No second timer exists anywhere. */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={onOpenPip} disabled={!pipOk || pipOpen}
+          <button onClick={onOpenPip} disabled={!pipOk || pipOpen} className="lg-focus-btn lg-focus-btn-util"
             title={pipOk
               ? (pipOpen ? "Floating window is open — look for it on your screen" : "Open a small floating window above other apps (Chromium/Edge only)")
               : "Floating above other apps needs the Document Picture-in-Picture API — Chromium/Edge only. The rest of the app still works."}
@@ -3198,27 +3495,31 @@ return (
             }}>
             <PictureInPicture2 size={12} /> {pipOpen ? "Floating" : "Float"}
           </button>
-          <button onClick={onOpenImmersive}
+          <button onClick={onOpenImmersive} className="lg-focus-btn lg-focus-btn-util"
             style={{
               display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 8,
-              background: "transparent", border: `1px solid ${COLORS.border}`,
-              color: COLORS.dim, fontSize: 9.5, letterSpacing: "0.16em", textTransform: "uppercase",
+              fontSize: 9.5, letterSpacing: "0.16em", textTransform: "uppercase",
               fontWeight: 700, fontFamily: FONTS.mono, cursor: "pointer",
             }}>
             <Maximize2 size={12} /> Immerse
           </button>
         </div>
       </div>
+          </div>
       </div>
 
       {/* RIGHT COLUMN — the day's task panel */}
       <div className="lg-focus-in" style={{ animationDelay: "60ms" }}>
-        <TaskPanel tasks={tasks} setTasks={setTasks} profile={profile} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />
+        <div className="lg-focus-side">
+          <TaskPanel tasks={tasks} setTasks={setTasks} profile={profile} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />
+        </div>
       </div>
       </div>
 
       {/* BELOW BOTH COLUMNS — stats, charts, history */}
-      <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} />
+      <div className="lg-focus-side">
+        <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} />
+      </div>
     </div>
   );
 }// ---------------- FLOATING TIMER ----------------
@@ -3897,10 +4198,8 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
                 ))}
               </div>
             </div>
-            <Select value={reviewSubject} onChange={e => setReviewSubject(e.target.value)} style={{ width: 150 }}>
-              <option value="all">All subjects</option>
-              {extraSubjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </Select>
+            <SelectBox value={reviewSubject} onChange={setReviewSubject} ariaLabel="Review subject"
+              options={[{ value: "all", label: "All subjects" }].concat(subjOpts(extraSubjects))} style={{ width: 150 }} />
           </div>
 
           <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
@@ -4377,13 +4676,9 @@ function ErrorLog({ errors, setErrors, mocks }) {
         <Card id="mistake-log" title="Log a mistake">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Input placeholder="Topic / chapter" value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === "Enter" && add()} />
-            <Select value={type} onChange={e => setType(e.target.value)}>
-              {ERROR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-            </Select>
-            <Select value={linkedMock} onChange={e => setLinkedMock(e.target.value)}>
-              <option value="">No linked mock</option>
-              {mocks.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </Select>
+            <SelectBox value={type} onChange={setType} ariaLabel="Mistake type" options={ERROR_TYPES.map(t => ({ value: t, label: t }))} style={{ width: "100%" }} />
+            <SelectBox value={linkedMock} onChange={setLinkedMock} ariaLabel="Linked mock"
+              options={[{ value: "", label: "No linked mock" }].concat(mocks.map(m => ({ value: m.id, label: m.name })))} style={{ width: "100%" }} />
             <textarea placeholder="What went wrong, and how to fix it next time…" value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
             <Btn variant="ink" onClick={add} style={{ justifyContent: "center" }}><Plus size={14} /> Log mistake</Btn>
           </div>
@@ -5120,9 +5415,9 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                 <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>
               <Row title="Target exam" sub="The plan your syllabus starts from.">
-                <Select value={profile.exam || "JEE Main"} onChange={e => setProfile({ ...profile, exam: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }}>
-                  {Object.keys(EXAM_SUBJECTS).map(k => <option key={k} value={k}>{k === "Both" ? "JEE + NEET" : k}</option>)}
-                </Select>
+                <SelectBox value={profile.exam || "JEE Main"} onChange={(v) => setProfile({ ...profile, exam: v })} ariaLabel="Target exam"
+                  options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: k === "Both" ? "JEE + NEET" : k }))}
+                  style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>
               <Row title="Target date" sub={daysLeft === null ? "Set a date and the countdown runs from there." : daysLeft === 0 ? "Exam day is today." : daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to go.` : `${-daysLeft} days since — revise your goals?`}>
                 <Input type="date" value={profile.targetDate} onChange={e => setProfile({ ...profile, targetDate: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />

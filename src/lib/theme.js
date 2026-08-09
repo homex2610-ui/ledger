@@ -699,6 +699,11 @@ input[type="range"] { accent-color: ${glowC}; cursor: pointer; }
   width: 2px; height: 16px; border-radius: 999px;
   background: linear-gradient(180deg, ${glowC}, ${darken(glowC, 30)});
   box-shadow: ${hexToRgba(glowC, 0.3)} 0 0 7px;
+  animation: lg-tickBreathe 3.2s ease-in-out infinite;
+}
+@keyframes lg-tickBreathe {
+  0%, 100% { box-shadow: ${hexToRgba(glowC, 0.22)} 0 0 5px; opacity: 0.75; }
+  50% { box-shadow: ${hexToRgba(glowC, 0.5)} 0 0 11px; opacity: 1; }
 }
 /* Inside the dock: rows are full-width with no extra padding; the icon cell
    keeps its fixed 44px and the label is absolutely positioned, so hovering
