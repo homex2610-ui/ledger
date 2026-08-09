@@ -1,10 +1,13 @@
 :root {
   /* Layout tokens */
   --border-width: 1px;
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --sidebar-width: 268px;
+  /* Study OS: soft glass roundness. Keep in step with RADIUS in
+     src/lib/theme.js so CSS-var surfaces and inline-styled ones agree. */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --sidebar-width: 248px;
   --header-height: 56px;
   --content-max-width: 1180px;
 
@@ -15,36 +18,43 @@
   --space-5: 28px;
   --space-6: 32px;
 
-  /* Color tokens (default: dark theme to preserve existing look) */
-  --color-bg: #16110b;          /* page background */
-  --color-text: #ffffff;        /* primary text */
-  --color-panel: #1b1510;       /* surfaces / panels */
-  --color-panel2: #221b16;      /* secondary surfaces */
-  --color-border: #2a2320;      /* borders / dividers */
-  --color-shadow: rgba(0,0,0,0.4);
-  --color-accent: #f59e0b;
+  /* Motion tokens — mirror MOTION in src/lib/theme.js */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-micro: 180ms;
+  --dur-surface: 300ms;
+  --dur-dashboard: 500ms;
+
+  /* Color tokens — Study OS deep-ink defaults; the live theme is driven by
+     COLORS in src/lib/theme.js, these are fallbacks for CSS-var classes. */
+  --color-bg: #090b11;
+  --color-text: #f2f4fa;
+  --color-panel: #10141d;
+  --color-panel2: #151a26;
+  --color-border: rgba(255,255,255,0.07);
+  --color-shadow: rgba(0,0,0,0.35);
+  --color-accent: #4fd8e0;
 }
 
-/* Light theme overrides */
+/* Light theme overrides — Study OS "Air" */
 :root[data-theme="light"] {
-  --color-bg: #ffffff;
-  --color-text: #000000;
-  --color-panel: #ffffff;
-  --color-panel2: #f7f7f7;
-  --color-border: #e6e6e6;
-  --color-shadow: rgba(0,0,0,0.06);
-  --color-accent: #2563eb;
+  --color-bg: #e7edf8;
+  --color-text: #1b2440;
+  --color-panel: #fafbfe;
+  --color-panel2: #eff3fb;
+  --color-border: rgba(40,60,110,0.14);
+  --color-shadow: rgba(40,60,100,0.16);
+  --color-accent: #4c6fff;
 }
 
-/* Dark theme explicit (optional) */
+/* Dark theme explicit — Study OS "Abyss" */
 :root[data-theme="dark"] {
-  --color-bg: #000000;
-  --color-text: #ffffff;
-  --color-panel: #0f0f0f;
-  --color-panel2: #111111;
-  --color-border: #222222;
-  --color-shadow: rgba(0,0,0,0.6);
-  --color-accent: #f59e0b;
+  --color-bg: #090b11;
+  --color-text: #f2f4fa;
+  --color-panel: #10141d;
+  --color-panel2: #151a26;
+  --color-border: rgba(255,255,255,0.07);
+  --color-shadow: rgba(0,0,0,0.4);
+  --color-accent: #4fd8e0;
 }
 
 /* Reset */
@@ -77,15 +87,14 @@ body {
   border-radius: var(--radius-lg);
 }
 
-/* Main content area */
+/* Main content area. The ruled-ledger backdrop is owned by globalCss()
+   (.app-main) in src/lib/theme.js so the ruling matches the active theme —
+   we intentionally set no background here to avoid a background-size clash. */
 .app-main {
   flex: 1;
   padding: var(--space-4) var(--space-5);
   overflow-y: auto;
   max-height: 900px;
-  background-image: linear-gradient(var(--color-border) 0.09, transparent 3px);
-  background-size: 100% 30px;
-  background-position-y: 8px;
 }
 
 /* Header */

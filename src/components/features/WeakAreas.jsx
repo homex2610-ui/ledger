@@ -45,9 +45,12 @@ function scoreChapter(chapter, subjectMockPct, errorCountForTopic) {
 export function computeWeakAreas({ syllabus, mocks, errors }) {
   const subjectMockPct = {};
   Object.keys(syllabus).forEach(subject => {
-    const scores = mocks.map(m => (m.subjectScores || []).find(s => s.subject === subject)).filter(Boolean);
+    // Both fields must be real numbers — a subject slot with a max but no
+    // obtained score (or vice versa) must not count as 0% or NaN.
+    const scores = mocks.map(m => (m.subjectScores || []).find(s => s.subject === subject))
+      .filter(s => s && s.obtained !== "" && s.obtained != null && Number(s.obtained) > 0 && Number(s.max) > 0);
     subjectMockPct[subject] = scores.length
-      ? Math.round(scores.reduce((a, s) => a + (s.max ? (s.obtained / s.max) * 100 : 0), 0) / scores.length)
+      ? Math.round(scores.reduce((a, s) => a + (Number(s.obtained) / Number(s.max)) * 100, 0) / scores.length)
       : null;
   });
 

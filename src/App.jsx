@@ -5,15 +5,21 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
 import {
-  Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
+Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
   Flame, Trophy, Play, Pause, Square, Plus, Trash2,
   ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
-  CheckCircle2, Star, BookMarked, NotebookPen, Layers, Lock, Zap,
-  Users, Crown, TrendingUp, Radio, ShieldCheck, Send
+  CheckCircle2, Star, NotebookPen, Layers, Zap,
+  Crown, TrendingUp, Radio, ShieldCheck, Send, Search, ArrowUp, ArrowDown,
+  ChevronUp, ChevronDown, Pencil,
+  PictureInPicture2, Maximize2, BookOpen, LogOut,
+  Settings, Palette, SlidersHorizontal, Type, Eye, Monitor, Bell,
+  RefreshCw, User as UserIcon, Users, Lock
 } from "lucide-react";
-import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, row, stack, center, between, elev } from "./lib/theme";
+import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
+import { pipSupported, openPipWindow, closePipWindow } from "./lib/pipTimer";
 import Sidebar from "./components/layout/Sidebar";
+import { DAILY_GOAL_MIN, FocusRing } from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import WeakAreas from "./components/features/WeakAreas";
 
@@ -37,9 +43,56 @@ const STATUS_LABEL = { todo: "To do", doing: "In progress", done: "Done", master
 
 const PRIORITY_ORDER = ["low", "medium", "high"];
 const PRIORITY_LABEL = { low: "Low", medium: "Medium", high: "High" };
-const PRIORITY_COLORS = { low: "#6FA287", medium: "#C98A3E", high: "#C1443D" };
+const PRIORITY_COLORS = { low: "#5BE6A8", medium: "#FFB26B", high: "#FF6B6B" };
 
 const REVISION_INTERVALS = [1, 3, 7, 15, 30, 60];
+
+// Settings defaults — every key here persists via the existing settings
+// save path. Merged with stored settings at load (stored values win), so
+// new keys never crash old exports.
+const DEFAULT_SETTINGS = {
+  theme: "glass-dark",
+  floatingTimer: true,
+  accent: "default",
+  radius: 1,
+  density: 1,
+  glow: 1,
+  fontScale: 100,
+  rail: "comfortable",
+  reducedMotion: false,
+  highContrast: false,
+  focusRing: 1,
+  landingPage: "dashboard",
+  dateFormat: "compact",
+  weekStart: "sunday",
+  goalMin: 360,
+  goalStatus: "daily",
+  defaultFocusMin: 25,
+  autoStartBreaks: true,
+  dashboard: { countdown: true, clock: true, studied: true, now: true, year: true, today: true, subjects: true, workspaces: true, status: true },
+  recall: { goal: 20, newPerDay: 12, order: "due", goalDot: true },
+  coverage: { defaultView: "list", showPrereqs: true, showCompleted: true, progress: "status" },
+  tests: { scoreUnit: "pct", showTrend: true, showSubjectBars: true, showGaps: true },
+  mistakes: { filter: "all", sort: "date", severitySort: false, remind: true },
+  reminders: { study: true, review: true, targets: true, time: "09:00" },
+};
+
+// Date format helpers — used by Home/Coverage/Mistakes/Tests so the
+// Settings dateFormat pref really changes what's rendered.
+const DATE_FMTS = { compact: ["DD MMM", "MMMM D, YYYY"], long: ["DD MMMM YYYY", "D MMMM YYYY"] };
+function fmtDateStr(ds, mode, variant = 0) {
+  const [p1, p2] = DATE_FMTS[mode] || DATE_FMTS.compact;
+  const d = parseLocalDate(ds);
+  const D = String(d.getDate());
+  const DD = D.padStart(2, "0");
+  const MMMM = d.toLocaleDateString(undefined, { month: "long" });
+  const MMM = d.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+  const YYYY = String(d.getFullYear());
+  // Replace "DD" first, then any remaining lone "D" (so "DD MMM" keeps its
+  // zero-padded day while "MMMM D, YYYY" gets the unpadded one).
+  return (variant === 0 ? p1 : p2)
+    .replace("DD", DD).replace("D", D).replace("MMMM", MMMM).replace("MMM", MMM).replace("YYYY", YYYY);
+}
 
 // Curated prerequisite chains — static, not AI-generated. Only default chapters
 // carry dependencies; custom-added chapters have none and are always "unlocked".
@@ -149,7 +202,10 @@ function chapterLevel(subject, name, cache = {}) {
 // readable by any signed-in user but only writable by their owner. See
 // supabase/schema.sql for the table + policies.
 function useStorage(session) {
-  const userId = session?.user?.id || null;
+  // Demo mode fabricates a session without a real Supabase account — its
+  // "demo-user" id is not a UUID, so every cloud call would 400. Treat it
+  // like being signed out: local-only storage.
+  const userId = session?.user?.id && session.user.id !== "demo-user" ? session.user.id : null;
   // Keys whose most recent load failed. If a load error made us fall back to
   // an empty/default value, saving that value back would silently overwrite
   // the user's real data — so save() refuses those keys until a load
@@ -206,9 +262,10 @@ function Bubble({ status, size = 20, onClick, disabled }) {
       role={interactive ? "button" : undefined} tabIndex={interactive ? 0 : undefined}
       aria-disabled={disabled || undefined}
       aria-label={interactive ? `Status: ${STATUS_LABEL[status] || status}` : undefined}
+      className={filled ? "lg-bubble lg-bubble-pop" : "lg-bubble"}
       onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
       style={{ cursor: interactive ? "pointer" : "default", flexShrink: 0, opacity: disabled ? 0.45 : 1 }}>
-      <rect x="2" y="2" width="16" height="16" rx="4" fill={filled ? colorMap[status] : "transparent"} stroke={colorMap[status]} strokeWidth="1.5" />
+      <rect x="2" y="2" width="16" height="16" rx="4.5" fill={filled ? colorMap[status] : hexToRgba(COLORS.faint, 0.07)} stroke={colorMap[status]} strokeWidth="1.4" />
       {status === "doing" && <rect x="2" y="10.5" width="16" height="7.5" rx="2" fill={COLORS.warn} opacity="0.85" />}
       {filled && <path d="M5.5 10.5l3 3 6-6.5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
       {status === "mastered" && <rect x="0.5" y="0.5" width="19" height="19" rx="5.5" fill="none" stroke={COLORS.ink} strokeWidth="1" strokeDasharray="2,2" />}
@@ -216,12 +273,12 @@ function Bubble({ status, size = 20, onClick, disabled }) {
   );
 }
 
-function Card({ title, right, children, style }) {
+function Card({ title, right, children, style, id }) {
   return (
-    <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: `${SPACE.lg}px ${SPACE.xl}px`, ...style }}>
+    <div id={id} className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: `${SPACE.lg}px ${SPACE.xl}px`, ...style }}>
       {(title || right) && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.md }}>
-          {title && <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>{title}</div>}
+          {title && <div style={{ fontSize: 10.5, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>{title}</div>}
           {right}
         </div>
       )}
@@ -247,15 +304,37 @@ function Stat({ label, value, sub, onClick, accent }) {
   );
 }
 
-// Lighter than Stat — a plain label/value pair with no border or background
-// of its own, so several can sit together in one row without stacking up
-// into a wall of boxes. Meant for secondary numbers worth knowing but not
-// worth top billing.
-function MiniFact({ label, value }) {
+// Thin page header — compact uppercase title + a one-line lead. Used by the
+// primary workspaces so each page reads like a designed surface rather than
+// a bare tab render. No hero noise: small type, real description.
+function PageHead({ title, lead, right }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: SPACE.xs + 2 }}>
-      <span style={{ fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase", color: COLORS.faint }}>{label}</span>
-      <span style={{ fontFamily: FONTS.mono, fontSize: 13, fontWeight: 600, color: COLORS.text }}>{value}</span>
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: SPACE.lg }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ width: 3, height: 15, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 32)})`, flexShrink: 0 }} />
+          <span className="sys" style={{ fontSize: 12.5, letterSpacing: "0.28em", color: COLORS.accentFocus, fontWeight: 700, lineHeight: 1 }}>{title}</span>
+        </div>
+        {lead && <div style={{ fontSize: 13, color: COLORS.dim, marginTop: 10, maxWidth: 600, lineHeight: 1.65, fontFamily: FONTS.body }}>{lead}</div>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+// Compact stat cell for page summary strips — same system language as Stat,
+// smaller footprint so a strip of four reads as one instrument.
+function MiniStat({ k, v, sub, pct, tint }) {
+  return (
+    <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "13px 15px", minWidth: 0, position: "relative", overflow: "hidden" }}>
+      <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>{k}</div>
+      <div className="num" style={{ fontSize: 22, fontWeight: 700, color: tint || COLORS.text, marginTop: 7, letterSpacing: "-0.02em" }}>{v}</div>
+      {sub && <div style={{ fontSize: 10.5, color: COLORS.dim, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>}
+      {typeof pct === "number" && (
+        <div className="lg-progress" style={{ height: 3, marginTop: 10, borderRadius: 2 }}>
+          <div className="lg-progress-fill" style={{ width: `${pct}%`, "--lg-w": `${pct}%`, height: "100%", borderRadius: 2 }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -327,13 +406,15 @@ function EmptyArt({ variant = "grid", width = 128, height = 76 }) {
   );
 }
 
-function Btn({ children, onClick, variant = "ghost", style, disabled, title }) {
+function Btn({ children, onClick, variant = "ghost", style, disabled, title, className, ariaLabel, type }) {
   const base = { fontFamily: FONTS.body, fontSize: 13, fontWeight: 500, padding: `${SPACE.sm}px ${SPACE.md + 2}px`, borderRadius: RADIUS.control, cursor: disabled ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid transparent", opacity: disabled ? 0.5 : 1 };
   const variants = {
-    ink: { background: COLORS.ink, color: "#fff" },
+    // Match the gradient used on the primary actions elsewhere (timer start,
+    // import, etc.) instead of a flat fill — same visual language.
+    ink: { background: `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 26)})`, color: "#fff" },
     ghost: { background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.text },
     danger: { background: "transparent", border: `1px solid ${COLORS.danger}55`, color: COLORS.danger },
-    subtle: { background: COLORS.panel2, color: COLORS.text },
+    subtle: { background: COLORS.glassFill2, color: COLORS.text },
   };
   // lg-btn (base transitions/press) + a per-variant class picks up the real
   // hover states defined in globalCss() — brightness lift on the filled
@@ -341,14 +422,14 @@ function Btn({ children, onClick, variant = "ghost", style, disabled, title }) {
   // their existing look; they're low-frequency actions that don't need the
   // same hover emphasis.
   const variantClass = variant === "ink" ? "lg-btn-ink" : variant === "ghost" ? "lg-btn-ghost" : "";
-  return <button title={title} disabled={disabled} onClick={onClick} className={`lg-btn ${variantClass}`} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
+  return <button title={title} aria-label={ariaLabel} type={type} disabled={disabled} onClick={onClick} className={`lg-btn ${variantClass} ${className || ""}`.trim()} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
 }
 
-function Input(props) {
-  return <input {...props} className={`lg-input ${props.className || ""}`} style={{ background: hexToRgba(COLORS.panel2, 0.66), border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
-}
+const Input = React.forwardRef((props, ref) =>
+  <input ref={ref} {...props} className={`lg-input ${props.className || ""}`} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />
+);
 function Select(props) {
-  return <select {...props} className={`lg-input ${props.className || ""}`} style={{ background: hexToRgba(COLORS.panel2, 0.66), border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
+  return <select {...props} className={`lg-input ${props.className || ""}`} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />;
 }
 
 // Renamed from the default export: this is the actual app, mounted only
@@ -366,16 +447,20 @@ function Workspace({ session }) {
   const [errors, setErrors] = useState([]);
   const [peers, setPeers] = useState([]);
   const [peerData, setPeerData] = useState({});
+  const peerFetchSeqRef = useRef(0);
   const [groupDefs, setGroupDefs] = useState({});
   const [groupRoster, setGroupRoster] = useState({});
   const [dpp, setDpp] = useState([]);
   const [cards, setCards] = useState([]);
   const [unlockedBadges, setUnlockedBadges] = useState([]);
-  const [settings, setSettings] = useState({ theme: "glass-light", floatingTimer: true });
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [floatResetKey, setFloatResetKey] = useState(0);
+  const [pipOpen, setPipOpen] = useState(false);
+  const [immersiveOpen, setImmersiveOpen] = useState(false);
   const appRef = useRef(null);
 
-  const userId = session?.user?.id || null;
+  // Demo mode has no real Supabase account — skip every groups/peer call.
+  const userId = session?.user?.id && session.user.id !== "demo-user" ? session.user.id : null;
   const createGroup = useCallback(async (code, name) => {
     if (!userId || !profile) return null;
     const { data: group, error: groupError } = await supabase
@@ -493,7 +578,46 @@ function Workspace({ session }) {
     return () => { live = false; };
   }, [groupDefs, userId, profile?.code, ready]);
 
-  applyTheme(normalizeTheme(settings.theme));
+  applyTheme(normalizeTheme(settings.theme), settings);
+
+  // Manual re-pull from the server for Settings → Data & Sync. Re-runs the
+  // same key loads as boot, then repaints live state. Settings are left
+  // untouched so an open Settings panel never gets clobbered mid-edit.
+  const syncFromCloud = useCallback(async () => {
+    // Cancel any pending debounced autosave first — otherwise a syllabus/cards
+    // edit queued before the sync could fire after it and overwrite the
+    // freshly-pulled server data with a stale local copy.
+    if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; }
+    const [p, s, t, se, m, er, pe, dq, cd, ub] = await Promise.all([
+      load("profile", null), load("syllabus", {}), load("tasks", []),
+      load("sessions", []), load("mocks", []), load("errors", []), load("peers", []),
+      load("dpp", []), load("cards", []), load("unlockedBadges", []),
+    ]);
+    if (p) setProfile(p);
+    if (s && typeof s === "object") setSyllabus(s);
+    if (Array.isArray(t)) setTasks(t);
+    if (Array.isArray(se)) setSessions(se);
+    if (Array.isArray(m)) setMocks(m);
+    if (Array.isArray(er)) setErrors(er);
+    if (Array.isArray(pe)) setPeers(pe);
+    if (Array.isArray(dq)) setDpp(dq);
+    if (Array.isArray(cd)) setCards(cd);
+    if (Array.isArray(ub)) setUnlockedBadges(ub);
+  }, [load]);
+
+  // Default landing page — applied once per session (after data loads) so the
+  // pref is real but never fights the user's explicit navigation mid-session.
+  const landingAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!ready || landingAppliedRef.current) return;
+    const landing = settings.landingPage && settings.landingPage !== "dashboard" && ["dashboard", "calendar", "cards", "syllabus", "timer", "mocks", "errors", "weak", "peers", "settings"].includes(settings.landingPage);
+    if (landing && tab === "dashboard") {
+      landingAppliedRef.current = true;
+      setTab(settings.landingPage);
+    } else if (settings.landingPage === "dashboard") {
+      landingAppliedRef.current = true;
+    }
+  }, [ready, settings.landingPage, tab]);
 
   // Timer state lives here, not inside the Deep Work tab component, so it
   // keeps running (and stays visible via the floating widget) when you
@@ -508,6 +632,12 @@ function Workspace({ session }) {
   const [pomoMinutes, setPomoMinutes] = useState(25);
   const [completedFlash, setCompletedFlash] = useState(null); // null | { kind: "focus"|"break", message }
   const pomoTarget = pomoMinutes * 60;
+
+  // The target being worked toward — captured the moment a session starts,
+  // so the logged session always references the target it was started under
+  // even if the picker later changes (it's locked while running anyway).
+  const [selectedTargetId, setSelectedTargetId] = useState(null);
+  const timerTargetRef = useRef(null);
 
   // Pomodoro now auto-cycles through work + break phases instead of just
   // resetting to a blank timer on completion. Every 4th focus session earns
@@ -589,12 +719,29 @@ function Workspace({ session }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timerRunning]);
 
+  // Guard against a stale completion effect firing in the same frame the
+  // user clicks "End & log": stopTimer sets this flag and the completion
+  // effect skips if it's set. Cleared when a session starts/resumes.
+  const stopRequestedRef = useRef(false);
+  const startTimer = () => { stopRequestedRef.current = false; timerTargetRef.current = selectedTargetId; unlockAudio(); setTimerRunning(true); };
+  const resumeTimer = () => { stopRequestedRef.current = false; setTimerRunning(true); };
+
   // Pomodoro phase completion: focus -> auto-starts a break; break -> chimes
   // and hands control back for the next focus session.
   useEffect(() => {
     if (timerMode !== "pomodoro" || !timerRunning || timerElapsed < phaseTarget) return;
+    if (stopRequestedRef.current) return;
     if (pomoPhase === "focus") {
-      setSessions(prev => [...prev, { id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(pomoTarget / 60), startHour: new Date().getHours(), mode: timerMode }]);
+      setSessions(prev => [...prev, { id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(pomoTarget / 60), startHour: new Date().getHours(), mode: timerMode, targetId: timerTargetRef.current }]);
+      if (settings.autoStartBreaks === false) {
+        // Auto-start disabled: session is logged, timer hands control back.
+        setTimerRunning(false);
+        setPomoPhase("focus");
+        setTimerElapsed(0);
+        setCompletedFlash({ kind: "focus", message: `Focus session logged${timerSubject ? ` — ${timerSubject}` : ""}. Break will not start automatically.` });
+        chime(880);
+        return;
+      }
       const nextCycle = pomoCycle + 1;
       const goLong = nextCycle % 4 === 0;
       setPomoCycle(goLong ? 0 : nextCycle);
@@ -610,7 +757,7 @@ function Workspace({ session }) {
       setCompletedFlash({ kind: "break", message: "Break's over — start your next focus session when ready." });
       chime(660);
     }
-  }, [timerElapsed, timerMode, timerRunning, phaseTarget, pomoPhase, pomoTarget, pomoCycle, timerSubject]);
+  }, [timerElapsed, timerMode, timerRunning, phaseTarget, pomoPhase, pomoTarget, pomoCycle, timerSubject, settings.autoStartBreaks]);
 
   // The completion effect above changes state (elapsed, phase, cycle) in the
   // same render it sets completedFlash, which cancels any in-effect timeout
@@ -630,6 +777,7 @@ function Workspace({ session }) {
   };
 
   const stopTimer = () => {
+    stopRequestedRef.current = true;
     setTimerRunning(false);
     if (timerMode === "pomodoro" && pomoPhase !== "focus") {
       // Stopping mid-break just cancels the break, no session logged.
@@ -638,10 +786,12 @@ function Workspace({ session }) {
       return;
     }
     if (timerElapsed >= 60) {
-      setSessions(prev => [...prev, { id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(timerElapsed / 60), startHour: new Date().getHours(), mode: timerMode }]);
+      setSessions(prev => [...prev, { id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(timerElapsed / 60), startHour: new Date().getHours(), mode: timerMode, targetId: timerTargetRef.current }]);
     }
     setTimerElapsed(0);
   };
+  const stopTimerRef = useRef(stopTimer);
+  useEffect(() => { stopTimerRef.current = stopTimer; });
 
   // Bug fix: mode used to stay clickable while a session was running.
   // Switching mode mid-run kept the accumulated elapsed time but changed
@@ -665,20 +815,27 @@ function Workspace({ session }) {
     }
   }, [profile, timerSubject]);
 
+  // The PiP window polls this ref every second, so it always sees the live
+  // snapshot while pushing state changes back through the same callbacks the
+  // in-app timers use. One timer, many views. Declared above the early
+  // returns so the hook order never changes between the loading/onboarding
+  // and the loaded renders.
+  const timerRef = useRef(null);
+
   useEffect(() => {
     (async () => {
       const [p, s, t, se, m, er, pe, dq, cd, ub, st] = await Promise.all([
         load("profile", null), load("syllabus", {}), load("tasks", []),
         load("sessions", []), load("mocks", []), load("errors", []), load("peers", []),
-        load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", { theme: "glass-light", floatingTimer: true }),
+        load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", DEFAULT_SETTINGS),
       ]);
       // Migrate any persisted pre-Glass theme id (or an unknown/undefined id)
       // to the equivalent Glass variant so the app never renders an undefined
       // theme. If the stored value needed migrating we pass the corrected
       // settings forward; the existing settings-save effect persists it.
       const stTheme = normalizeTheme(st && st.theme);
-      const stSafe = st && st.theme === stTheme ? st : { ...(st || {}), theme: stTheme };
-      setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(stSafe);
+      const mergedSafe = { ...DEFAULT_SETTINGS, ...(st || {}), theme: stTheme };
+      setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(mergedSafe);
       setTimerSubject((p && p.subjects && p.subjects[0]) || null);
       setReady(true);
     })();
@@ -688,11 +845,55 @@ function Workspace({ session }) {
   // textarea, card front/back), so their autosaves are debounced — the rest
   // change at click granularity and still save immediately.
   const saveTimeoutRef = useRef(null);
+  const pendingSaveRef = useRef(null);
   const debouncedSave = useCallback((key, value) => {
+    pendingSaveRef.current = { key, value };
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => save(key, value), 600);
+    saveTimeoutRef.current = setTimeout(() => { pendingSaveRef.current = null; save(key, value); }, 600);
   }, [save]);
   useEffect(() => () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); }, []);
+
+  // Flush a pending debounced autosave when the tab closes — otherwise the
+  // last keystroke in a chapter note or card field (within the 600ms window)
+  // is silently dropped. Tracks the latest key/value on the ref so the
+  // pagehide handler can write exactly what would have been written.
+  useEffect(() => {
+    const onHide = () => {
+      if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; }
+      if (pendingSaveRef.current) {
+        const { key, value } = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        save(key, value);
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [save]);
+
+  // "Delete everything" must empty the cloud too. syllabus/cards autosave on a
+  // 600ms debounce, and sign-out unmounts this component (clearing the pending
+  // timer) before those writes land — so wipe synchronously, then let the
+  // normal state effects overwrite with the empty values.
+  const wipeNow = () => {
+    save("syllabus", {});
+    save("cards", []);
+    save("tasks", []);
+    save("sessions", []);
+    save("mocks", []);
+    save("errors", []);
+    save("peers", []);
+    save("dpp", []);
+    save("unlockedBadges", []);
+  };
+
+  // Focus-timer default length follows Settings → Study (only when the pref
+  // value itself changes, so manual in-page changes keep working).
+  const lastFocusPrefRef = useRef(null);
+  useEffect(() => {
+    if (lastFocusPrefRef.current === settings.defaultFocusMin) return;
+    lastFocusPrefRef.current = settings.defaultFocusMin;
+    if (!timerRunning) setPomoMinutes(Number(settings.defaultFocusMin) || 25);
+  }, [settings.defaultFocusMin, timerRunning]);
 
   useEffect(() => { if (ready && profile) save("profile", profile); }, [profile, ready, save]);
   useEffect(() => { if (ready) debouncedSave("syllabus", syllabus); }, [syllabus, ready, debouncedSave]);
@@ -730,6 +931,10 @@ function Workspace({ session }) {
   // fetch peer data — query shared rows by the code stored in each payload
   useEffect(() => {
     if (!ready || peers.length === 0 || !userId) return;
+    // Each fetch gets a sequence number; only the latest response may
+    // repaint peerData. Otherwise a slow earlier fetch can resolve after a
+    // faster newer one and overwrite fresh data with a stale snapshot.
+    const seq = ++peerFetchSeqRef.current;
     (async () => {
       try {
         // Select owner_id and updated_at so we can deterministically
@@ -751,17 +956,24 @@ function Workspace({ session }) {
             out[code] = { ...r.value, _owner_id: r.owner_id, _updated_at: r.updated_at };
           }
         });
-        setPeerData(out);
+        if (seq === peerFetchSeqRef.current) setPeerData(out);
       } catch (e) {
         console.error("[peers] failed to fetch leaderboard entries", e);
       }
     })();
   }, [peers, ready, userId, sessions]);
 
+  // Close any floating window when the app unmounts (sign-out), and when a
+  // session really ends (elapsed resets to 0) rather than just pausing.
+  useEffect(() => () => closePipWindow(), []);
+  useEffect(() => {
+    if (pipOpen && !timerRunning && timerElapsed === 0) closePipWindow();
+  }, [pipOpen, timerRunning, timerElapsed]);
+
   if (!ready) {
     return (
       <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body, padding: 24 }}>
-        <style>{globalCss()}</style>
+      <style>{globalCss()}</style>
         <div style={{ width: "100%", maxWidth: 560, display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="lg-skeleton" style={{ height: 22, width: 200 }} />
           <div className="lg-skeleton" style={{ height: 90 }} />
@@ -772,9 +984,9 @@ function Workspace({ session }) {
             <div className="lg-skeleton" style={{ height: 70 }} />
           </div>
         </div>
-      </div>
-    );
-  }
+</div>
+  );
+}
 
   if (!profile) {
     return <Onboarding onDone={(p) => {
@@ -794,35 +1006,61 @@ function Workspace({ session }) {
 
   const timer = { mode: timerMode, running: timerRunning, elapsed: timerElapsed, subject: timerSubject, pomoMinutes, pomoTarget, phase: pomoPhase, phaseTarget, breakTarget, cycle: pomoCycle, completedFlash };
 
-  return (
-    <div ref={appRef} className="app-shell lg-shell" style={{ border: `1px solid ${COLORS.border}` }}>
-      <style>{globalCss()}</style>
+  // The PiP window polls this ref every second, so it always sees the live
+  // snapshot while pushing state changes back through the same callbacks the
+  // in-app timers use. One timer, many views.
+  timerRef.current = timer;
 
-      <Sidebar tab={tab} setTab={setTab} profile={profile} onSignOut={() => supabase.auth.signOut()} />
+  // Route PiP actions through the same stable handlers the in-app controls
+  // use so the floating window never captures a stale closure (e.g. a
+  // stopTimer from the render that opened the window, which would log the
+  // elapsed time from back then instead of the live value).
+  const openPip = async () => {
+    if (pipOpen) return;
+    const handle = await openPipWindow({
+      getState: () => timerRef.current,
+      onPause: () => setTimerRunning(false),
+      onResume: resumeTimer,
+      onStop: () => { stopTimerRef.current(); closePipWindow(); },
+      onClose: () => setPipOpen(false),
+    });
+    if (handle) setPipOpen(true);
+  };
+
+  return (
+    <div ref={appRef} className={`app-shell lg-shell${settings.reducedMotion ? " lg-motion-off" : ""}`}>
+      <style>{globalCss() + focusCss()}</style>
+
+      <Sidebar tab={tab} setTab={setTab} profile={profile} sessions={sessions} onSignOut={() => supabase.auth.signOut()}
+        notifyRecall={settings.recall?.goalDot !== false && dueReviews(syllabus).length > 0} />
 
       <div className="app-main lg-main">
-        <Header />
-        <TopBar profile={profile} sessions={sessions} tasks={tasks} showFull={tab === "dashboard"} />
+        <Header profile={profile} sessions={sessions} tasks={tasks} />
         <div className="lg-page" key={tab}>
-          {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} unlockedBadges={unlockedBadges} setTab={setTab} />}
-          {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} />}
-          {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} />}
-          {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} />}
+          {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} setDpp={setDpp} peers={peers} peerData={peerData} unlockedBadges={unlockedBadges} setTab={setTab} timer={timer} onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)} dashboardSettings={settings.dashboard} goalMin={settings.goalMin} dateFormat={settings.dateFormat} />}
+          {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} weekStart={settings.weekStart} dateFormat={settings.dateFormat} />}
+          {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} settings={settings.recall} />}
+          {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} settings={settings.coverage} />}
           {tab === "timer" && <FocusTimer profile={profile} sessions={sessions} setSessions={setSessions} timer={timer}
             setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
-            onStart={() => { unlockAudio(); setTimerRunning(true); }} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak} />}
-          {tab === "tasks" && <Tasks tasks={tasks} setTasks={setTasks} profile={profile} dpp={dpp} setDpp={setDpp} />}
-          {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} />}
-          {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} />}
+            onStart={startTimer} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak}
+            tasks={tasks} setTasks={setTasks} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId}
+            pipOk={pipSupported()} pipOpen={pipOpen} onOpenPip={openPip} onOpenImmersive={() => setImmersiveOpen(true)} autoBreaks={settings.autoStartBreaks} />}
+          {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} settings={settings.tests} />}
+          {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} profile={profile} settings={settings.mistakes} />}
           {tab === "weak" && <WeakAreas syllabus={syllabus} mocks={mocks} errors={errors} setTab={setTab} />}
           {tab === "peers" && <Peers profile={profile} peers={peers} setPeers={setPeers} peerData={peerData} sessions={sessions}
             groupDefs={groupDefs} groupRoster={groupRoster} onCreateGroup={createGroup} onJoinGroup={joinGroup} onLeaveGroup={leaveGroup} />}
           {tab === "settings" && <SettingsTab
             profile={profile} setProfile={setProfile}
-            data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers }}
-            setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers }}
+            data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers, unlockedBadges }}
+            setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers, setUnlockedBadges }}
             settings={settings} setSettings={setSettings}
+            email={session?.user?.email || null}
+            onSignOut={() => supabase.auth.signOut()}
             onResetFloatPosition={() => setFloatResetKey(k => k + 1)}
+            onSync={syncFromCloud}
+            onWipeNow={wipeNow}
           />}
         </div>
       </div>
@@ -830,6 +1068,13 @@ function Workspace({ session }) {
       {settings.floatingTimer !== false && (
         <FloatingTimer timer={timer} appRef={appRef} activeTab={tab} setTab={setTab} resetKey={floatResetKey}
           onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)} onStop={stopTimer} />
+      )}
+
+      {immersiveOpen && (
+        <ImmersiveTimer timer={timer}
+          onClose={() => setImmersiveOpen(false)}
+          onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)}
+          onStop={stopTimer} onSkipBreak={skipBreak} />
       )}
     </div>
   );
@@ -861,12 +1106,13 @@ function reviewsByDate(syllabus) {
 }
 
 function consistencyAlert(sessions) {
-  // Rule-based, not predictive: compares the last 3 days' average focus time
-  // against the 7 days before that. Flags only when a sustained downward trend
-  // appears, not when a single light day or one-off dip happens.
+  // Rule-based, not predictive: compares the last 3 completed days' average
+  // focus time against the 7 days before that. Today is excluded — a partial
+  // morning must not read as a full zero-day. Flags only when a sustained
+  // downward trend appears, not when a single light day or one-off dip happens.
   const dailyTotals = Array.from({ length: 10 }, (_, idx) => {
     const d = new Date();
-    d.setDate(d.getDate() - idx);
+    d.setDate(d.getDate() - (idx + 1)); // start yesterday
     return sessions.filter(s => s.date === todayStr(d)).reduce((sum, s) => sum + s.minutes, 0);
   });
 
@@ -897,6 +1143,28 @@ function computeStreak(sessions) {
   let streak = 0;
   let d = new Date();
   while (days.has(todayStr(d))) { streak++; d.setDate(d.getDate() - 1); }
+  return streak;
+}
+
+// Longest uninterrupted run of active days, from all-time session history.
+function longestStreak(sessions) {
+  const days = Array.from(new Set(sessions.map(s => s.date))).sort();
+  let best = 0, run = 0, prev = null;
+  for (const d of days) {
+    run = prev !== null && daysBetween(prev, d) === 1 ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = d;
+  }
+  return best;
+}
+
+function computeDppStreak(dpp) {
+  let streak = 0;
+  let d = new Date();
+  while (true) {
+    const rec = dpp.find(x => x.date === todayStr(d));
+    if (rec && rec.target > 0 && rec.solved >= rec.target) { streak++; d.setDate(d.getDate() - 1); } else break;
+  }
   return streak;
 }
 
@@ -944,58 +1212,11 @@ function computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp }) {
     progressLabel: (!b.unlocked && b.target != null) ? `${b.current}/${b.target}` : null,
   }));
 }
-function TopBar({ profile, sessions, tasks, showFull }) {
-  const days = daysBetween(new Date(), profile.targetDate);
-  const todayTasks = tasks.filter(t => t.date === todayStr());
-  const doneToday = todayTasks.filter(t => t.done).length;
-  const urgent = days >= 0 && days <= 21;
-
-  const numGrad = urgent
-    ? `linear-gradient(180deg, ${COLORS.danger}, ${darken(COLORS.danger, 26)})`
-    : `linear-gradient(180deg, ${COLORS.text}, ${hexToRgba(COLORS.text, 0.5)})`;
-
-  return (
-    <div className="lg-hero" style={{ padding: "32px 36px", marginBottom: SPACE.xl, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: SPACE.lg }}>
-      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: SPACE.xl }}>
-        <div>
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: COLORS.ink, fontWeight: 600, marginBottom: 8 }}>
-            {profile.exam}
-          </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <div key={days} className="lg-tick" style={{ fontFamily: FONTS.display, fontSize: "clamp(27px, 3.2vw, 32px)", fontWeight: 700, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums", backgroundImage: numGrad, WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent", position: "relative" }}>
-              {days >= 0 ? days : "0"}
-              {urgent && (
-                <span style={{ position: "absolute", left: 0, right: 0, top: "40%", bottom: -14, background: `radial-gradient(60% 100% at 50% 50%, ${hexToRgba(COLORS.danger, 0.22)}, transparent 70%)`, filter: "blur(2px)", pointerEvents: "none" }} />
-              )}
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.dim }}>
-              {days >= 0 ? (days === 1 ? "day" : "days") : "days"} to exam day
-            </div>
-          </div>
-          <div style={{ width: 72, height: 3, borderRadius: 2, marginTop: 10, background: `linear-gradient(90deg, ${COLORS.ink}, ${hexToRgba(COLORS.ink, 0.1)})`, boxShadow: `0 0 12px ${COLORS.inkGlow}` }} />
-          <div style={{ fontSize: 11.5, color: COLORS.faint, marginTop: 10 }}>
-            Target · {parseLocalDate(profile.targetDate).toDateString()}
-          </div>
-          <div style={{ display: "flex", gap: SPACE.sm, marginTop: SPACE.md }}>
-            <MiniStat icon={Flame} label="Streak" value={`${computeStreak(sessions)}d`} />
-            <MiniStat icon={CheckCircle2} label="Tasks" value={`${doneToday}/${todayTasks.length}`} />
-          </div>
-        </div>
-        </div>
-      {showFull && (
-        <div style={{ flex: 1, minWidth: 320, display: "flex", justifyContent: "center", flexShrink: 1 }}>
-          <PrepProgressGrid profile={profile} sessions={sessions} />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Today's focus vs your own best single day — a quiet ring, lit by real data.
-//   empty   → no logged sessions yet: dashed ring, "no data", never fake progress
 //   beatBest → today ≥ best day: clamps at 100% and says so
 //   else    → progress toward your historical best
-function FocusRing({ pct, todayMin, bestDay, beatBest, empty }) {
+function BestDayRing({ pct, todayMin, bestDay, beatBest, empty }) {
   const size = 96, stroke = 8;
   const r = size / 2 - stroke / 2 - 3;
   const c = 2 * Math.PI * r;
@@ -1011,7 +1232,7 @@ function FocusRing({ pct, todayMin, bestDay, beatBest, empty }) {
           strokeDasharray={empty ? "3 6" : `${dash} ${c - dash}`}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
           style={{
-            transition: "stroke-dasharray 0.7s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.4s ease-out",
+            transition: "stroke-dasharray 0.7s cubic-bezier(0.2,0.8,0.2,1), stroke 0.4s ease-out",
             filter: empty ? "none" : `drop-shadow(0 0 5px ${hexToRgba(beatBest ? COLORS.done : COLORS.ink, 0.45)})`,
           }}
         />
@@ -1032,233 +1253,13 @@ function FocusRing({ pct, todayMin, bestDay, beatBest, empty }) {
     </div>
   );
 }
-function MiniStat({ icon: Icon, label, value }) {
-  return (
-    <div className="lg-card" style={{ display: "flex", alignItems: "center", gap: SPACE.sm, borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.sm}px ${SPACE.md}px`, boxShadow: elev("e1") }}>
-      <div className="lg-empty-icon" style={{ width: 30, height: 30, borderRadius: 9 }}>
-        <Icon size={14} color={COLORS.ink} />
-      </div>
-      <div>
-        <div style={{ fontSize: 9, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 13, fontWeight: 600 }}>{value}</div>
-      </div>
-    </div>
-  );
-}
-
-// "How far through my prep window am I?" — a full-year, GitHub-style activity
-// grid (52-53 week columns x 7 rows) anchored at the prep start, covering
-// 365 days of the window regardless of prep length. Day zero = profile
-// creation when available (real data, no new field); otherwise the window is
-// anchored on the target date. Past days are filled (session minutes add a
-// heatmap tint), today glows, the exam day stays outlined, days after the
-// exam are dimmed. Purely presentational: no persistence, no new settings.
-function PrepProgressGrid({ profile, sessions = [] }) {
-  const target = profile.targetDate ? parseLocalDate(profile.targetDate) : null;
-  if (!target || isNaN(target.getTime())) return null;
-
-  let start = profile.createdAt ? parseLocalDate(profile.createdAt) : null;
-  if (!start || isNaN(start.getTime()) || start > target) {
-    start = parseLocalDate(addDays(profile.targetDate, -179));
-  }
-
-  const gridDays = 365;
-  const lead = start.getDay();
-  const cols = Math.ceil((lead + gridDays) / 7);
-  const todayKey = todayStr();
-
-  const perDay = useMemo(() => {
-    const m = {};
-    sessions.forEach(s => { m[s.date] = (m[s.date] || 0) + s.minutes; });
-    return m;
-  }, [sessions]);
-
-  const dateAt = (i) => {
-    const d = parseLocalDate(start);
-    d.setDate(d.getDate() + i - lead);
-    return d;
-  };
-  const dayTitle = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-
-  // Dot fills sit on the SAME light glass surface as the sibling panels —
-  // no dark stage. Passed dots are a solid mixed blue (accent blended at
-  // medium strength toward the panel, never an alpha wash), Upcoming dots
-  // carry a faint hairline and no fill, Today stays full accent, Target an
-  // accent ring. One blue family only.
-  const DOT = {
-    passed: ["rgb(154,170,255)", "rgb(134,150,255)", "rgb(112,130,255)", COLORS.ink],
-    future: "transparent",
-    bare: "transparent",
-  };
-  const passedFill = (lv) => DOT.passed[Math.min(3, lv)];
-
-  const passed = Math.max(0, Math.min(gridDays, daysBetween(start, new Date()) + 1));
-  const remaining = Math.max(0, gridDays - passed);
-
-  const cells = [];
-  for (let w = 0; w < cols; w++) {
-    for (let j = 0; j < 7; j++) {
-      const i = w * 7 + j;
-      const di = i - lead;
-      const d = dateAt(i);
-      const key = todayStr(d);
-      let state, lv = 0;
-      if (di < 0) state = "lead";
-      else if (key === todayKey) state = "today";
-      else if (key < todayKey) {
-        state = "past";
-        const min = perDay[key] || 0;
-        lv = min >= 100 ? 3 : min >= 40 ? 2 : min > 0 ? 1 : 0;
-      } else if (key <= todayStr(target)) state = "future";
-      else state = "post";
-      cells.push({
-        key: `c${i}`,
-        title: `${dayTitle(d)} · ${
-          state === "lead" ? "before prep started"
-          : state === "past" ? `${perDay[key] || 0} min focused`
-          : state === "today" ? "today"
-          : state === "future" ? (key === todayStr(target) ? "exam target day" : "upcoming")
-          : "after exam"
-        }`,
-        state,
-        lv,
-        isTarget: key === todayStr(target),
-      });
-    }
-  }
-
-  const fill = (state, lv, isTarget) =>
-    isTarget && state === "future"
-      ? "transparent"
-      : state === "today"
-        ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})`
-        : state === "past"
-          ? passedFill(lv)
-          : "transparent";
-  const edge = (state, isTarget) =>
-    state === "future" && isTarget
-      ? `0 0 0 2px ${hexToRgba(COLORS.ink, 0.85)}, 0 0 6px ${hexToRgba(COLORS.ink, 0.28)}`
-      : state === "today"
-        ? `0 0 0 1.5px ${hexToRgba(COLORS.ink, 0.9)}, 0 0 8px ${hexToRgba(COLORS.ink, 0.45)}`
-        : state === "future"
-          ? `inset 0 0 0 1px ${hexToRgba(COLORS.text, 0.13)}`
-          : undefined;
-
-  return (
-    <div className="lg-card" style={{
-      width: "min(720px, 100%)", display: "flex", flexDirection: "column", gap: 8, flexShrink: 1, minWidth: 220,
-      borderRadius: RADIUS.card,
-      padding: "14px 16px 12px",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
-        <span style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>Prep progress</span>
-        <span style={{ marginLeft: "auto", fontFamily: FONTS.mono, fontSize: 10, color: COLORS.dim, fontVariantNumeric: "tabular-nums" }}>
-          {passed}/{gridDays}
-        </span>
-      </div>
-      <div
-        role="img"
-        aria-label={`${gridDays}-day preparation window: ${passed} ${passed === 1 ? "day" : "days"} completed, ${remaining} ${remaining === 1 ? "day" : "days"} remaining.`}
-        style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(9px, 1fr))`, gap: 2.5, width: "100%" }}
-      >
-        {cells.map(c => (
-          <div
-            key={c.key}
-            title={c.title}
-            aria-hidden="true"
-            className="lg-pcell"
-            style={{ aspectRatio: "1", borderRadius: "50%", background: fill(c.state, c.lv, c.isTarget), boxShadow: edge(c.state, c.isTarget), transition: "filter 0.15s ease-out" }}
-          />
-        ))}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 9.5, color: COLORS.faint, letterSpacing: "0.04em" }}>
-        <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", background: passedFill(0), boxShadow: `inset 0 0 0 1px ${hexToRgba(COLORS.text, 0.13)}` }} />
-        <span>Passed</span>
-        {cells.some(c => c.state === "today") && (
-          <>
-            <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", background: COLORS.ink, boxShadow: `0 0 4px ${hexToRgba(COLORS.ink, 0.5)}`, marginLeft: 6 }} />
-            <span>Today</span>
-          </>
-        )}
-        <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", boxShadow: `inset 0 0 0 1px ${hexToRgba(COLORS.text, 0.13)}`, marginLeft: 6 }} />
-        <span>Upcoming</span>
-        <span style={{ width: 9, height: 9, borderRadius: "50%", display: "inline-block", boxShadow: `0 0 0 1.5px ${hexToRgba(COLORS.ink, 0.85)}`, marginLeft: 6 }} />
-        <span>Target</span>
-      </div>
-    </div>
-  );
-}
-
-// Hierarchy-aware stat tiles: `primary` dominates (large display number,
-// accent edge + glow), secondary tiles stay quieter but elevated. All real
-// numbers, just weighted differently.
-function StatTile({ icon: Icon, tint = COLORS.ink, label, value, sub, onClick, primary }) {
-  const interactive = onClick ? { onClick, role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } } : {};
-  const hue = primary ? COLORS.ink : tint;
-  return (
-    <div
-      className={`lg-card lg-card-interactive`}
-      {...interactive}
-      style={{
-        borderRadius: RADIUS.card,
-        border: `1px solid ${hexToRgba(hue, primary ? 0.4 : 0.24)}`,
-        background: `radial-gradient(170px 96px at 88% -44%, ${hexToRgba(hue, 0.12)}, transparent 72%), linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.7)}, ${hexToRgba(COLORS.panel2, 0.54)})`,
-        backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.18)`,
-        WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.18)`,
-        boxShadow: elev("e2"),
-        padding: primary ? `${SPACE.lg}px` : `${SPACE.md}px ${SPACE.lg}px`,
-        position: "relative",
-        minHeight: primary ? 116 : 88,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        gap: SPACE.xs,
-      }}
-    >
-      {primary && (
-        <div style={{ position: "absolute", left: 0, top: 16, bottom: 16, width: 3, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.ink}, ${darken(COLORS.ink, 24)})`, boxShadow: `0 0 8px ${COLORS.inkGlow}` }} />
-      )}
-      <div style={{ ...row(SPACE.sm), justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ fontSize: 9.5, letterSpacing: "0.09em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>{label}</div>
-        <div style={{ width: primary ? 40 : 34, height: primary ? 40 : 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: hexToRgba(hue, 0.1), border: `1px solid ${hexToRgba(hue, 0.3)}`, color: hue, boxShadow: `0 6px 16px -8px ${hexToRgba(hue, 0.55)}` }}>
-          <Icon size={primary ? 19 : 15} />
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: primary ? 6 : 3 }}>
-        <div style={{ fontFamily: primary ? FONTS.display : FONTS.mono, fontSize: primary ? 38 : 22, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", color: COLORS.text, marginTop: 2 }}>{value}</div>
-        {sub && <div style={{ fontSize: 11, color: COLORS.dim }}>{sub}</div>}
-      </div>
-    </div>
-  );
-}
-
-// Lowest tier — deliberately borderless/open; value + label + optional note
-// reads as a stat, not a card.
-function FlatStat({ icon, tint = COLORS.ink, label, value, sub, onClick }) {
-  const interactive = onClick ? { onClick, role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } } : {};
-  return (
-    <div
-      {...interactive}
-      className="lg-row"
-      style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: RADIUS.control, cursor: onClick ? "pointer" : "default" }}
-    >
-      <div style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: hexToRgba(tint, 0.08), border: `1px solid ${hexToRgba(tint, 0.25)}`, color: tint }}>{icon}</div>
-      <div>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 16, fontWeight: 700, lineHeight: 1.1, fontVariantNumeric: "tabular-nums", color: COLORS.text }}>{value}</div>
-        <div style={{ fontSize: 9.5, letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600, marginTop: 2 }}>{label}</div>
-      </div>
-      {sub && <span style={{ marginLeft: "auto", fontSize: 10.5, color: COLORS.dim, maxWidth: 150, textAlign: "right" }}>{sub}</span>}
-    </div>
-  );
-}
 
 // Quick actions — one dock, four lit cells, all just navigational.
 function QuickDock({ setTab }) {
   const actions = [
     { id: "timer", icon: TimerIcon, tint: COLORS.ink, label: "Start Focus", line: "Deep work, pomodoro & breaks", primary: true },
-    { id: "tasks", icon: ClipboardList, tint: "#8B7CF8", label: "Daily Targets", line: "Tasks & practice questions" },
-    { id: "cards", icon: Layers, tint: "#5B8CFF", label: "Recall Deck", line: "Spaced-repetition reviews" },
-    { id: "mocks", icon: TrendingUp, tint: "#52B788", label: "Test Trends", line: "Mock scores & history" },
+    { id: "cards", icon: Layers, tint: "#4FD8E0", label: "Recall Deck", line: "Spaced-repetition reviews" },
+    { id: "mocks", icon: TrendingUp, tint: "#5BE6A8", label: "Test Trends", line: "Mock scores & history" },
   ];
   return (
     <div className="lg-dock" role="group" aria-label="Quick actions">
@@ -1359,23 +1360,84 @@ function Onboarding({ onDone }) {
 }
 
 // ---------------- DASHBOARD ----------------
-function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, errors, dpp, unlockedBadges, setTab }) {
+// YEAR GRID — Ledger's signature widget: the current year as a 53-column
+// cell map. Intensity = focus minutes logged that day; full-goal days glow
+// green; today gets a lavender outline. Reads from a distance, like a
+function useNow(intervalMs = 15000) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => { const id = setInterval(() => setNow(new Date()), intervalMs); return () => clearInterval(id); }, [intervalMs]);
+  return now;
+}
+
+// the year reduced to a single terminal strip
+function YearStrip({ sessionMap, goal = 360 }) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const jan1Dow = new Date(y, 0, 1).getDay();
+  const monthStarts = {};
+  const cols = [];
+  for (let wk = 0; wk < 53; wk++) cols.push({ days: 0, max: 0 });
+  let activeDays = 0, goalsMet = 0;
+  for (let d = 1; d <= 366; d++) {
+    const dt = new Date(y, 0, d);
+    if (dt.getFullYear() !== y) break;
+    const ds = todayStr(dt);
+    const off = d + jan1Dow - 1;
+    const wk = Math.floor(off / 7);
+    if (d === 1 || dt.getDate() === 1) monthStarts[wk] = dt.toLocaleString(undefined, { month: "short" }).toUpperCase();
+    if (dt > now) continue;
+    const min = sessionMap[ds] || 0;
+    const c = cols[wk];
+    c.days++;
+    if (min > c.max) c.max = min;
+    if (min > 0) activeDays++;
+    if (min >= goal) goalsMet++;
+  }
+  const doy = Math.floor((now - new Date(y, 0, 1)) / 86400000) + 1;
+  const todayWk = Math.floor((doy + jan1Dow - 1) / 7);
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>{y} · YEAR</span>
+        <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{activeDays} ACTIVE · {goalsMet} GOALS</span>
+      </div>
+      <div style={{ position: "relative", height: 10, marginBottom: 6 }}>
+        {Object.entries(monthStarts).map(([wk, label], i, arr) => (
+          <span key={label} className="sys" style={{ position: "absolute", left: `calc(${(wk / 52) * 100}% + 1px)`, transform: i === arr.length - 1 ? "none" : "translateX(-50%)", fontSize: 7.5, letterSpacing: "0.08em", color: COLORS.faint }}>{label}</span>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 2.5 }}>
+        {cols.map((c, i) => {
+          const bg = c.days === 0 ? "transparent"
+            : c.max === 0 ? "rgba(255,255,255,0.04)"
+            : c.max < 30 ? "rgba(168,155,255,0.18)"
+            : c.max < 120 ? "rgba(168,155,255,0.45)"
+            : c.max < goal ? "rgba(168,155,255,0.78)"
+            : COLORS.done;
+          return (
+            <div key={i} title={c.days === 0 ? "later" : (c.max ? `${fmtMin(c.max)} that week` : "rest week")} style={{ flex: 1, height: 9, borderRadius: 2, background: bg, border: i === todayWk ? `1px solid ${COLORS.accentFocus}` : "1px solid transparent", boxSizing: "border-box", transition: "filter 0.14s ease-out, transform 0.14s ease-out" }} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, errors, dpp, setDpp, peers, peerData, unlockedBadges, setTab, timer, onPause, onResume, dashboardSettings = {}, goalMin = 360, dateFormat = "compact" }) {
+  const flags = { countdown: true, clock: true, studied: true, now: true, year: true, today: true, subjects: true, workspaces: true, status: true, ...dashboardSettings };
+  const goal = Number(goalMin) || 360;
+  const dwNow = useNow(15000);
   const allChapters = Object.values(syllabus).flat();
   const doneCount = allChapters.filter(c => c.status === "done" || c.status === "mastered").length;
   const pct = allChapters.length ? Math.round((doneCount / allChapters.length) * 100) : 0;
-  const days = daysBetween(new Date(), profile.targetDate);
+  const days = profile.targetDate ? daysBetween(new Date(), profile.targetDate) : null;
   const due = dueReviews(syllabus);
   const alert = consistencyAlert(sessions);
-  const dppToday = todayDppRecord(dpp || []);
-
-  const markReviewed = (subject, id) => {
-    setSyllabus(prev => ({
-      ...prev,
-      [subject]: prev[subject].map(c => c.id === id
-        ? { ...c, revisionStage: c.revisionStage + 1, nextRevision: addDays(todayStr(), REVISION_INTERVALS[Math.min(c.revisionStage + 1, REVISION_INTERVALS.length - 1)]) }
-        : c)
-    }));
-  };
+  const dayOfPrep = Math.max(1, Math.min(365, daysBetween(profile.createdAt ? parseLocalDate(profile.createdAt) : new Date(), new Date()) + 1));
+  const scorableMocks = mocks.filter(m => Number(m.max) > 0 && isFinite(Number(m.total)));
+  const mockAvg = scorableMocks.length ? Math.round(scorableMocks.reduce((a, m) => a + Math.min(100, (Number(m.total) / Number(m.max)) * 100), 0) / scorableMocks.length) : 0;
+  const daysLeft = days === null ? null : Math.max(0, days);
+  const urgent = daysLeft !== null && daysLeft > 0 && daysLeft <= 21;
 
   const last30 = useMemo(() => {
     const out = [];
@@ -1390,11 +1452,24 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
 
   const backlog = allChapters.filter(c => c.status === "todo").length;
   const todayTasks = tasks.filter(t => t.date === todayStr());
+  const targetById = useMemo(() => Object.fromEntries(tasks.map(t => [t.id, t])), [tasks]);
   const xpInfo = useMemo(() => computeXP({ sessions, tasks, mocks, syllabus, dpp: dpp || [] }), [sessions, tasks, mocks, syllabus, dpp]);
   const liveBadges = useMemo(() => computeBadges({ sessions, tasks, mocks, syllabus, errors, dpp: dpp || [] }), [sessions, tasks, mocks, syllabus, errors, dpp]);
   const badges = useMemo(() => liveBadges.map(b => ({ ...b, unlocked: b.unlocked || unlockedBadges.includes(b.id) })), [liveBadges, unlockedBadges]);
   const unlockedCount = badges.filter(b => b.unlocked).length;
 
+  const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
+  const streakOfDays = computeStreak(sessions);
+  const dppRecord = todayDppRecord(dpp);
+  const updateDppToday = (patch) => {
+    setDpp(prev => {
+      const exists = prev.some(d => d.date === todayStr());
+      const next = exists ? prev.map(d => d.date === todayStr() ? { ...d, ...patch } : d) : [...prev, { ...dppRecord, ...patch }];
+      return next;
+    });
+  };
+  const bumpSolved = (n) => updateDppToday({ solved: Math.max(0, dppRecord.solved + n) });
+  const dppStreak = useMemo(() => computeDppStreak(dpp), [dpp]);
   const subjectTime7 = useMemo(() => {
     const since = addDays(todayStr(), -6);
     const totals = {};
@@ -1407,186 +1482,315 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
       .map(s => ({ subject: s, minutes: Math.round(totals[s]), pct: grand ? Math.round((totals[s] / grand) * 100) : 0 }))
       .sort((a, b) => b.minutes - a.minutes);
   }, [sessions, profile.subjects]);
-  const subjectColors = ["#C98A3E", "#6FA287", "#5B8CFF", "#E88DA0", "#D9A441", "#8B7FE8"];
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 20 }}>
-        <StatTile primary icon={Layers} label="Backlog" value={backlog} sub="chapters untouched" onClick={() => setTab("syllabus")} />
-        <StatTile icon={BookMarked} tint="#5B8CFF" label="Syllabus complete" value={`${pct}%`} sub={`${doneCount}/${allChapters.length} chapters`} onClick={() => setTab("syllabus")} />
-        <StatTile icon={CheckCircle2} tint="#8B7CF8" label="Questions today" value={`${dppToday.solved}/${dppToday.target}`} sub="daily practice count" onClick={() => setTab("tasks")} />
-      </div>
+  // ---- desktop computations ----
+  const sessionMinByDate = useMemo(() => {
+    const m = {};
+    sessions.forEach(s => { m[s.date] = (m[s.date] || 0) + s.minutes; });
+    return m;
+  }, [sessions]);
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <FlatStat icon={<Trophy size={15} />} tint="#E8A23D" label="Mocks logged" value={mocks.length} sub={mocks.length ? `avg ${Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length)}%` : "log your first"} onClick={() => setTab("mocks")} />
-        <FlatStat icon={<AlertTriangle size={15} />} tint={COLORS.danger} label="Errors catalogued" value={errors.length} sub="patch these before D-day" onClick={() => setTab("errors")} />
-      </div>
+  const todayBySub = useMemo(() => {
+    const map = {};
+    profile.subjects.forEach(s => { map[s] = 0; });
+    sessions.forEach(s => { if (s.date === todayStr() && map[s.subject] !== undefined) map[s.subject] += s.minutes; });
+    return profile.subjects.map(s => ({ subject: s, minutes: Math.round(map[s]) })).filter(s => s.minutes > 0);
+  }, [sessions, profile.subjects]);
 
-      <QuickDock setTab={setTab} />
+  const milestone = useMemo(() => {
+    for (const sub of profile.subjects) {
+      const c = (syllabus[sub] || []).find(x => x.status === "todo");
+      if (c) return { subject: sub, name: c.name };
+    }
+    return null;
+  }, [syllabus, profile.subjects]);
 
-      <Card title="Progress ledger" right={<div style={{ fontSize: 11, color: COLORS.faint }}>{unlockedCount}/{badges.length} badges</div>}>
-        <div style={{ display: "flex", alignItems: "center", gap: SPACE.lg, marginBottom: SPACE.xl, flexWrap: "wrap" }}>
-          <div style={{ position: "relative", width: 52, height: 52, borderRadius: RADIUS.card, background: `radial-gradient(120px 60px at 50% -40%, ${COLORS.inkGlow}, transparent 70%), ${COLORS.panel2}`, border: `1px solid ${hexToRgba(COLORS.ink, 0.45)}`, boxShadow: elev("e3"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Zap size={24} color={COLORS.ink} />
-            <div style={{ position: "absolute", top: -7, right: -7, width: 22, height: 22, borderRadius: "50%", background: COLORS.ink, color: COLORS.bg, fontFamily: FONTS.mono, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 10px -4px ${COLORS.inkGlow}` }}>
-              {xpInfo.level}
+  const peersTop = useMemo(() => {
+    const rows = [];
+    (peers || []).forEach(code => {
+      const p = peerData && peerData[code];
+      if (p && p.name) rows.push({ name: p.name, code, minutes: p.minutes || 0, self: false });
+    });
+    rows.push({ name: profile.name, code: profile.code, minutes: todayMin, self: true });
+    return rows.sort((a, b) => b.minutes - a.minutes).slice(0, 5);
+  }, [peers, peerData, profile, todayMin]);
+
+  const dueNext = due[0] || null;
+
+  const todaySessions = useMemo(() => sessions.filter(s => s.date === todayStr()), [sessions]);
+  const showToday = todaySessions.length > 0 || todayTasks.length > 0 || due.length > 0 || mocks.length > 0;
+  const [openSub, setOpenSub] = useState(null);
+  const goalPct = Math.min(100, Math.round((todayMin / goal) * 100));
+  const goalHours = goal / 60;
+  const timerRunningSec = timer ? timer.elapsed : 0;
+  const timerShowingRunning = !!(timer && timer.running && timer.elapsed > 0);
+  const timerModeLabel = timer && timer.mode === "pomodoro"
+    ? (timer.phase === "focus" ? "FOCUS SESSION" : "BREAK · RECHARGE")
+    : "FLOW · UNBROKEN";
+  const hour12 = ((dwNow.getHours() + 11) % 12) + 1;
+  const minSlice = String(dwNow.getMinutes()).padStart(2, "0");
+  const ampm = dwNow.getHours() >= 12 ? "PM" : "AM";
+  const weekday = dwNow.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
+  const dateStr = fmtDateStr(todayStr(), dateFormat, 1).toUpperCase();
+  const daysInPrep = 365;
+  const examTitle = String(profile.exam || "EXAM").toUpperCase();
+  const targetYear = String(profile.targetDate || "").slice(0, 4);
+  const miniStamp = { background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: COLORS.faint, borderRadius: 5, padding: "3px 8px", fontSize: 9, letterSpacing: "0.06em", fontFamily: FONTS.mono, cursor: "pointer", transition: "color 0.14s ease-out, border-color 0.14s ease-out" };
+  const miniBtnStyle = (accent) => ({ background: accent ? hexToRgba(COLORS.accentFocus, 0.12) : "rgba(255,255,255,0.05)", border: `1px solid ${accent ? hexToRgba(COLORS.accentFocus, 0.4) : "rgba(255,255,255,0.12)"}`, color: accent ? COLORS.accentFocus : COLORS.dim, borderRadius: 6, padding: "5px 11px", fontSize: 9.5, letterSpacing: "0.1em", fontFamily: FONTS.mono, cursor: "pointer", transition: "filter 0.14s ease-out" });
+
+  const leftCol = {
+    display: "flex", flexDirection: "column", gap: 20, minWidth: 0,
+  };
+  const rightCol = {
+    display: "flex", flexDirection: "column", gap: 20, width: "100%",
+  };
+
+return (
+    <div className="lg-canvas">
+{/* 01 · CLOCK — a typographic object, no container */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "30px 44px" }}>
+        {flags.clock && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="lg-live" style={{ width: 7, height: 7, background: COLORS.accentFocus, alignSelf: "flex-end", marginBottom: 16 }} />
+            <div style={{ fontFamily: FONTS.mono, fontSize: "clamp(54px, 9vw, 104px)", fontWeight: 600, lineHeight: 0.9, letterSpacing: "-0.045em", fontVariantNumeric: "tabular-nums", color: COLORS.text }}>
+              {String(hour12).padStart(2, "0")}:{minSlice}
+              <span style={{ fontSize: "0.26em", fontWeight: 500, letterSpacing: "0.1em", color: COLORS.faint, marginLeft: 8 }}>{ampm}</span>
             </div>
           </div>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontFamily: FONTS.display, fontSize: 18, fontWeight: 700, color: COLORS.text }}>Level {xpInfo.level} — {xpInfo.title}</div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.faint }}>{xpInfo.intoLevel}/{XP_PER_LEVEL} XP</div>
-            </div>
-            <div className="lg-progress" style={{ height: 9, marginTop: SPACE.sm, position: "relative", overflow: "visible" }}>
-              <div className="lg-progress-fill" style={{ width: `${xpInfo.levelPct}%`, height: "100%" }} />
-              <div style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, display: "flex", justifyContent: "space-between", pointerEvents: "none" }}>
-                {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ width: 1, height: "100%", background: hexToRgba(COLORS.panel, 0.55), opacity: i === 0 || i === 4 ? 0 : 1 }} />)}
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 4 }}>{xpInfo.xp} XP total · {xpInfo.levelPct}% toward level {Math.min(xpInfo.level + 1, LEVEL_TITLES.length + 1)}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18 }}>
+            <span className="sys" style={{ fontSize: 10.5, letterSpacing: "0.24em", color: COLORS.text }}>{weekday}</span>
+            <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
+            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>{dateStr}</span>
+            <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
+            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>DAY {dayOfPrep}/{daysInPrep}</span>
+          </div>
+</div>
+        )}
+
+        {/* EXAM — the signature numeral */}
+        {flags.countdown && (
+        <div style={{ textAlign: "right" }}>
+          <div className="sys" style={{ fontSize: 9.5, letterSpacing: "0.26em", color: COLORS.faint }}>{examTitle} · {targetYear}</div>
+          <div className="num" style={{ fontSize: "clamp(72px, 10vw, 148px)", fontWeight: 800, lineHeight: 0.78, letterSpacing: "-0.05em", fontVariantNumeric: "tabular-nums", color: daysLeft === null ? COLORS.faint : hexToRgba(COLORS.danger, 0.94), marginTop: 10 }}>{daysLeft === null ? "—" : daysLeft}</div>
+          <div className="sys" style={{ fontSize: 11, letterSpacing: "0.42em", color: daysLeft === null ? COLORS.faint : urgent ? COLORS.danger : COLORS.dim, marginTop: 12 }}>{daysLeft === null ? "NO DATE SET" : "DAYS LEFT"}</div>
+        </div>
+        )}
+      </div>
+
+      {/* 02 · two small chips, deliberately misaligned */}
+      <div style={{ display: "flex", alignItems: "stretch", flexWrap: "wrap", gap: 18, marginTop: "clamp(36px, 5vh, 56px)" }}>
+        {flags.studied && (
+        <div style={{ minWidth: 232, background: "rgba(255,255,255,0.03)", borderRadius: 14, padding: "16px 22px 14px" }}>
+          <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.26em", color: COLORS.faint }}>STUDIED</div>
+          <div className="num" style={{ fontSize: 38, fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.03em", marginTop: 6 }}>{fmtMin(todayMin)}</div>
+          <div className="lg-progress" style={{ height: 4, marginTop: 13 }}>
+            <div className="lg-progress-fill" style={{ width: `${goalPct}%`, "--lg-w": `${goalPct}%`, height: "100%" }} />
+          </div>
+<div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.14em", color: COLORS.faint, marginTop: 9 }}>
+            {todaySessions.length} SESSION{todaySessions.length === 1 ? "" : "S"} · {goalPct}% OF {goalHours}H
           </div>
         </div>
-        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: SPACE.sm }}>
-          {badges.map(b => (
-            <div key={b.id} title={b.unlocked ? b.desc : (b.progressLabel ? `${b.desc} — ${b.progressLabel}` : b.desc)} className={`lg-card${b.unlocked ? " lg-card-interactive" : ""}`} style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: SPACE.xs, padding: `${SPACE.sm}px ${SPACE.xs}px`, borderRadius: RADIUS.control,
-              background: b.unlocked ? `radial-gradient(130px 60px at 50% -40%, ${COLORS.inkGlow}, transparent 70%), linear-gradient(170deg, ${COLORS.panel}, ${COLORS.panel2})` : COLORS.panel2,
-              border: `1px solid ${b.unlocked ? hexToRgba(COLORS.ink, 0.4) : COLORS.border}`,
-              boxShadow: b.unlocked ? elev("e2") : "none",
-              filter: b.unlocked ? "none" : "grayscale(0.9)",
-              opacity: b.unlocked ? 1 : 0.5,
-            }}>
-              {b.unlocked ? <Award size={17} color={COLORS.ink} /> : <Lock size={14} color={COLORS.faint} />}
-              <div style={{ fontSize: 9.5, textAlign: "center", color: b.unlocked ? COLORS.text : COLORS.faint, lineHeight: 1.3 }}>{b.label}</div>
-              {b.progressLabel && !b.unlocked && (
-                <div style={{ fontSize: 8.5, fontFamily: FONTS.mono, color: COLORS.faint }}>{b.progressLabel}</div>
+        )}
+
+        {/* NOW — the music-player equivalent */}
+        {flags.now && (
+        <div style={{ minWidth: 236, flex: "0 1 250px", borderRadius: 14, padding: "14px 18px", marginLeft: "clamp(0px, 4vw, 72px)", background: timerShowingRunning ? hexToRgba(COLORS.accentFocus, 0.08) : "transparent", border: `1px solid ${timerShowingRunning ? hexToRgba(COLORS.accentFocus, 0.32) : "rgba(255,255,255,0.08)"}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.26em", color: timerShowingRunning ? COLORS.accentFocus : COLORS.faint }}>NOW STUDYING</span>
+            <span className="lg-live" style={{ width: 6, height: 6, background: timerShowingRunning ? COLORS.accentFocus : "transparent", border: `1px solid ${timerShowingRunning ? COLORS.accentFocus : COLORS.borderStrong}` }} />
+          </div>
+          {timerRunningSec > 0 ? (
+            <>
+              <div className="num" style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", marginTop: 7, color: timer.running ? COLORS.text : COLORS.dim }}>{fmtClock(timer.elapsed)}</div>
+              <div style={{ fontSize: 12.5, color: COLORS.text, marginTop: 3 }}>{timer.subject || "Focus block"}</div>
+              <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.18em", color: COLORS.faint, marginTop: 6 }}>{timerModeLabel}{!timer.running ? " · PAUSED" : ""}</div>
+            </>
+          ) : (
+            <>
+              <div className="num" style={{ fontSize: 28, fontWeight: 700, color: COLORS.faint, letterSpacing: "-0.02em", marginTop: 7 }}>00:00</div>
+              <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.18em", color: COLORS.faint, marginTop: 3 }}>IDLE</div>
+            </>
+          )}
+<div style={{ display: "flex", gap: 6, marginTop: 11 }}>
+            {timer.running ? (
+              <button onClick={onPause} style={miniBtnStyle(true)}>PAUSE</button>
+            ) : timer.elapsed > 0 ? (
+              <button onClick={onResume} style={miniBtnStyle(true)}>RESUME</button>
+            ) : (
+              <button onClick={() => setTab("timer")} style={miniBtnStyle(false)}>START FOCUS</button>
+            )}
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* 03 — the year, one strip */}
+      {flags.year && (
+      <div style={{ maxWidth: 620, marginTop: "clamp(30px, 4.5vh, 52px)", marginLeft: "clamp(0px, 3vw, 44px)" }}>
+        <YearStrip sessionMap={sessionMinByDate} goal={goal} />
+      </div>
+      )}
+
+      {/* 04 — today's timeline + the subject block, asymmetric */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "36px 48px", marginTop: "clamp(34px, 5vh, 58px)" }}>
+        {flags.today && showToday && (
+          <div style={{ flex: "1 1 300px", maxWidth: 400 }}>
+            <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>TODAY</span>
+            <div style={{ marginTop: 8 }}>
+              {todaySessions.slice(-8).map(s => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={subjectDot(s.subject)} />
+                  <span style={{ flex: 1, fontSize: 12.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.topic || s.subject}
+                    {s.targetId && targetById[s.targetId] && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
+                  </span>
+                  <span className="num" style={{ fontSize: 9, color: COLORS.faint, letterSpacing: "0.08em" }}>{String(s.mode || "").toUpperCase().slice(0, 4)}</span>
+                  <span className="num" style={{ fontSize: 11, color: COLORS.dim, fontVariantNumeric: "tabular-nums" }}>{fmtMin(s.minutes)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 16, flexWrap: "wrap" }}>
+              {todayTasks.length > 0 && (
+                <button onClick={() => setTab("timer")} style={miniStamp}>{todayTasks.filter(t => t.done).length}/{todayTasks.length} TARGETS{todayTasks.every(t => t.done) ? " ✓" : ""}</button>
+              )}
+              {due.length > 0 && (
+                <button onClick={() => setTab("cards")} style={miniStamp}>{due.length} REVIEW{due.length === 1 ? "" : "S"} DUE</button>
+              )}
+              {mocks.length > 0 && (
+                <button onClick={() => setTab("mocks")} style={miniStamp}>{mockAvg}% MOCK AVG</button>
               )}
             </div>
+          </div>
+        )}
+
+{/* SUBJECTS — a diagnostic meter, one coherent instrument */}
+        {flags.subjects && (
+        <div style={{ width: "100%", maxWidth: 340, border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: "18px 20px 12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.26em", color: COLORS.dim }}>SUBJECTS</span>
+            <span className="num" style={{ fontSize: 9.5, color: COLORS.faint }}>{pct}%</span>
+          </div>
+          {profile.subjects.map((sub, si) => {
+            const list = syllabus[sub] || [];
+            const done = list.filter(c => c.status === "done" || c.status === "mastered").length;
+            const sp = list.length ? Math.round((done / list.length) * 100) : 0;
+            const segs = 10;
+            const filled = list.length ? Math.round((done / list.length) * segs) : 0;
+            const todo = list.filter(c => c.status === "todo");
+            const expanded = openSub === sub;
+            return (
+              <div key={sub} onClick={() => setOpenSub(expanded ? null : sub)} style={{ marginBottom: 2, borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "9px 0" }}>
+                  <span className="num" style={{ fontSize: 8.5, color: expanded ? COLORS.accentFocus : COLORS.faint, letterSpacing: "0.06em", width: 16 }}>{String(si + 1).padStart(2, "0")}</span>
+                  <span style={{ fontSize: 11.5, letterSpacing: "0.06em", color: COLORS.text, flex: 1 }}>{sub}</span>
+                  <span className="num" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.01em", color: sp > 0 ? COLORS.text : COLORS.faint }}>{sp || "–"}</span>
+                </div>
+                <div style={{ display: "flex", gap: 2.5, marginLeft: 26, marginBottom: 9 }}>
+                  {Array.from({ length: segs }).map((_, i) => (
+                    <span key={i} style={{ flex: 1, height: 5, borderRadius: 1.5, background: i < filled ? subjectColor(sub) : "rgba(255,255,255,0.055)", transition: "background 0.3s ease-out" }} />
+                  ))}
+                </div>
+                {expanded && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "0 0 10px 26px" }}>
+                    <span className="sys" style={{ fontSize: 8, letterSpacing: "0.16em", color: COLORS.faint }}>{done}/{list.length} DONE · {todo.length} REMAIN{todo.length === 1 ? "S" : "ING"}</span>
+                    {todo.slice(0, 3).map(c => (
+                      <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10.5, color: COLORS.dim }}>
+                        <span style={{ width: 3, height: 3, borderRadius: "50%", background: subjectColor(sub), flexShrink: 0 }} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                      </div>
+                    ))}
+                    <button onClick={e => { e.stopPropagation(); setTab("syllabus"); }} style={miniStamp}>OPEN MAP →</button>
+                  </div>
+                )}
+              </div>
+            );
+})}
+        </div>
+        )}
+      </div>
+
+      {/* 05b — daily question practice (moved here from the retired Targets tab) */}
+      {flags.today && (
+        <div style={{ marginTop: "clamp(34px, 5vh, 56px)", maxWidth: 900 }}>
+          <PracticeCard record={dppRecord} dppStreak={dppStreak} bumpSolved={bumpSolved} updateTarget={updateDppToday} />
+        </div>
+      )}
+
+      {/* 06 — the command strip: one line in, one workspace at a time */}
+      {flags.workspaces && (
+      <div style={{ marginTop: "clamp(34px, 5vh, 56px)", maxWidth: 900 }}>
+        <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>WORKSPACES — ONE STEP AT A TIME</span>
+        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))", gap: 10, marginTop: 10 }}>
+          {[
+            {
+              id: "timer", label: "Focus", tab: "timer",
+              num: timerShowingRunning ? fmtClock(timer.elapsed) : fmtMin(todayMin),
+              line: timerShowingRunning ? "Running now — jump back in" : todayMin > 0 ? `${todayMin} focused today` : "Start a session",
+            },
+            {
+              id: "syllabus", label: "Coverage", tab: "syllabus",
+              num: `${pct}%`,
+              line: pct > 0 ? `${doneCount} of ${allChapters.length} chapters covered` : "Open the coverage map",
+            },
+            {
+              id: "cards", label: "Recall", tab: "cards",
+              num: due.length > 0 ? `${due.length}` : "0",
+              line: due.length > 0 ? `review${due.length === 1 ? "" : "s"} due now` : "No reviews due",
+            },
+            {
+              id: "mocks", label: "Tests", tab: "mocks",
+              num: mocks.length > 0 ? `${mocks.length}` : "0",
+              line: scorableMocks.length > 0 ? `avg ${mockAvg}% across ${scorableMocks.length} scored` : "Log your first test",
+            },
+            {
+              id: "errors", label: "Mistakes", tab: "errors",
+              num: errors.length > 0 ? `${errors.length}` : "0",
+              line: errors.length > 0 ? "Logged — review the ledger" : "Add a mistake to track",
+            },
+          ].map(w => {
+            const Icon = w.id === "timer" ? TimerIcon : w.id === "syllabus" ? BookOpen : w.id === "cards" ? Layers : w.id === "mocks" ? TrendingUp : AlertTriangle;
+            return (
+              <button key={w.id} className="lg-ws" onClick={() => setTab(w.tab)}
+                style={{ textAlign: "left", display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: COLORS.glassFill2, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.control, cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <Icon size={13} color={COLORS.faint} />
+                  <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>{w.label}</span>
+                </div>
+                <div className="num" style={{ fontSize: 22, fontWeight: 700, color: COLORS.text, letterSpacing: "-0.01em", lineHeight: 1.05 }}>{w.num}</div>
+                <div style={{ fontSize: 10.5, color: COLORS.dim, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.line}</div>
+                <div style={{ fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: COLORS.faint, marginTop: "auto", fontFamily: FONTS.mono, fontWeight: 600 }}>
+                  Open →
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      )}
+
+{/* 05 — the status strip */}
+      {flags.status && (
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "clamp(40px, 6vh, 68px)", paddingTop: 16, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", maxWidth: 900 }}>
+        <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.faint }}>LV {xpInfo.level} · {String(xpInfo.title).toUpperCase()}</span>
+        <div className="lg-progress" style={{ width: 150, height: 3 }}>
+          <div className="lg-progress-fill" style={{ width: `${xpInfo.levelPct}%`, "--lg-w": `${xpInfo.levelPct}%`, height: "100%" }} />
+        </div>
+<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>{xpInfo.intoLevel}/{XP_PER_LEVEL}</span>
+        {alert && (
+          <>
+            <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.warn }}>⚠ −{alert.drop}% 7D</span>
+          </>
+        )}
+        <span style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {badges.map(b => (
+            <span key={b.id} title={`${b.label} — ${b.desc}`} style={{ width: 5, height: 5, transform: "rotate(45deg)", background: b.unlocked ? hexToRgba(COLORS.accentFocus, 0.85) : "rgba(255,255,255,0.09)" }} />
           ))}
         </div>
-      </Card>
-
-      {alert && (
-        <Card style={{ borderColor: `${COLORS.warn}55` }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <AlertTriangle size={16} color={COLORS.warn} style={{ flexShrink: 0, marginTop: 2 }} />
-            <div style={{ fontSize: 12, color: COLORS.dim }}>
-              <b style={{ color: COLORS.text }}>Consistency dropped {alert.drop}%</b> — your last 3 days averaged {fmtMin(alert.recent)}/day vs {fmtMin(alert.baseline)}/day the week before. This is a pattern flag, not a diagnosis — could be burnout, exams, or just a rough week. Worth a lighter day or checking in with yourself before it compounds.
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {due.length > 0 && (
-        <Card title={`Reviews due today (${due.length})`}>
-          {due.map(c => (
-            <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-              <div>{c.name} <span style={{ fontSize: 10, color: COLORS.faint }}>· {c.subject}</span></div>
-              <Btn variant="ghost" onClick={() => markReviewed(c.subject, c.id)}>Mark reviewed</Btn>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      <Card title="30-day focus momentum" right={<div style={{ fontSize: 10, color: COLORS.faint }}>daily focus minutes</div>}>
-        {last30.every(d => d.min === 0) ? (
-          <div style={{ position: "relative", height: 150, borderRadius: RADIUS.card, overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 6, padding: "16px 16px 14px", background: `linear-gradient(180deg, ${hexToRgba(COLORS.ink, 0.05)}, transparent 72%)` }}>
-            {[0.12, 0.2, 0.16, 0.28, 0.22, 0.34, 0.26, 0.42, 0.3, 0.5, 0.38, 0.26, 0.46, 0.34, 0.28, 0.5, 0.4, 0.3, 0.2].map((h, i) => (
-              <div key={i} style={{ flex: 1, maxWidth: 26, height: `${h * 100}%`, borderRadius: 4, background: hexToRgba(COLORS.ink, 0.05 + (i % 3) * 0.02), border: `1px solid ${hexToRgba(COLORS.ink, 0.09)}` }} />
-            ))}
-            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, textAlign: "center", padding: 20 }}>
-              <EmptyArt variant="track" width={148} height={84} />
-              <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 340, lineHeight: 1.6 }}>
-                The momentum curve draws itself from real sessions. Log your first focus days and this chart fills in automatically.
-              </div>
-              <Btn variant="ink" onClick={() => setTab("timer")}><Play size={12} /> Start focus timer</Btn>
-            </div>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={last30}>
-              <defs>
-                <linearGradient id="momentum" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLORS.ink} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={COLORS.ink} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="day" tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: RADIUS.control }} labelStyle={{ color: COLORS.dim }} />
-              <Area type="monotone" dataKey="min" stroke={COLORS.ink} fill="url(#momentum)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </Card>
-
-      <Card title="Where your time went (last 7 days)">
-        {subjectTime7.every(s => s.minutes === 0) ? (
-          <EmptyState
-            art="grid"
-            message="No focus sessions logged yet this week — start the timer or add a manual entry."
-            action={<Btn variant="ink" onClick={() => setTab("timer")}>Start focus timer</Btn>}
-          />
-        ) : (
-          <div style={stack(SPACE.sm + 2)}>
-            {subjectTime7.map((s, i) => (
-              <div key={s.subject}>
-                <div style={{ ...between(), fontSize: 12, marginBottom: SPACE.xs }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: COLORS.text }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 2, background: subjectColors[i % subjectColors.length], boxShadow: `0 0 6px ${hexToRgba(subjectColors[i % subjectColors.length], 0.55)}` }} />
-                    {s.subject}
-                  </span>
-                  <span style={{ color: COLORS.dim, fontFamily: FONTS.mono }}>{fmtMin(s.minutes)} · {s.pct}%</span>
-                </div>
-                <div className="lg-progress" style={{ height: 7 }}>
-                  <div style={{ width: `${s.pct}%`, height: "100%", background: `linear-gradient(90deg, ${darken(subjectColors[i % subjectColors.length], 25)}, ${subjectColors[i % subjectColors.length]})`, borderRadius: 999, transition: `width ${MOTION.duration.slow}ms ${MOTION.easing.standard}` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: SPACE.lg }}>
-        <Card title="Today's plan" right={<Btn variant="ghost" onClick={() => setTab("tasks")}>Open <ChevronRight size={13} /></Btn>}>
-          {todayTasks.length === 0 ? (
-            <EmptyState
-              icon={ClipboardList}
-              message="No targets set for today. Add a few tasks so Dashboard has something to track."
-              action={<Btn variant="ink" onClick={() => setTab("tasks")}>Open Task Planner</Btn>}
-            />
-          ) : todayTasks.slice(0, 5).map(t => (
-            <div
-              key={t.id}
-              className="lg-row"
-              onClick={() => setTab("tasks")}
-              style={{ ...row(SPACE.sm), padding: `${SPACE.xs + 2}px 4px`, fontSize: 13, borderBottom: `1px solid ${COLORS.border}`, cursor: "pointer", borderRadius: RADIUS.badge }}
-            >
-              {t.done ? <CheckCircle2 size={14} color={COLORS.done} /> : <Circle size={14} color={COLORS.faint} />}
-              <span style={{ textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</span>
-            </div>
-          ))}
-        </Card>
-
-        <Card title="Reality check">
-          <RealityCheck days={days} />
-        </Card>
+<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>{unlockedCount}/{badges.length}</span>
       </div>
-    </div>
-  );
-}
-
-function RealityCheck({ days }) {
-  const [waste, setWaste] = useState(2);
-  const lostHours = Math.max(0, days) * waste;
-  return (
-    <div>
-      <div style={{ fontSize: 12, color: COLORS.dim, marginBottom: SPACE.md }}>If you waste <b style={{ color: COLORS.text }}>{waste}h/day</b> from here to exam day:</div>
-      <input type="range" min="0" max="6" step="0.5" value={waste} onChange={e => setWaste(parseFloat(e.target.value))} style={{ width: "100%" }} />
-      <div style={{ fontFamily: FONTS.mono, fontSize: 26, fontWeight: 600, color: COLORS.danger, marginTop: SPACE.md }}>
-        {Math.round(lostHours)} hours lost
-      </div>
-      <div style={{ fontSize: 11, color: COLORS.faint, marginTop: SPACE.xs }}>≈ {Math.round(lostHours / 8)} full study days, gone. {Math.max(0, days)} days remain either way — spend them or lose them.</div>
+      )}
     </div>
   );
 }
@@ -1594,7 +1798,7 @@ function RealityCheck({ days }) {
 // ---------------- CALENDAR ----------------
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
-function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab }) {
+function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab, weekStart = "sunday", dateFormat = "compact" }) {
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [selected, setSelected] = useState(todayStr());
   const [newText, setNewText] = useState("");
@@ -1618,14 +1822,16 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
 
   const grid = useMemo(() => {
     const year = cursor.getFullYear(), month = cursor.getMonth();
+    const monday = weekStart === "monday";
     const firstDow = new Date(year, month, 1).getDay();
+    const offset = monday ? (firstDow + 6) % 7 : firstDow;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const cells = [];
-    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let i = 0; i < offset; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(todayStr(new Date(year, month, d)));
     while (cells.length % 7 !== 0) cells.push(null);
     return cells;
-  }, [cursor]);
+  }, [cursor, weekStart]);
 
   const dayInfo = (ds) => {
     if (!ds) return null;
@@ -1668,7 +1874,7 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
           <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.mocksTaken}</b> mocks taken</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
-          {WEEKDAY_LABELS.map((w, i) => <div key={i} style={{ textAlign: "center", fontSize: 10, color: COLORS.faint, textTransform: "uppercase", padding: "2px 0" }}>{w}</div>)}
+          {(weekStart === "monday" ? ["M", "T", "W", "T", "F", "S", "S"] : WEEKDAY_LABELS).map((w, i) => <div key={i} style={{ textAlign: "center", fontSize: 10, color: COLORS.faint, textTransform: "uppercase", padding: "2px 0" }}>{w}</div>)}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
           {grid.map((ds, i) => {
@@ -1681,7 +1887,7 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
             const intensity = info.studyMin === 0 ? 0 : info.studyMin < 30 ? 0.3 : info.studyMin < 90 ? 0.6 : 1;
             return (
               <div key={ds} className="lg-cell" onClick={() => setSelected(ds)} style={{
-                aspectRatio: "1", borderRadius: 7, cursor: "pointer", padding: "5px 6px", position: "relative",
+                aspectRatio: "1", borderRadius: 12, cursor: "pointer", padding: "5px 6px", position: "relative",
                 background: isSelected ? COLORS.inkSoft : intensity > 0 ? `${COLORS.ink}${Math.round(intensity * 30).toString(16).padStart(2, "0")}` : COLORS.panel2,
                 border: `1px solid ${isSelected ? COLORS.ink : isExam ? COLORS.danger : COLORS.border}`,
                 display: "flex", flexDirection: "column", justifyContent: "space-between",
@@ -1689,11 +1895,11 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
                 <div style={{ fontSize: 11, fontFamily: FONTS.mono, color: isToday ? COLORS.ink : COLORS.dim, fontWeight: isToday ? 700 : 400 }}>
                   {dateNum}{isToday && <span style={{ marginLeft: 3, fontSize: 8 }}>•</span>}
                 </div>
-                <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                  {info.tasks.length > 0 && <div title={`${info.tasks.length} task(s)`} style={{ width: 5, height: 5, borderRadius: 1, background: COLORS.ink }} />}
-                  {info.reviews.length > 0 && <div title={`${info.reviews.length} review(s) due`} style={{ width: 5, height: 5, borderRadius: 1, background: COLORS.done }} />}
-                  {info.mocks.length > 0 && <div title="Mock logged" style={{ width: 5, height: 5, borderRadius: 1, background: COLORS.warn }} />}
-                  {isExam && <div title="Exam day" style={{ width: 5, height: 5, borderRadius: 1, background: COLORS.danger }} />}
+                <div style={{ display: "flex", gap: 2.5, flexWrap: "wrap" }}>
+                  {info.tasks.length > 0 && <div title={`${info.tasks.length} task(s)`} style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.ink }} />}
+                  {info.reviews.length > 0 && <div title={`${info.reviews.length} review(s) due`} style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.done }} />}
+                  {info.mocks.length > 0 && <div title="Mock logged" style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.warn }} />}
+                  {isExam && <div title="Exam day" style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.danger }} />}
                 </div>
               </div>
             );
@@ -1758,20 +1964,60 @@ function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab
 }
 
 // ---------------- SYLLABUS ----------------
-function Syllabus({ syllabus, setSyllabus, profile }) {
+function Syllabus({ syllabus, setSyllabus, profile, settings = {} }) {
   const [activeSubject, setActiveSubject] = useState(profile.subjects[0]);
   const [newChapter, setNewChapter] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [view, setView] = useState("list");
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortKey, setSortKey] = useState("order");
+  const [sortDir, setSortDir] = useState(1);
   const chapters = syllabus[activeSubject] || [];
-  const byName = Object.fromEntries(chapters.map(c => [c.name, c]));
-  const visibleChapters = query.trim() ? chapters.filter(c => c.name.toLowerCase().includes(query.trim().toLowerCase())) : chapters;
+const byName = Object.fromEntries(chapters.map(c => [c.name, c]));
+  const weighted = settings.progress !== "status";
 
-  const isUnlocked = (name) => {
-    const deps = (DEPENDENCIES[activeSubject] || {})[name];
-    if (!deps) return true;
-    return deps.every(d => byName[d] && (byName[d].status === "done" || byName[d].status === "mastered"));
+  useEffect(() => {
+    if (settings.defaultView === "list" || settings.defaultView === "map") setView(settings.defaultView);
+  }, [settings.defaultView]);
+
+  // Realistic decomposition from stored chapter data — one of truth.
+  const allCh = Object.values(syllabus).flat();
+  const covDone = allCh.filter(c => c.status === "done" || c.status === "mastered").length;
+  const covPct = allCh.length ? Math.round((covDone / allCh.length) * 100) : 0;
+  const covDoing = allCh.filter(c => c.status === "doing").length;
+  const covTodo = allCh.filter(c => c.status === "todo").length;
+  const reviewsDue = dueReviews(syllabus).length;
+
+  // Per-item progress — every term driven by real fields.
+  const chapterPct = (c) => weighted
+    ? Math.round((c.theory ? 10 : 0) + (c.examples ? 10 : 0) + (Number(c.pyq) || 0) * 0.4 + (Number(c.module) || 0) * 0.4)
+    : (c.status === "done" || c.status === "mastered") ? 100 : c.status === "doing" ? 45 : 0;
+
+  // Only stages 0..N-1 schedule reviews (mirrors dueReviews); a chapter past
+  // the final stage is fully retained and never "due" again, no matter how
+  // much time passes.
+  const isOverdueReview = (c) => c.revisionStage >= 0 && c.revisionStage < REVISION_INTERVALS.length && c.nextRevision && c.nextRevision <= todayStr();
+  const readyPrereqs = (name) => {
+    const deps = (DEPENDENCIES[activeSubject] || {})[name] || [];
+    // A prerequisite that no longer exists (its chapter was deleted) can't
+    // block progress — treat it as satisfied rather than permanently locked.
+    return deps.filter(d => !byName[d] || (byName[d].status === "done" || byName[d].status === "mastered"));
+  };
+  const depsOf = (name) => (DEPENDENCIES[activeSubject] || {})[name] || [];
+const recommendation = (c) => {
+    if (isOverdueReview(c)) return { label: "Review now", tint: COLORS.warn };
+    if (c.revisionStage >= 0 && c.revisionStage + 1 < REVISION_INTERVALS.length) return { label: `Reverify D+${REVISION_INTERVALS[c.revisionStage]}`, tint: COLORS.dim };
+    if (c.status === "todo") {
+      const d = depsOf(c.name);
+      // Missing (deleted) prereqs don't block — only existing ones that
+      // aren't done yet.
+      const blocked = d.length > 0 && !d.every(x => !byName[x] || (byName[x].status === "done" || byName[x].status === "mastered"));
+      return { label: blocked ? "Study prerequisites" : "Study chapter", tint: blocked ? COLORS.accentFocus : COLORS.faint };
+    }
+    if (c.status === "doing") return { label: "Complete & solidify", tint: COLORS.accentFocus };
+    if (c.status === "done") return { label: "Spaced revision", tint: COLORS.faint };
+    return { label: "Maintain mastery", tint: COLORS.done };
   };
 
   const updateChapter = (id, patch) => {
@@ -1791,114 +2037,238 @@ function Syllabus({ syllabus, setSyllabus, profile }) {
   };
 
   const addChapter = () => {
-    if (!newChapter.trim()) return;
-    setSyllabus(prev => ({ ...prev, [activeSubject]: [...(prev[activeSubject] || []), { id: uid(), name: newChapter.trim(), status: "todo", confidence: 0, pyq: 0, module: 0, theory: false, examples: false, doneDate: null, revisionStage: -1, nextRevision: null, notes: "" }] }));
+    const name = newChapter.trim();
+    if (!name) return;
+    // Duplicate names would collide in the byName maps that drive
+    // dependencies, the concept map, and the review chain — reject them.
+    if (chapters.some(c => c.name.toLowerCase() === name.toLowerCase())) return;
+    setSyllabus(prev => ({ ...prev, [activeSubject]: [...(prev[activeSubject] || []), { id: uid(), name, status: "todo", confidence: 0, pyq: 0, module: 0, theory: false, examples: false, doneDate: null, revisionStage: -1, nextRevision: null, notes: "" }] }));
     setNewChapter("");
   };
   const removeChapter = (id) => { if (window.confirm("Delete this chapter and its progress?")) setSyllabus(prev => ({ ...prev, [activeSubject]: prev[activeSubject].filter(c => c.id !== id) })); };
 
+  // Filters + sorting over the live subject list.
+  let rows = chapters.filter(c => query.trim() ? c.name.toLowerCase().includes(query.trim().toLowerCase()) : true);
+  if (statusFilter !== "all") rows = rows.filter(c => c.status === statusFilter);
+  if (settings.showCompleted === false) rows = rows.filter(c => c.status !== "done" && c.status !== "mastered");
+  rows = [...rows];
+  if (sortKey === "name") rows.sort((a, b) => (a.name < b.name ? -1 : 1));
+  else if (sortKey === "pct") rows.sort((a, b) => chapterPct(a) - chapterPct(b));
+  else if (sortKey === "status") rows.sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
+  else if (sortKey === "review") rows.sort((a, b) => (a.nextRevision || "9999") < (b.nextRevision || "9999") ? -1 : 1);
+  if (sortDir === -1) rows.reverse();
+
   const doneN = chapters.filter(c => c.status === "done" || c.status === "mastered").length;
+  const statusChips = ["all", ...STATUS_ORDER];
+  const chipLabel = { all: "All", todo: "To do", doing: "In progress", done: "Done", mastered: "Mastered" };
+
+  const cardStyle = { borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: "14px 16px", background: "transparent" };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          {profile.subjects.map(s => (
-            <div key={s} onClick={() => { setActiveSubject(s); setExpanded(null); }} style={{
-              padding: "8px 14px", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: 500,
-              background: activeSubject === s ? COLORS.ink : COLORS.panel2,
-              color: activeSubject === s ? "#fff" : COLORS.dim, border: `1px solid ${activeSubject === s ? COLORS.ink : COLORS.border}`,
-            }}>{s}</div>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {view === "list" && (
-            <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search chapters…" style={{ width: 180 }} />
-          )}
-          <div style={{ display: "flex", gap: 6 }}>
-            {["list", "map"].map(v => (
-              <div key={v} onClick={() => setView(v)} style={{ padding: "7px 12px", borderRadius: 7, cursor: "pointer", fontSize: 12, background: view === v ? COLORS.inkSoft : "transparent", border: `1px solid ${view === v ? COLORS.ink : COLORS.border}`, color: view === v ? COLORS.text : COLORS.faint }}>
-                {v === "list" ? "List" : "Concept map"}
+      <PageHead
+        title="Coverage"
+        lead="The syllabus as a working knowledge base — what's covered, what's in flight, and what's ready for review. Every chapter is yours to inspect and edit."
+        right={(
+          <div className="num" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: COLORS.faint, marginTop: 4 }}>
+            {allCh.length} CHAPTER{allCh.length === 1 ? "" : "S"} · {covDone} DONE · {covPct}%
+          </div>
+        )}
+      />
+
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 24 }}>
+        <MiniStat k="Overall coverage" v={`${covPct}%`} sub={`${covDone} of ${allCh.length} chapters complete`} pct={covPct} tint={COLORS.ink} />
+        <MiniStat k="Completed" v={covDone} sub="Done + mastered" tint={covDone > 0 ? COLORS.done : undefined} />
+        <MiniStat k="In progress" v={covDoing} sub="Started but not finished" tint={covDoing > 0 ? COLORS.warn : undefined} />
+        <MiniStat k="Not started" v={covTodo} sub="Still in the backlog" />
+        <MiniStat k="Reviews due" v={reviewsDue} sub={reviewsDue > 0 ? "Spaced repetition pending" : "Repetitions caught up"} tint={reviewsDue > 0 ? COLORS.warn : undefined} />
+      </div>
+
+      {/* Subject navigation */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {profile.subjects.map(s => {
+            const list = syllabus[s] || [];
+            const dn = list.filter(c => c.status === "done" || c.status === "mastered").length;
+            const sp = list.length ? Math.round((dn / list.length) * 100) : 0;
+            const active = activeSubject === s;
+            const sc = subjectColor(s);
+            return (
+              <div key={s} role="tab" tabIndex={0} onClick={() => { setActiveSubject(s); setExpanded(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveSubject(s); setExpanded(null); } }}
+                title={`${s} — ${sp}% covered`} style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "0 12px", height: 34, borderRadius: 8, cursor: "pointer",
+                  background: active ? hexToRgba(sc, 0.12) : "transparent",
+                  border: `1px solid ${active ? hexToRgba(sc, 0.5) : COLORS.border}`,
+                  boxShadow: active ? `inset 0 1px 0 ${hexToRgba(sc, 0.14)}` : undefined,
+                  transition: "background 0.16s ease-out, border-color 0.16s ease-out, box-shadow 0.16s ease-out",
+                }}>
+                <span style={subjectDot(s)} />
+                <span style={{ fontSize: 12.5, color: active ? COLORS.text : COLORS.dim, fontWeight: active ? 600 : 500 }}>{s}</span>
+                <span className="num" style={{ fontSize: 10.5, color: active ? sc : COLORS.faint }}>{sp}%</span>
+                <div className="lg-progress" style={{ width: 40, height: 3 }}>
+                  <div style={{ width: `${sp}%`, height: "100%", background: sc, borderRadius: 2, transition: "width 0.5s cubic-bezier(0.2,0.8,0.2,1)" }} />
+                </div>
               </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {view === "list" && (
+            <div style={{ position: "relative" }}>
+              <Search size={13} color={COLORS.faint} strokeWidth={2} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", zIndex: 1 }} />
+              <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search chapters…" style={{ width: 190, height: 34, padding: "0 10px 0 28px", fontSize: 12.5 }} />
+            </div>
+          )}
+          <div className="lg-seg">
+            {["list", "map"].map(v => (
+              <button key={v} className={`lg-seg-item${view === v ? " active" : ""}`} onClick={() => setView(v)}>
+                {v === "list" ? "List" : "Map"}
+              </button>
             ))}
           </div>
+          {view === "list" && (
+            <Select value={sortKey} onChange={e => { if (e.target.value !== sortKey) { setSortKey(e.target.value); setSortDir(1); } }} style={{ width: 128, height: 34, padding: "0 8px", fontSize: 12.5 }}>
+              <option value="order">Order</option>
+              <option value="name">Name</option>
+              <option value="pct">Progress</option>
+              <option value="status">Status</option>
+              <option value="review">Next review</option>
+            </Select>
+          )}
         </div>
       </div>
 
       {view === "list" ? (
         <Card title={`${activeSubject} — ${doneN}/${chapters.length} covered`} right={
-<div style={{ display: "flex", gap: 10, fontSize: 10, color: COLORS.faint, margin: 0 }} title="Legend — colour of the square on each row is that chapter's status; the squares here are not buttons">
-  <span style={{ letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Status legend</span>
-            {STATUS_ORDER.map(s => (
-              <div key={s} style={{ display: "flex", alignItems: "center", gap: 4, color: COLORS.faint }} title={STATUS_LABEL[s]}>
-                <Bubble status={s} size={12} /> {STATUS_LABEL[s]}
-              </div>
-            ))}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {statusChips.map(s => {
+              const active = statusFilter === s;
+              return (
+                <button key={s} className={active ? "lg-chip active" : "lg-chip"} onClick={() => setStatusFilter(active ? "all" : s)}>
+                  {chipLabel[s]}
+                </button>
+              );
+            })}
+            <button className="lg-chip" onClick={() => setSortDir(d => -d)} title={sortDir === 1 ? "Ascending" : "Descending"}
+              style={{ display: "inline-flex", alignItems: "center", lineHeight: 1, padding: "4px 7px" }}>
+              {sortDir === 1 ? <ArrowUp size={10} strokeWidth={2.2} /> : <ArrowDown size={10} strokeWidth={2.2} />}
+            </button>
           </div>
         }>
+          {query.trim() && rows.length === 0 && (
+            <div style={{ fontSize: 12, color: COLORS.faint, padding: "12px 4px" }}>No chapters match "{query.trim()}".</div>
+          )}
           <div style={{ display: "flex", flexDirection: "column" }}>
-            {query.trim() && visibleChapters.length === 0 && (
-              <div style={{ fontSize: 12, color: COLORS.faint, padding: "12px 4px" }}>No chapters match "{query.trim()}".</div>
-            )}
-            {visibleChapters.map(c => {
-              const unlocked = isUnlocked(c.name);
-              const deps = (DEPENDENCIES[activeSubject] || {})[c.name];
-              const missing = !unlocked ? deps.filter(d => !(byName[d] && (byName[d].status === "done" || byName[d].status === "mastered"))) : [];
+            {rows.map((c, ri) => {
+              const pct = chapterPct(c);
+              const deps = depsOf(c.name);
+              const doneDeps = readyPrereqs(c.name);
+              const depsReady = deps.length > 0 && doneDeps.length === deps.length;
+              const rec = recommendation(c);
+              const lastSeen = c.doneDate || (c.revisionStage >= 0 ? c.nextRevision : null);
+              const barColor = subjectColor(activeSubject);
               return (
-                <div key={c.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px" }}>
-                    <Bubble status={c.status} onClick={unlocked ? () => cycleStatus(c) : undefined} disabled={!unlocked} />
-                    <div onClick={() => setExpanded(expanded === c.id ? null : c.id)} style={{ flex: "0 1 460px", minWidth: 200, fontSize: 13, cursor: "pointer", color: c.status === "todo" ? COLORS.dim : COLORS.text, opacity: unlocked ? 1 : 0.55 }}>
-                      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom", maxWidth: "100%" }}>{c.name}</span>
-                      {!unlocked && <span style={{ fontSize: 10, color: COLORS.warn, marginLeft: 8 }}>Locked · needs {missing.join(", ")}</span>}
+                <div key={c.id} className="lg-row" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                  <div className="lg-row-inner" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 10px", borderRadius: 8 }}>
+                    <span className="num" style={{ fontSize: 9.5, color: COLORS.faint, width: 26, flexShrink: 0, letterSpacing: "0.08em" }}>{String(ri + 1).padStart(2, "0")}</span>
+                    <Bubble status={c.status} onClick={() => cycleStatus(c)} />
+                    <div role="button" tabIndex={0} onClick={() => setExpanded(expanded === c.id ? null : c.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(expanded === c.id ? null : c.id); } }}
+                      className="lg-row-title-wrap" style={{ flex: "0 1 420px", minWidth: 160, cursor: "pointer" }}>
+                      <span className="lg-row-title" style={{ fontSize: 13.2, fontWeight: 500 }}>{c.name}</span>
+                      {c.confidence > 0 && (
+                        <span style={{ marginLeft: 8, flexShrink: 0, color: COLORS.warn, fontSize: 9, fontFamily: FONTS.mono }}>{"★".repeat(c.confidence)}</span>
+                      )}
                     </div>
-                    {c.notes && c.notes.trim() && <NotebookPen size={12} color={COLORS.faint} title="Has notes" />}
-                    {c.confidence > 0 && <div style={{ display: "flex", flexShrink: 0 }}>{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={11} color={i < c.confidence ? COLORS.warn : COLORS.border} fill={i < c.confidence ? COLORS.warn : "none"} />)}</div>}
-                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginLeft: 14, flexShrink: 0 }}>
-                      <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", minWidth: 70, textAlign: "right" }}>
-                        {unlocked ? STATUS_LABEL[c.status] : <span style={{ color: COLORS.warn }}>Locked</span>}
-                      </div>
-                      <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeChapter(c.id)} />
+                    {settings.showPrereqs !== false && deps.length > 0 && (
+                      <span className="lg-narrow-hide" title={`Sequence: ${deps.join(" → ")}`} style={{
+                        fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: FONTS.mono,
+                        padding: "3px 8px", borderRadius: 5, flexShrink: 0, fontWeight: 600,
+                        color: depsReady ? COLORS.done : COLORS.faint,
+                        background: depsReady ? `${COLORS.done}14` : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${depsReady ? `${COLORS.done}3a` : COLORS.border}`,
+                      }}>
+                        {depsReady ? "Prereqs met" : `Builds on ${deps.join(" · ")}`}
+                      </span>
+                    )}
+                    <div className="lg-progress" style={{ width: 72, height: 3, flexShrink: 0 }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: barColor, borderRadius: 2, transition: "width 0.5s cubic-bezier(0.2,0.8,0.2,1)" }} />
                     </div>
+                    <span className="num" style={{ fontSize: 10.5, color: pct > 0 ? COLORS.text : COLORS.faint, width: 36, flexShrink: 0, textAlign: "right" }}>{pct}%</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginLeft: 6, flexShrink: 0 }}>
+                      {isOverdueReview(c) && (
+                        <span title={`Next revision due ${c.nextRevision}`} style={{ color: COLORS.warn, background: `${COLORS.warn}1a`, border: `1px solid ${COLORS.warn}3a`, borderRadius: 5, padding: "2px 7px", fontSize: 8.5, letterSpacing: "0.1em", fontFamily: FONTS.mono, fontWeight: 700 }}>REVIEW DUE</span>
+                      )}
+                      {c.revisionStage >= 0 && !isOverdueReview(c) && (
+                        <span className="lg-narrow-hide" title={`Stage ${c.revisionStage + 1}/${REVISION_INTERVALS.length} · next ${c.nextRevision || "—"}`} style={{ fontSize: 9, color: COLORS.faint, fontFamily: FONTS.mono }}>R{c.revisionStage + 1}/{REVISION_INTERVALS.length}</span>
+                      )}
+                      <div className="lg-narrow-hide" style={{ fontSize: 9, color: rec.tint, fontFamily: FONTS.mono, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", minWidth: 118, textAlign: "right" }}>{rec.label}</div>
+                      {lastSeen && <span className="num lg-narrow-hide" style={{ fontSize: 9, color: COLORS.faint }} title="Last touched">{fmtDateStr(lastSeen, "compact")}</span>}
+                      <span style={{ color: COLORS.faint, fontSize: 10, width: 12, textAlign: "center", transform: expanded === c.id ? "rotate(90deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>›</span>
+                    </div>
+                    <Trash2 className="lg-row-del" size={13} color={COLORS.faint} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeChapter(c.id)} />
                   </div>
                   {expanded === c.id && (
-                    <div style={{ padding: "10px 4px 16px 32px", display: "flex", flexDirection: "column", gap: 10, background: COLORS.panel2, borderRadius: 8, marginBottom: 8 }}>
-                      <div style={{ display: "flex", gap: 18 }}>
-                        <label style={{ fontSize: 12, color: COLORS.dim, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <div style={{ padding: "12px 14px 16px 48px", display: "flex", flexDirection: "column", gap: 10, background: COLORS.glassFill, borderRadius: 8, margin: "0 0 10px" }}>
+                      {deps.length > 0 && (
+                        <div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span className="sys" style={{ fontSize: 7.5 }}>Builds on</span>
+                          {deps.map(d => {
+                            const dc = byName[d];
+                            return (
+                              <span key={d} style={{
+                                padding: "2px 7px", borderRadius: 4, fontSize: 10, fontFamily: FONTS.mono,
+                                color: dc && (dc.status === "done" || dc.status === "mastered") ? COLORS.done : COLORS.dim,
+                                background: dc && (dc.status === "done" || dc.status === "mastered") ? `${COLORS.done}14` : "rgba(255,255,255,0.04)",
+                                border: `1px solid ${COLORS.border}`,
+                              }}>
+                                {d}{dc ? ` · ${STATUS_LABEL[dc.status].toUpperCase()}` : ""}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
+                        <label style={{ fontSize: 12, color: COLORS.dim, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", width: "fit-content" }}>
                           <input type="checkbox" checked={c.theory} onChange={e => updateChapter(c.id, { theory: e.target.checked })} /> Theory
                         </label>
                         <label style={{ fontSize: 12, color: COLORS.dim, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                           <input type="checkbox" checked={c.examples} onChange={e => updateChapter(c.id, { examples: e.target.checked })} /> Worked examples
                         </label>
+                        <div className="num" style={{ fontSize: 11, color: COLORS.dim }}>PYQ {c.pyq}% · Module {c.module}%</div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 4 }}>PYQ accuracy — {c.pyq}%</div>
-                        <input type="range" min="0" max="100" value={c.pyq} onChange={e => updateChapter(c.id, { pyq: parseInt(e.target.value) })} style={{ width: "100%" }} />
+                      <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ flex: "min(300px, 1fr)" }}>
+                          <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 4 }}>PYQ accuracy — {c.pyq}%</div>
+                          <input type="range" min="0" max="100" value={c.pyq} onChange={e => updateChapter(c.id, { pyq: parseInt(e.target.value) })} style={{ width: "100%" }} />
+                        </div>
+                        <div style={{ flex: "min(300px, 1fr)" }}>
+                          <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 4 }}>Module questions done — {c.module}%</div>
+                          <input type="range" min="0" max="100" value={c.module} onChange={e => updateChapter(c.id, { module: parseInt(e.target.value) })} style={{ width: "100%" }} />
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 4 }}>Module questions done — {c.module}%</div>
-                        <input type="range" min="0" max="100" value={c.module} onChange={e => updateChapter(c.id, { module: parseInt(e.target.value) })} style={{ width: "100%" }} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 4 }}>Confidence</div>
-                        <div style={{ display: "flex", gap: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          <span style={{ fontSize: 11, color: COLORS.dim, marginRight: 4 }}>Confidence</span>
                           {Array.from({ length: 5 }).map((_, i) => (
-                            <Star key={i} size={18} style={{ cursor: "pointer" }} color={i < c.confidence ? COLORS.warn : COLORS.border} fill={i < c.confidence ? COLORS.warn : "none"} onClick={() => updateChapter(c.id, { confidence: i + 1 })} />
+                            <Star key={i} size={16} style={{ cursor: "pointer" }} color={i < c.confidence ? COLORS.warn : COLORS.border} fill={i < c.confidence ? COLORS.warn : "none"} onClick={() => updateChapter(c.id, { confidence: i + 1 })} />
                           ))}
                         </div>
+                        {c.revisionStage >= 0 && (
+                          <div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 8 }}>
+                            {c.revisionStage < REVISION_INTERVALS.length ? (
+                              <>Next revision due <b style={{ color: COLORS.text }}>{c.nextRevision}</b> (stage {c.revisionStage + 1}/{REVISION_INTERVALS.length})
+                                <Btn variant="ghost" onClick={() => updateChapter(c.id, { revisionStage: c.revisionStage + 1, nextRevision: addDays(todayStr(), REVISION_INTERVALS[Math.min(c.revisionStage + 1, REVISION_INTERVALS.length - 1)]) })}>Mark reviewed</Btn>
+                              </>
+                            ) : <span style={{ color: COLORS.done }}>Fully retained — spaced repetition complete.</span>}
+                          </div>
+                        )}
                       </div>
-                      {c.revisionStage >= 0 && (
-                        <div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 8 }}>
-                          {c.revisionStage < REVISION_INTERVALS.length ? (
-                            <>Next revision due <b style={{ color: COLORS.text }}>{c.nextRevision}</b> (stage {c.revisionStage + 1}/{REVISION_INTERVALS.length})
-                              <Btn variant="ghost" onClick={() => updateChapter(c.id, { revisionStage: c.revisionStage + 1, nextRevision: addDays(todayStr(), REVISION_INTERVALS[Math.min(c.revisionStage + 1, REVISION_INTERVALS.length - 1)]) })}>Mark reviewed</Btn>
-                            </>
-                          ) : <span style={{ color: COLORS.done }}>Fully retained — spaced repetition complete.</span>}
-                        </div>
-                      )}
                       <div>
                         <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}><NotebookPen size={11} /> Quick notes</div>
-                        <textarea value={c.notes || ""} onChange={e => updateChapter(c.id, { notes: e.target.value })} placeholder="Formula slips, doubts to ask, things to revisit…" rows={2} style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "8px 10px", color: COLORS.text, fontSize: 12, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", resize: "vertical" }} />
+                        <textarea value={c.notes || ""} onChange={e => updateChapter(c.id, { notes: e.target.value })} placeholder="Formula slips, doubts to ask, things to revisit…" rows={2} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "8px 10px", color: COLORS.text, fontSize: 12, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", resize: "vertical" }} />
                       </div>
                     </div>
                   )}
@@ -1907,7 +2277,7 @@ function Syllabus({ syllabus, setSyllabus, profile }) {
             })}
             {chapters.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint, padding: "12px 4px" }}>No chapters yet — add your first one below.</div>}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <Input value={newChapter} onChange={e => setNewChapter(e.target.value)} placeholder="Add a custom chapter…" onKeyDown={e => e.key === "Enter" && addChapter()} />
             <Btn variant="ink" onClick={addChapter}><Plus size={14} /> Add</Btn>
           </div>
@@ -1931,7 +2301,8 @@ function ConceptMap({ subject, chapters }) {
   });
   const levelKeys = Object.keys(levels).map(Number).sort((a, b) => a - b);
   const colW = 190, rowH = 76;
-  const maxPerLevel = Math.max(...levelKeys.map(l => levels[l].length));
+  // Empty map (no chapters) would make Math.max(...[]) = -Infinity; guard it.
+  const maxPerLevel = levelKeys.length ? Math.max(...levelKeys.map(l => levels[l].length)) : 0;
   const width = levelKeys.length * colW + 40;
   const height = maxPerLevel * rowH + 40;
   const pos = {};
@@ -1956,7 +2327,7 @@ function ConceptMap({ subject, chapters }) {
             if (!p) return null;
             return (
               <g key={c.id}>
-                <rect x={p.x - 68} y={p.y - 20} width={136} height={40} rx={7} fill={COLORS.panel2} stroke={statusColor[c.status]} strokeWidth={1.6} />
+                <rect x={p.x - 68} y={p.y - 20} width={136} height={40} rx={7} fill={COLORS.glassFillStrong} stroke={statusColor[c.status]} strokeWidth={1.6} />
                 <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={10} fill={COLORS.text} fontFamily={FONTS.body}>
                   {c.name.length > 20 ? c.name.slice(0, 18) + "…" : c.name}
                 </text>
@@ -1987,15 +2358,15 @@ function RingTimer({ mode, phase, elapsed, phaseTarget, running, size = 180 }) {
   const ringColor = mode === "pomodoro" && phase !== "focus" ? COLORS.done : COLORS.ink;
   const remaining = mode === "pomodoro" ? Math.max(0, phaseTarget - elapsed) : elapsed;
   const label = mode === "pomodoro"
-    ? (phase === "focus" ? (running ? "FOCUS" : "PAUSED") : phase === "long_break" ? "LONG BREAK" : "SHORT BREAK")
-    : (running ? "RUNNING" : "PAUSED");
+    ? (phase !== "focus" ? (phase === "long_break" ? "LONG BREAK" : "SHORT BREAK") : (running ? "FOCUSING" : elapsed > 0 ? "PAUSED" : "READY"))
+    : (running ? "FOCUSING" : elapsed > 0 ? "PAUSED" : "READY");
   return (
     <svg width={size} height={size} style={{ display: "block", margin: "0 auto" }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={COLORS.panel2} strokeWidth="9" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={ringColor} strokeWidth="9" strokeLinecap="round"
         strokeDasharray={`${dash} ${c - dash}`} transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: "stroke-dasharray 0.9s linear", opacity: running ? 1 : 0.55 }} />
-      <text x="50%" y="47%" textAnchor="middle" fontFamily={FONTS.mono} fontSize={size * 0.15} fontWeight={600} fill={COLORS.text}>
+        style={{ transition: "stroke-dasharray 0.9s linear", opacity: running ? 1 : 0.55, filter: `drop-shadow(0 0 8px ${hexToRgba(ringColor, 0.55)})` }} />
+      <text x="50%" y="47%" textAnchor="middle" fontFamily={FONTS.mono} fontSize={size * 0.15} fontWeight={700} fill={COLORS.text} style={{ fontVariantNumeric: "tabular-nums" }}>
         {fmtClock(remaining)}
       </text>
       <text x="50%" y="63%" textAnchor="middle" fontSize={11} fill={COLORS.faint} letterSpacing="0.08em">{label}</text>
@@ -2003,220 +2374,854 @@ function RingTimer({ mode, phase, elapsed, phaseTarget, running, size = 180 }) {
   );
 }
 
-function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak }) {
-  const { mode, running, elapsed, subject, pomoMinutes, phase, phaseTarget, cycle, completedFlash } = timer;
-  const [logDate, setLogDate] = useState(todayStr());
+// ---------------- TARGET PICKER ----------------
+// Targets live in Focus now: pick what you're working toward, add a new
+// one, complete it, or delete it — all from one compact control between
+// Subject and Start Focus. The target store is the same `tasks` array the
+// old Targets screen wrote to; only the surface changed, not the data.
+function TargetPicker({ tasks, setTasks, profile, focusSubject, running, selectedTargetId, setSelectedTargetId }) {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newSubject, setNewSubject] = useState(focusSubject || profile.subjects[0]);
+  const [newPriority, setNewPriority] = useState("medium");
+  const wrapRef = useRef(null);
+  const listRef = useRef(null);
+  const triggerRef = useRef(null);
+  const today = todayStr();
+  const priorityRank = { high: 0, medium: 1, low: 2 };
+  const selected = tasks.find(t => t.id === selectedTargetId) || null;
+
+  // The inline form inherits the current focus subject whenever the
+  // dropdown opens, so a new target starts on the subject being studied.
+  useEffect(() => {
+    if (open) setNewSubject(focusSubject || profile.subjects[0]);
+  }, [open, focusSubject]);
+
+  // Click-outside and Escape close — same pattern as the sidebar popovers.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onEsc = (e) => { if (e.key === "Escape") { setOpen(false); if (triggerRef.current) triggerRef.current.focus(); } };
+    document.addEventListener("pointerdown", onDoc);
+    document.addEventListener("keydown", onEsc);
+    return () => { document.removeEventListener("pointerdown", onDoc); document.removeEventListener("keydown", onEsc); };
+  }, [open]);
+
+  // Real data, real dates: overdue / today / days-left chips come from the
+  // target's stored date. No invented progress — targets are either done
+  // or not, so nothing here pretends to be a fraction.
+  const dueChip = (t) => {
+    if (t.date === today) return { text: "TODAY", color: COLORS.warn };
+    if (t.date < today) return { text: "OVERDUE", color: COLORS.danger };
+    const n = daysBetween(parseLocalDate(today), parseLocalDate(t.date));
+    return { text: `${n}D LEFT`, color: COLORS.faint };
+  };
+
+  // Active list: current focus subject's targets first, then by date
+  // (overdue → today → upcoming), then priority. Nothing is hidden — the
+  // matching targets surface first, everything else stays reachable below.
+  const activeTargets = useMemo(() => {
+    return tasks
+      .filter(t => !t.done)
+      .sort((a, b) => {
+        const aSub = a.subject === focusSubject ? 0 : 1, bSub = b.subject === focusSubject ? 0 : 1;
+        if (aSub !== bSub) return aSub - bSub;
+        const aDue = a.date < today ? 0 : a.date === today ? 1 : 2;
+        const bDue = b.date < today ? 0 : b.date === today ? 1 : 2;
+        if (aDue !== bDue) return aDue - bDue;
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        return (priorityRank[a.priority || "medium"] ?? 1) - (priorityRank[b.priority || "medium"] ?? 1);
+      });
+  }, [tasks, focusSubject, today, priorityRank]);
+
+  // A compact "recently completed" row — reverse insertion order, newest
+  // first, capped so the dropdown stays short.
+  const doneTargets = useMemo(() => tasks.filter(t => t.done).slice().reverse().slice(0, 4), [tasks]);
+
+  const addTarget = () => {
+    const name = newName.trim();
+    if (!name) return;
+    if (tasks.some(t => t.text.toLowerCase() === name.toLowerCase())) return;
+    const id = uid();
+    setTasks(prev => [...prev, { id, text: name, subject: newSubject, priority: newPriority, done: false, date: today }]);
+    setSelectedTargetId(id);
+    setNewName("");
+  };
+
+  const toggleDone = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const removeTarget = (id) => {
+    if (!window.confirm("Delete this target?")) return;
+    if (id === selectedTargetId) setSelectedTargetId(null);
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Arrow-key navigation between options; Enter/Space select via each
+  // option's own handler, Escape and click-outside close (handled above).
+  const onListKey = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
+    if (!listRef.current) return;
+    const opts = Array.from(listRef.current.querySelectorAll('[role="option"]'));
+    if (!opts.length) return;
+    e.preventDefault();
+    const idx = opts.indexOf(document.activeElement);
+    if (e.key === "Home") opts[0].focus();
+    else if (e.key === "End") opts[opts.length - 1].focus();
+    else if (e.key === "ArrowDown") (idx === -1 || idx === opts.length - 1 ? opts[0] : opts[idx + 1]).focus();
+    else (idx <= 0 ? opts[opts.length - 1] : opts[idx - 1]).focus();
+  };
+
+  const row = (t, isDone) => {
+    const chip = dueChip(t);
+    const isSel = selectedTargetId === t.id;
+    const select = () => { setSelectedTargetId(t.id); setOpen(false); };
+    return (
+      <div key={t.id} role="option" aria-selected={isSel} tabIndex={0}
+        onClick={select}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } }}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8,
+          background: isSel ? hexToRgba(COLORS.accentFocus, 0.1) : "transparent",
+          border: "1px solid transparent", color: COLORS.text, fontSize: 12,
+          cursor: "pointer", opacity: isDone ? 0.6 : 1, outline: "none",
+        }}>
+        <button type="button" aria-label={isDone ? "Mark not done" : "Mark done"}
+          onClick={(e) => { e.stopPropagation(); toggleDone(t.id); }}
+          style={{ display: "flex", padding: 0, background: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}>
+          {isDone ? <CheckCircle2 size={14} color={COLORS.done} /> : <Circle size={14} color={COLORS.faint} />}
+        </button>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: PRIORITY_COLORS[t.priority || "medium"], flexShrink: 0 }} />
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: isDone ? "line-through" : "none" }}>{t.text}</span>
+        {t.subject && (
+          <span style={{ fontSize: 8.5, color: subjectColor(t.subject), background: hexToRgba(subjectColor(t.subject), 0.12), border: `1px solid ${hexToRgba(subjectColor(t.subject), 0.3)}`, padding: "1px 5px", borderRadius: 4, flexShrink: 0 }}>{t.subject}</span>
+        )}
+        <span style={{ fontSize: 8, letterSpacing: "0.08em", fontFamily: FONTS.mono, color: chip.color, flexShrink: 0 }}>{chip.text}</span>
+        <button type="button" aria-label="Delete target"
+          onClick={(e) => { e.stopPropagation(); removeTarget(t.id); }}
+          style={{ display: "flex", padding: 0, background: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}>
+          <Trash2 size={12} color={COLORS.faint} />
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>WORKING ON</span>
+        <button ref={triggerRef} type="button" disabled={running} onClick={() => setOpen(o => !o)}
+          aria-expanded={open} aria-haspopup="listbox" aria-controls="ledger-target-list"
+          aria-label="Choose what you're working toward"
+          title={running ? "Locked while a session runs" : "Choose a target — or add a new one"}
+          style={{
+            display: "flex", alignItems: "center", gap: 8, minWidth: 240, maxWidth: 400,
+            background: "rgba(255,255,255,0.03)",
+            border: `1px solid ${selected && selected.done ? hexToRgba(COLORS.done, 0.35) : COLORS.border}`, borderRadius: 8,
+            padding: "8px 12px", color: COLORS.text, fontSize: 12, fontFamily: FONTS.mono,
+            cursor: running ? "not-allowed" : "pointer", opacity: running ? 0.55 : 1, textAlign: "left",
+          }}>
+          {selected && !selected.done ? (
+            <>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: PRIORITY_COLORS[selected.priority || "medium"], flexShrink: 0 }} />
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.text}</span>
+              <span style={{ fontSize: 9, color: subjectColor(selected.subject), background: hexToRgba(subjectColor(selected.subject), 0.12), border: `1px solid ${hexToRgba(subjectColor(selected.subject), 0.28)}`, padding: "2px 6px", borderRadius: 4, flexShrink: 0 }}>{selected.subject}</span>
+              <span style={{ fontSize: 8.5, letterSpacing: "0.08em", fontFamily: FONTS.mono, color: dueChip(selected).color, flexShrink: 0 }}>{dueChip(selected).text}</span>
+              <ChevronDown size={12} color={COLORS.faint} />
+            </>
+          ) : (
+            <>
+              <span style={{ flex: 1, color: COLORS.faint }}>{selected ? "Completed — choose a new target" : "Choose what you're working toward"}</span>
+              <ChevronDown size={12} color={COLORS.faint} />
+            </>
+          )}
+        </button>
+        {running && <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.faint }}>LOCKED</span>}
+      </div>
+
+      {open && (
+        <div id="ledger-target-list" ref={listRef} role="listbox" aria-label="Targets" tabIndex={-1} onKeyDown={onListKey}
+          style={{
+            position: "absolute", left: "50%", transform: "translateX(-50%)", top: "calc(100% + 8px)", zIndex: 70,
+            width: "min(400px, 92vw)", maxHeight: "min(60vh, 420px)", overflowY: "auto",
+            borderRadius: 12, padding: 6, background: COLORS.glassFillStrong,
+            border: `1px solid ${COLORS.border}`, boxShadow: `0 18px 44px -18px ${COLORS.shadowStrong}`, outline: "none",
+          }}>
+          {activeTargets.length === 0 && (
+            <div style={{ fontSize: 11.5, color: COLORS.faint, padding: "10px 12px" }}>No active targets — add one below.</div>
+          )}
+          {activeTargets.length > 0 && (
+            <>
+              <div className="sys" style={{ fontSize: 8, letterSpacing: "0.2em", color: COLORS.faint, padding: "6px 10px 4px" }}>ACTIVE</div>
+              {activeTargets.map(t => row(t, false))}
+            </>
+          )}
+          {doneTargets.length > 0 && (
+            <>
+              <div className="sys" style={{ fontSize: 8, letterSpacing: "0.2em", color: COLORS.faint, padding: "8px 10px 4px", borderTop: `1px solid ${COLORS.border}`, marginTop: 4 }}>COMPLETED</div>
+              {doneTargets.map(t => row(t, true))}
+            </>
+          )}
+          <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 4, padding: "8px 4px 4px" }}>
+            <div className="sys" style={{ fontSize: 8, letterSpacing: "0.2em", color: COLORS.faint, padding: "0 6px 6px" }}>NEW TARGET</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Rotational Motion revision"
+                onKeyDown={e => e.key === "Enter" && addTarget()} aria-label="New target name" />
+              <div style={{ display: "flex", gap: 6 }}>
+                <Select value={newSubject} onChange={e => setNewSubject(e.target.value)} aria-label="Target subject" style={{ flex: 1 }}>
+                  {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                </Select>
+                <Select value={newPriority} onChange={e => setNewPriority(e.target.value)} aria-label="Target priority" style={{ width: 96 }}>
+                  {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+                </Select>
+                <Btn variant="ink" onClick={addTarget} title="Add target" style={{ flexShrink: 0 }}><Plus size={13} /></Btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------- FOCUS WORKSPACE ----------------
+// One screen, three parts: the timer workspace (left), the task panel
+// (right), and the analytics strip (below). All of it derives from the
+// same session/task stores the rest of Ledger uses — nothing here invents
+// data. Motion is CSS-only so the existing lg-motion-off shell class and
+// the prefers-reduced-motion media query suppress it automatically.
+function focusCss() {
+  return `
+@keyframes lg-focusIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.lg-focus-in { animation: lg-focusIn 0.32s cubic-bezier(0.2,0.8,0.2,1) both; }
+@keyframes lg-focusTaskIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.lg-focus-task-in { animation: lg-focusTaskIn 0.24s cubic-bezier(0.2,0.8,0.2,1) both; }
+.lg-focus-top { display: grid; grid-template-columns: minmax(380px, 0.9fr) minmax(520px, 1.1fr); gap: 20px; align-items: start; }
+.lg-focus-grid2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.lg-focus-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1080px) { .lg-focus-top { grid-template-columns: 1fr; } }
+@media (max-width: 980px) { .lg-focus-grid2 { grid-template-columns: 1fr; } .lg-focus-grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .lg-focus-grid4 { grid-template-columns: 1fr; } }
+@keyframes lg-barGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.lg-bar-grow { transform-origin: 50% 100%; animation: lg-barGrow 0.42s cubic-bezier(0.2,0.8,0.2,1) both; }
+
+/* Segmented filter control — the active pill carries the Focus accent, the
+   same inset-marker language as the sidebar's cyan rail. */
+.lg-focus-seg { display: flex; gap: 3; padding: 3px; background: rgba(255,255,255,0.04); border: 1px solid ${COLORS.border}; border-radius: 9px; }
+.lg-focus-seg-btn { padding: 5px 12px; border-radius: 6px; border: none; background: transparent; color: ${COLORS.faint}; font-size: 9.5; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; font-family: ${FONTS.mono}; cursor: pointer; transition: background 0.16s ease-out, color 0.16s ease-out; }
+.lg-focus-seg-btn:hover { color: ${COLORS.dim}; }
+.lg-focus-seg-btn[aria-pressed="true"] { background: ${hexToRgba(COLORS.accentFocus, 0.12)}; color: ${COLORS.accentFocus}; box-shadow: inset 0 -2px 0 ${COLORS.accentFocus}; }
+
+/* Task rows: tactile hover with a slight lift — the inline transition
+   previously pinned to opacity-only, so the hover felt instant/flat. */
+.lg-focus-taskpanel .lg-row { transition: background 0.16s ease-out, opacity 0.14s ease-out, transform 0.16s ease-out, box-shadow 0.16s ease-out; }
+.lg-focus-taskpanel .lg-row:hover { background: ${COLORS.hoverOverlay}; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.28); }
+
+/* Progress: visibly-muted track + cyan gradient fill with a soft glow.
+   The fill keeps its width transition for updates, but the entrance
+   animation is gated on the element having content (inline animation). */
+.lg-focus-panel .lg-progress, .lg-focus-taskpanel .lg-progress { background: rgba(255,255,255,0.09); }
+.lg-focus-panel .lg-progress-fill, .lg-focus-taskpanel .lg-progress-fill { background: linear-gradient(90deg, ${darken(COLORS.accentFocus, 18)}, ${COLORS.accentFocus}); box-shadow: 0 0 8px ${hexToRgba(COLORS.accentFocus, 0.4)}; }
+`;
+}
+
+// Subject identity in miniature — the same per-subject color system used
+// across the app, as a compact monogram square for task rows.
+function SubjectBadge({ subject }) {
+  const sc = subjectColor(subject || "");
+  return (
+    <span title={subject} aria-label={`Subject: ${subject}`}
+      style={{ width: 18, height: 18, borderRadius: 5, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: hexToRgba(sc, 0.14), border: `1px solid ${hexToRgba(sc, 0.35)}`, color: sc, fontFamily: FONTS.mono, fontSize: 9, fontWeight: 700 }}>
+      {subject ? subject.charAt(0).toUpperCase() : "•"}
+    </span>
+  );
+}
+
+// Time distribution donut — same ring language as the timer/FocusRing, so
+// it reads as Ledger rather than a generic chart library. Legend hover
+// highlights the matching segment; nothing flashes.
+function TimeDonut({ dist, total, hoverIdx, onHover }) {
+  const size = 118, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  // Entrance-only draw-in: segments grow from 0 to their share once, on
+  // mount. The whole transition is suppressed by lg-motion-off / the
+  // reduced-motion media query (they force transition-duration to ~0).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(t);
+  }, []);
+  let acc = 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", justifyContent: "center" }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
+        aria-label={`Study time by subject. Total ${fmtMin(total)}.`} style={{ flexShrink: 0 }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={hexToRgba(COLORS.accentFocus, 0.12)} strokeWidth={stroke} />
+        {dist.map((d, i) => {
+          const frac = total > 0 ? d.minutes / total : 0;
+          const dash = frac * c;
+          const offset = -acc * c;
+          acc += frac;
+          const color = subjectColor(d.subject);
+          return (
+            <circle key={d.subject} cx={size / 2} cy={size / 2} r={r} fill="none"
+              stroke={color} strokeWidth={stroke}
+              strokeDasharray={mounted ? `${dash} ${c - dash}` : `0 ${c}`}
+              strokeDashoffset={offset} transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              opacity={hoverIdx === null || hoverIdx === i ? 1 : 0.28}
+              style={{ transition: `stroke-dasharray 0.6s cubic-bezier(0.2,0.8,0.2,1) ${i * 70}ms, opacity 0.16s ease-out` }} />
+          );
+        })}
+        <text x="50%" y="47%" textAnchor="middle" fontFamily={FONTS.mono} fontSize={15} fontWeight={700} fill={COLORS.text}>{fmtMin(total)}</text>
+        <text x="50%" y="63%" textAnchor="middle" fontSize={8} fill={COLORS.faint} letterSpacing="0.14em">STUDIED</text>
+      </svg>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7, minWidth: 150, flex: 1 }}>
+        {dist.length === 0 && <div style={{ fontSize: 11.5, color: COLORS.faint }}>No study time to distribute yet.</div>}
+        {dist.map((d, i) => (
+          <div key={d.subject} onMouseEnter={() => onHover(i)} onMouseLeave={() => onHover(null)}
+            onFocus={() => onHover(i)} onBlur={() => onHover(null)} tabIndex={0}
+            style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, cursor: "default", borderRadius: 6, padding: "2px 4px", outline: "none" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: subjectColor(d.subject), flexShrink: 0 }} />
+            <span style={{ flex: 1, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.subject}</span>
+            <span className="num" style={{ color: COLORS.dim }}>{Math.round((d.minutes / total) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Recharts tooltip in the app's own surface language.
+function FocusTip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div style={{ background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 11.5, color: COLORS.text, boxShadow: `0 12px 28px -14px ${COLORS.shadowStrong}` }}>
+      <div className="sys" style={{ fontSize: 8, letterSpacing: "0.14em", color: COLORS.faint }}>{label}</div>
+      <div style={{ marginTop: 3, fontFamily: FONTS.mono, fontWeight: 700 }}>{fmtMin(payload[0].value)}</div>
+    </div>
+  );
+}
+
+// ---------------- TASKS / TO-DO PANEL ----------------
+// The target store is the `tasks` array — the same one the old Targets
+// screen and Month View wrote to. Rows set the working target for Focus
+// (shared selectedTargetId), so picking a task here and pressing Start
+// Focus ties the session to it with no duplicate record.
+function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTargetId }) {
+  const today = todayStr();
+  const [filter, setFilter] = useState("all");
+  const [newText, setNewText] = useState("");
+  const [newSubject, setNewSubject] = useState(profile.subjects[0]);
+  const [newPriority, setNewPriority] = useState("medium");
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [removingId, setRemovingId] = useState(null);
+  const [justAdded, setJustAdded] = useState(null);
+  const addInputRef = useRef(null);
+
+  const FILTERS = [
+    { id: "all", label: "All" },
+    { id: "today", label: "Today" },
+    { id: "upcoming", label: "Upcoming" },
+    { id: "done", label: "Done" },
+  ];
+
+  const sorted = useMemo(() => {
+    const rank = { high: 0, medium: 1, low: 2 };
+    return tasks.slice().sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (rank[a.priority || "medium"] ?? 1) - (rank[b.priority || "medium"] ?? 1);
+    });
+  }, [tasks]);
+
+  const visible = useMemo(() => {
+    if (filter === "today") return sorted.filter(t => t.date === today);
+    if (filter === "upcoming") return sorted.filter(t => t.date > today && !t.done);
+    if (filter === "done") return sorted.filter(t => t.done);
+    return sorted;
+  }, [sorted, filter, today]);
+
+  const doneCount = tasks.filter(t => t.done).length;
+  const pct = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+  const add = () => {
+    if (!newText.trim()) return;
+    const id = uid();
+    setTasks(prev => [...prev, { id, text: newText.trim(), subject: newSubject, priority: newPriority, done: false, date: today }]);
+    setNewText("");
+    setFilter("all");
+    setJustAdded(id);
+    setTimeout(() => setJustAdded(null), 320);
+  };
+  const toggle = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const remove = (id) => {
+    if (!window.confirm("Delete this task?")) return;
+    setRemovingId(id);
+    setTimeout(() => {
+      setTasks(prev => prev.filter(t => t.id !== id));
+      if (id === selectedTargetId) setSelectedTargetId(null);
+      setRemovingId(null);
+    }, 140);
+  };
+  const beginEdit = (t) => { setEditingId(t.id); setEditText(t.text); };
+  const commitEdit = (id) => {
+    const text = editText.trim();
+    setEditingId(null);
+    if (text) setTasks(prev => prev.map(t => t.id === id ? { ...t, text } : t));
+  };
+
+  const dueLabel = (t) => {
+    if (t.date === today) return { text: "TODAY", color: COLORS.warn };
+    if (t.date < today && !t.done) return { text: fmtDateStr(t.date, "compact"), color: COLORS.danger };
+    return { text: fmtDateStr(t.date, "compact"), color: COLORS.faint };
+  };
+
+  const segBtn = (on) => ({
+    flex: 1, padding: "5px 12px", borderRadius: 6, border: "none", background: "transparent",
+    color: on ? COLORS.accentFocus : COLORS.faint, fontSize: 9.5, fontWeight: 700,
+    letterSpacing: "0.13em", textTransform: "uppercase", fontFamily: FONTS.mono, cursor: "pointer",
+    boxShadow: on ? `inset 0 -2px 0 ${COLORS.accentFocus}` : "none",
+    transition: "background 0.16s ease-out, color 0.16s ease-out",
+  });
+
+  return (
+    <div className="lg-card lg-focus-taskpanel" style={{ padding: "20px 18px 14px", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+        <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>TASKS / TO DO</span>
+        <Btn variant="ghost" style={{ padding: "5px 11px", fontSize: 11 }} onClick={() => { addInputRef.current && addInputRef.current.focus(); }}>
+          <Plus size={13} /> Add task
+        </Btn>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        <Input ref={addInputRef} value={newText} onChange={e => setNewText(e.target.value)} aria-label="New task"
+          placeholder="What needs to get done?" style={{ flex: 1, padding: "7px 10px", fontSize: 12.5 }}
+          onKeyDown={e => e.key === "Enter" && add()} />
+        <Select value={newSubject} onChange={e => setNewSubject(e.target.value)} aria-label="Task subject"
+          style={{ width: 128, padding: "7px 10px", fontSize: 12.5, flexShrink: 0 }}>
+          {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+        </Select>
+        <Select value={newPriority} onChange={e => setNewPriority(e.target.value)} aria-label="Task priority"
+          style={{ width: 92, padding: "7px 10px", fontSize: 12.5, flexShrink: 0 }}>
+          {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+        </Select>
+        <Btn variant="ink" onClick={add} title="Add task" style={{ flexShrink: 0 }}><Plus size={13} /></Btn>
+      </div>
+
+      <div role="group" aria-label="Filter tasks" className="lg-focus-seg" style={{ marginBottom: 12 }}>
+        {FILTERS.map(f => (
+          <button key={f.id} className="lg-focus-seg-btn" style={segBtn(filter === f.id)} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>{f.label}</button>
+        ))}
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", maxHeight: 360 }}>
+        {tasks.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "26px 10px", textAlign: "center" }}>
+            <EmptyArt variant="grid" width={122} height={72} />
+            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.faint }}>NO TASKS YET</span>
+            <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 260, lineHeight: 1.6 }}>Add something you want to complete today — then pick it as your working target and start a focus session.</div>
+            <Btn variant="ghost" style={{ marginTop: 6 }} onClick={() => { addInputRef.current && addInputRef.current.focus(); }}><Plus size={13} /> Add task</Btn>
+          </div>
+        ) : visible.length === 0 ? (
+          <div style={{ fontSize: 12, color: COLORS.faint, padding: "22px 8px", textAlign: "center" }}>Nothing here — try another filter.</div>
+        ) : visible.map(t => (
+          <div key={t.id} className={`lg-row${justAdded === t.id ? " lg-focus-task-in" : ""}`}
+            style={{
+              display: "flex", alignItems: "center", gap: 9, padding: "8px 8px", borderRadius: 8,
+              borderBottom: `1px solid ${COLORS.border}`,
+              opacity: removingId === t.id ? 0 : 1,
+              background: t.id === selectedTargetId ? hexToRgba(COLORS.accentFocus, 0.06) : "transparent",
+              boxShadow: t.id === selectedTargetId ? `inset 2px 0 0 ${COLORS.accentFocus}` : "none",
+            }}>
+            <Bubble status={t.done ? "done" : "todo"} size={18} onClick={() => toggle(t.id)} />
+            {editingId === t.id ? (
+              <Input autoFocus value={editText} onChange={e => setEditText(e.target.value)} aria-label="Edit task"
+                onKeyDown={e => { if (e.key === "Enter") commitEdit(t.id); if (e.key === "Escape") setEditingId(null); }}
+                onBlur={() => commitEdit(t.id)}
+                style={{ flex: 1, padding: "4px 8px", fontSize: 12.5 }} />
+            ) : (
+              <button className="lg-row-title" onClick={() => setSelectedTargetId(t.id)}
+                title={t.done ? "Completed — uncheck to reactivate" : "Set as the working target for Focus"}
+                style={{
+                  flex: 1, textAlign: "left", background: "transparent", border: "none", cursor: "pointer", padding: "1px 0",
+                  fontSize: 13, textDecoration: t.done ? "line-through" : "none",
+                  color: t.done ? COLORS.faint : COLORS.text, opacity: t.done ? 0.75 : 1,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                {t.text}
+              </button>
+            )}
+            {t.subject && <SubjectBadge subject={t.subject} />}
+            <span title={`Priority: ${PRIORITY_LABEL[t.priority] || "Medium"}`}
+              style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: PRIORITY_COLORS[t.priority || "medium"] }} />
+            <span className="num" style={{ fontSize: 9, color: dueLabel(t).color, flexShrink: 0 }}>{dueLabel(t).text}</span>
+            <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0 }}>
+              <button onClick={() => beginEdit(t)} title="Edit task" aria-label="Edit task"
+                style={{ display: "flex", padding: 2, background: "transparent", border: "none", cursor: "pointer", opacity: 0.7, transition: "opacity 0.14s ease-out" }}>
+                <Pencil size={12} color={COLORS.faint} />
+              </button>
+              <button onClick={() => remove(t.id)} title="Delete task" aria-label="Delete task"
+                className="lg-row-del"
+                style={{ display: "flex", padding: 2, background: "transparent", border: "none", cursor: "pointer" }}>
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 12, paddingTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 7 }}>
+          <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.faint }}>PROGRESS</span>
+          <span className="num" style={{ fontSize: 11.5, color: COLORS.text }}>
+            {doneCount} of {tasks.length} task{tasks.length === 1 ? "" : "s"} completed
+            <span style={{ color: COLORS.faint, marginLeft: 6 }}>{pct}%</span>
+          </span>
+        </div>
+        <div className="lg-progress" style={{ height: 6 }}>
+          <div className="lg-progress-fill" style={{ width: `${pct}%`, "--lg-w": `${pct}%`, height: "100%", animation: pct > 0 ? undefined : "none" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- FOCUS ANALYTICS ----------------
+// Every number below is derived from the real sessions/tasks arrays — the
+// same data Dashboard, badges and XP read. Ranges re-derive the window;
+// there is no second copy of anything.
+function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
+  const today = todayStr();
+  const [range, setRange] = useState("7");
+  const [logOpen, setLogOpen] = useState(false);
+  const [logDate, setLogDate] = useState(today);
   const [logSubject, setLogSubject] = useState(profile.subjects[0]);
   const [logHours, setLogHours] = useState("");
   const [logMinutes, setLogMinutes] = useState("");
   const [logSaved, setLogSaved] = useState(false);
-  const isBreak = mode === "pomodoro" && phase !== "focus";
+  const [donutHover, setDonutHover] = useState(null);
+  const n = Number(range);
+
+  const windowSessions = useMemo(() => {
+    const start = addDays(today, -(n - 1));
+    return sessions.filter(s => s.date >= start);
+  }, [sessions, today, n]);
+
+  const days = useMemo(() => {
+    const per = {};
+    windowSessions.forEach(s => {
+      per[s.date] = per[s.date] || { min: 0, n: 0 };
+      per[s.date].min += s.minutes;
+      per[s.date].n += 1;
+    });
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const ds = addDays(today, -i);
+      const d = per[ds] || { min: 0, n: 0 };
+      out.push({ date: ds, min: d.min, n: d.n });
+    }
+    return out;
+  }, [windowSessions, today, n]);
+
+  const windowTotal = days.reduce((a, d) => a + d.min, 0);
+  const windowCount = days.reduce((a, d) => a + d.n, 0);
+  const avg = Math.round(windowTotal / n);
+  const todayMin = days.length ? days[days.length - 1].min : 0;
+  const todayCount = days.length ? days[days.length - 1].n : 0;
+  const streak = computeStreak(sessions);
+  const longest = longestStreak(sessions);
+
+  const dist = useMemo(() => {
+    const totals = {};
+    profile.subjects.forEach(s => { totals[s] = 0; });
+    windowSessions.forEach(s => { if (totals[s.subject] !== undefined) totals[s.subject] += s.minutes; });
+    return profile.subjects
+      .map(s => ({ subject: s, minutes: totals[s] }))
+      .filter(x => x.minutes > 0)
+      .sort((a, b) => b.minutes - a.minutes);
+  }, [windowSessions, profile.subjects]);
+  const distTotal = dist.reduce((a, d) => a + d.minutes, 0);
+
+  const recentSessions = useMemo(() => sessions.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 8), [sessions]);
+  const targetById = useMemo(() => Object.fromEntries(tasks.map(t => [t.id, t])), [tasks]);
 
   const addManualLog = () => {
     const h = parseFloat(logHours) || 0, m = parseFloat(logMinutes) || 0;
     const totalMin = Math.round(h * 60 + m);
     if (totalMin <= 0 || !logDate) return;
-    setSessions(prev => [...prev, { id: uid(), date: logDate, subject: logSubject, minutes: totalMin, startHour: 12, mode: "manual", manual: true }]);
+    setSessions(prev => [...prev, { id: uid(), date: logDate, subject: logSubject, minutes: totalMin, startHour: new Date().getHours(), mode: "manual", manual: true }]);
     setLogHours(""); setLogMinutes("");
     setLogSaved(true);
     setTimeout(() => setLogSaved(false), 2500);
   };
   const deleteSession = (id) => { if (window.confirm("Remove this session from your log?")) setSessions(prev => prev.filter(s => s.id !== id)); };
 
-  const recentSessions = useMemo(() => sessions.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 8), [sessions]);
-
-  const stats = useMemo(() => {
-    const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
-    const last7 = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const ds = todayStr(d);
-      last7.push({ date: ds.slice(5), min: Math.round(sessions.filter(s => s.date === ds).reduce((a, s) => a + s.minutes, 0)) });
-    }
-    const avg7 = last7.reduce((a, d) => a + d.min, 0) / 7;
-    const peak7 = Math.max(0, ...last7.map(d => d.min));
-    const last30days = new Set();
-    for (let i = 0; i < 30; i++) { const d = new Date(); d.setDate(d.getDate() - i); if (sessions.some(s => s.date === todayStr(d))) last30days.add(todayStr(d)); }
-    const consistency = Math.round((last30days.size / 30) * 100);
-    const avgSession = sessions.length ? Math.round(sessions.reduce((a, s) => a + s.minutes, 0) / sessions.length) : 0;
-    const hourBuckets = { Morning: 0, Afternoon: 0, Evening: 0, Night: 0 };
-    sessions.forEach(s => {
-      const h = s.startHour ?? 12;
-      if (h >= 5 && h < 12) hourBuckets.Morning += s.minutes;
-      else if (h >= 12 && h < 17) hourBuckets.Afternoon += s.minutes;
-      else if (h >= 17 && h < 21) hourBuckets.Evening += s.minutes;
-      else hourBuckets.Night += s.minutes;
-    });
-    const chronotype = Object.entries(hourBuckets).sort((a, b) => b[1] - a[1])[0];
-    const chronoLabel = chronotype && chronotype[1] > 0 ? chronotype[0] : "—";
-    let wkdSum = 0, wkdN = 0, wknSum = 0, wknN = 0;
-    sessions.forEach(s => {
-      // parseLocalDate, not `new Date(s.date)` (which parses as UTC and can
-      // land on the wrong weekday for users west of UTC).
-      const day = parseLocalDate(s.date).getDay();
-      if (day === 0 || day === 6) { wknSum += s.minutes; wknN++; } else { wkdSum += s.minutes; wkdN++; }
-    });
-    const wknAvg = wknN ? Math.round(wknSum / wknN) : 0;
-    const wkdAvg = wkdN ? Math.round(wkdSum / wkdN) : 0;
-    return { todayMin, last7, avg7: Math.round(avg7), peak7, consistency, avgSession, chronoLabel, wknAvg, wkdAvg };
-  }, [sessions]);
-
-  const heatmap = useMemo(() => {
-    const out = [];
-    for (let i = 34; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const ds = todayStr(d);
-      const min = sessions.filter(s => s.date === ds).reduce((a, s) => a + s.minutes, 0);
-      out.push({ date: ds, min: Math.round(min) });
-    }
-    return out;
-  }, [sessions]);
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
-        <Card>
-          <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-            {["flow", "pomodoro"].map(m => (
-              <div key={m} onClick={() => setMode(m)} title={running ? "Stop the current session to change mode" : ""} style={{ flex: 1, textAlign: "center", padding: "6px 0", borderRadius: 6, fontSize: 12, cursor: running ? "not-allowed" : "pointer", background: mode === m ? COLORS.inkSoft : "transparent", color: mode === m ? COLORS.text : COLORS.faint, border: `1px solid ${mode === m ? COLORS.ink : COLORS.border}`, textTransform: "capitalize", opacity: running && mode !== m ? 0.4 : 1 }}>{m}</div>
+    <div className="lg-focus-in" style={{ animationDelay: "120ms" }}>
+      <div className="lg-card lg-focus-panel" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "18px 20px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ width: 3, height: 15, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 32)})`, flexShrink: 0 }} />
+            <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>FOCUS ANALYTICS</span>
+          </div>
+          <div role="group" aria-label="Analytics range" className="lg-focus-seg">
+            {["7", "30", "90"].map(r => (
+              <button key={r} className="lg-focus-seg-btn" aria-pressed={range === r} onClick={() => setRange(r)}>{r}D</button>
             ))}
           </div>
-          {running && <div style={{ fontSize: 10, color: COLORS.faint, textAlign: "center", marginTop: -10, marginBottom: 10 }}>Mode locked while a session is running</div>}
+        </div>
 
-          <RingTimer mode={mode} phase={phase} elapsed={elapsed} phaseTarget={phaseTarget} running={running} />
-
-          {completedFlash && (
-            <div style={{ textAlign: "center", fontSize: 12, color: completedFlash.kind === "break" ? COLORS.warn : COLORS.done, background: `${completedFlash.kind === "break" ? COLORS.warn : COLORS.done}22`, border: `1px solid ${completedFlash.kind === "break" ? COLORS.warn : COLORS.done}55`, borderRadius: 7, padding: "8px 10px", margin: "14px 0 0" }}>
-              {completedFlash.message}
+        <div className="lg-grid" style={{ gap: 12 }}>
+          <Stat label="Focus time" value={fmtMin(todayMin)} sub="TODAY" />
+          <Stat label="Sessions" value={todayCount} sub="TODAY" />
+          <div className="lg-card" style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px`, minWidth: 0 }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>Streak</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontFamily: FONTS.mono, fontSize: 23, fontWeight: 600, color: streak > 0 ? COLORS.accentWarm : COLORS.text, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{streak}d</span>
+              <div role="img" aria-label="Active days in the last week" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                {days.slice(-7).map(d => (
+                  <span key={d.date} style={{ width: 7, height: 7, borderRadius: "50%", background: d.min > 0 ? COLORS.accentWarm : "rgba(255,255,255,0.08)", border: `1px solid ${d.min > 0 ? COLORS.accentWarm : COLORS.border}`, flexShrink: 0 }} />
+                ))}
+              </div>
             </div>
-          )}
-
-          {mode === "pomodoro" && !isBreak && (
-            <div style={{ display: "flex", gap: 6, margin: "16px 0 4px", justifyContent: "center" }}>
-              {[15, 25, 45, 60].map(m => (
-                <div key={m} onClick={() => !running && setPomoMinutes(m)} style={{
-                  padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: running ? "default" : "pointer",
-                  background: pomoMinutes === m ? COLORS.inkSoft : "transparent",
-                  border: `1px solid ${pomoMinutes === m ? COLORS.ink : COLORS.border}`,
-                  color: pomoMinutes === m ? COLORS.text : COLORS.faint, opacity: running ? 0.6 : 1,
-                }}>{m}m</div>
-              ))}
-            </div>
-          )}
-          {mode === "pomodoro" && (
-            <div style={{ textAlign: "center", fontSize: 10, color: COLORS.faint, margin: "8px 0 4px" }}>
-              {isBreak ? "Break — next focus session waiting" : `Cycle ${cycle + 1}/4 · long break after 4 focus sessions`}
-            </div>
-          )}
-
-          <div style={{ marginTop: 14, marginBottom: 12 }}>
-            <label style={{ fontSize: 11, color: COLORS.dim }}>Subject</label>
-            <Select value={subject || ""} onChange={e => setSubject(e.target.value)} disabled={running}>
-              {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </Select>
+            <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>CURRENT · LONGEST {longest}d</div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {!running ? (
-              <Btn variant="ink" style={{ flex: 1, justifyContent: "center" }} onClick={onStart}><Play size={14} /> {isBreak ? "Start break" : elapsed > 0 ? "Resume" : "Start"}</Btn>
+          <Stat label="7-day avg" value={fmtMin(avg)} sub={`LAST ${range}D`} />
+        </div>
+
+        <div className="lg-focus-grid2" style={{ marginTop: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+              <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.2em", color: COLORS.dim }}>FOCUS TIME — LAST {range} DAYS</span>
+              <span className="sys" style={{ fontSize: 8.5, color: COLORS.faint }}>{windowCount} SESSION{windowCount === 1 ? "" : "S"}</span>
+            </div>
+            {windowTotal === 0 ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 4px 6px", flexWrap: "wrap" }}>
+                <EmptyArt variant="track" width={150} height={72} />
+                <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.7, flex: 1, minWidth: 180 }}>
+                  {sessions.length === 0 ? (
+                    <>
+                      <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.faint, display: "block", marginBottom: 6 }}>NO FOCUS DATA YET</span>
+                      Start your first focus session and your analytics will appear here.
+                    </>
+                  ) : (
+                    <>No focus sessions in the last {range} days — the timer is waiting.</>
+                  )}
+                </div>
+              </div>
             ) : (
-              <Btn variant="subtle" style={{ flex: 1, justifyContent: "center" }} onClick={onPause}><Pause size={14} /> Pause</Btn>
-            )}
-            {isBreak ? (
-              <Btn variant="ghost" onClick={onSkipBreak}>Skip break</Btn>
-            ) : (
-              <Btn variant="danger" disabled={elapsed === 0 && !running} onClick={onStop}><Square size={14} /> Stop & log</Btn>
+              <div role="img" aria-label={`Focus minutes per day for the last ${range} days. Total ${fmtMin(windowTotal)}.`} className="lg-bar-grow">
+                <ResponsiveContainer width="100%" height={170}>
+                  <BarChart data={days.map(d => ({ label: d.date.slice(5), min: d.min }))} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="label" tick={{ fill: COLORS.faint, fontSize: 9.5 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={20} />
+                    <YAxis tick={{ fill: COLORS.faint, fontSize: 9.5 }} axisLine={false} tickLine={false} width={46}
+                      tickFormatter={v => (v >= 60 ? `${Math.round(v / 60)}h` : `${v}m`)} />
+                    <Tooltip content={<FocusTip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Bar dataKey="min" fill={COLORS.accentFocus} radius={[3, 3, 0, 0]} maxBarSize={24} isAnimationActive={false}
+                      background={{ fill: "rgba(255,255,255,0.07)", radius: 3 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </div>
-          <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 10, textAlign: "center" }}>Keeps running if you switch to another section of Ledger — look for the floating badge. (It can't follow you to other browser tabs — see Settings for details.)</div>
-        </Card>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-            <Stat label="Study streak" value={`${computeStreak(sessions)}d`} />
-            <Stat label="Focused today" value={fmtMin(stats.todayMin)} />
-            <Stat label="7-day avg" value={fmtMin(stats.avg7)} />
-            <Stat label="Consistency (30d)" value={`${stats.consistency}%`} />
-          </div>
-          <Card title="Patterns" style={{ padding: "12px 14px" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 20px" }}>
-              <MiniFact label="7-day peak" value={fmtMin(stats.peak7)} />
-              <MiniFact label="Avg session" value={fmtMin(stats.avgSession)} />
-              <MiniFact label="Chronotype" value={stats.chronoLabel} />
-              <MiniFact label="Weekday avg" value={fmtMin(stats.wkdAvg)} />
-              <MiniFact label="Weekend avg" value={fmtMin(stats.wknAvg)} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+              <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.2em", color: COLORS.dim }}>TIME DISTRIBUTION</span>
+              <span className="sys" style={{ fontSize: 8.5, color: COLORS.faint }}>LAST {range}D</span>
             </div>
-          </Card>
+            <TimeDonut dist={dist} total={distTotal} hoverIdx={donutHover} onHover={setDonutHover} />
+          </div>
         </div>
       </div>
 
-      <Card title="This week">
-        <ResponsiveContainer width="100%" height={130}>
-          <BarChart data={stats.last7}>
-            <XAxis dataKey="date" tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis hide />
-            <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: 6 }} />
-            <Bar dataKey="min" fill={COLORS.ink} radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-
-      <Card title="35-day focus heatmap">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 5 }}>
-          {heatmap.map(h => {
-            const intensity = h.min === 0 ? 0 : h.min < 30 ? 0.35 : h.min < 90 ? 0.65 : 1;
-            return <div key={h.date} className="lg-cell" title={`${h.date}: ${fmtMin(h.min)}`} style={{ aspectRatio: "1", borderRadius: 4, background: intensity === 0 ? COLORS.panel2 : COLORS.ink, opacity: intensity === 0 ? 1 : 0.25 + intensity * 0.75, border: `1px solid ${COLORS.border}` }} />;
-          })}
-        </div>
-      </Card>
-
-      <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Card title="Log a session you didn't time">
-          <div style={{ fontSize: 11, color: COLORS.faint, marginBottom: 10 }}>Studied offline, with a physical clock, or forgot to start the timer? Add it here — it counts the same as a tracked session.</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div>
-              <label style={{ fontSize: 11, color: COLORS.dim }}>Date</label>
-              <Input type="date" value={logDate} max={todayStr()} onChange={e => setLogDate(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: COLORS.dim }}>Subject</label>
-              <Select value={logSubject} onChange={e => setLogSubject(e.target.value)}>
-                {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-              </Select>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, color: COLORS.dim }}>Hours</label>
-                <Input type="number" min="0" step="1" placeholder="0" value={logHours} onChange={e => setLogHours(e.target.value)} />
+        <Card title="Recent sessions" right={
+          <button onClick={() => setLogOpen(o => !o)} aria-expanded={logOpen}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 6, fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: FONTS.mono, fontWeight: 700, cursor: "pointer", background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.dim, transition: "color 0.14s ease-out, border-color 0.14s ease-out" }}>
+            <Plus size={11} /> Log
+          </button>
+        }>
+          {logOpen && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px", marginBottom: 10, borderRadius: 10, border: `1px solid ${COLORS.border}`, background: COLORS.glassFill2 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Input type="date" value={logDate} max={today} onChange={e => setLogDate(e.target.value)} aria-label="Session date" style={{ width: 150, flexShrink: 0, padding: "6px 9px", fontSize: 12 }} />
+                <Select value={logSubject} onChange={e => setLogSubject(e.target.value)} aria-label="Session subject" style={{ flex: 1, minWidth: 120, padding: "6px 9px", fontSize: 12 }}>
+                  {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                </Select>
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, color: COLORS.dim }}>Minutes</label>
-                <Input type="number" min="0" max="59" step="1" placeholder="0" value={logMinutes} onChange={e => setLogMinutes(e.target.value)} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <Input type="number" min="0" step="1" placeholder="Hrs" value={logHours} onChange={e => setLogHours(e.target.value)} aria-label="Session hours" style={{ flex: 1, padding: "6px 9px", fontSize: 12 }} />
+                <Input type="number" min="0" max="59" step="1" placeholder="Min" value={logMinutes} onChange={e => setLogMinutes(e.target.value)} aria-label="Session minutes" style={{ flex: 1, padding: "6px 9px", fontSize: 12 }} />
+                <Btn variant="ink" onClick={addManualLog} ariaLabel="Add session" style={{ padding: "6px 12px", fontSize: 11.5 }}>Add</Btn>
               </div>
+              {logSaved && <div style={{ fontSize: 11, color: COLORS.done }}>Added — counted in stats and streak.</div>}
             </div>
-            <Btn variant="ink" onClick={addManualLog} style={{ justifyContent: "center" }}><Plus size={14} /> Add to log</Btn>
-            {logSaved && <div style={{ fontSize: 11, color: COLORS.done }}>Added — it's now counted in your stats and streak.</div>}
-          </div>
-        </Card>
-
-        <Card title="Recent sessions">
+          )}
           {recentSessions.length === 0 ? (
-            <div style={{ fontSize: 12, color: COLORS.faint }}>Nothing logged yet.</div>
+            <div style={{ fontSize: 12, color: COLORS.faint, padding: "8px 2px" }}>Nothing logged yet.</div>
           ) : recentSessions.map(s => (
-            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 2px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 12 }}>
-              <div style={{ fontSize: 10, color: COLORS.faint, minWidth: 68 }}>{s.date}</div>
-              <div style={{ flex: 1, color: COLORS.text }}>{s.subject}</div>
-              {s.manual && <div style={{ fontSize: 9, color: COLORS.faint, border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: "1px 5px" }}>manual</div>}
-              <div style={{ fontFamily: FONTS.mono, color: COLORS.ink, minWidth: 44, textAlign: "right" }}>{fmtMin(s.minutes)}</div>
-              <Trash2 size={12} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => deleteSession(s.id)} />
+            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 2px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 12 }}>
+              <span style={subjectDot(s.subject)} />
+              <div style={{ flex: 1, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.subject}
+                {s.targetId && targetById[s.targetId] && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
+              </div>
+              {s.manual && <span style={{ fontSize: 8.5, color: COLORS.faint, border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: "1px 5px", letterSpacing: "0.08em" }}>manual</span>}
+              <span className="num" style={{ color: COLORS.faint, fontSize: 10 }}>{s.date.slice(5)}</span>
+              <span className="num" style={{ color: COLORS.text, minWidth: 40, textAlign: "right" }}>{fmtMin(s.minutes)}</span>
+              <button onClick={() => deleteSession(s.id)} aria-label="Delete session" title="Delete session"
+                className="lg-row-del" style={{ display: "flex", padding: 2, background: "transparent", border: "none", cursor: "pointer" }}>
+                <Trash2 size={12} />
+              </button>
             </div>
           ))}
         </Card>
-      </div>
     </div>
   );
 }
 
-// ---------------- FLOATING TIMER ----------------
+function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak, tasks, setTasks, selectedTargetId, setSelectedTargetId, pipOk = false, pipOpen = false, onOpenPip, onOpenImmersive, autoBreaks = true }) {
+  const { mode, running, elapsed, subject, pomoMinutes, phase, phaseTarget, cycle, completedFlash } = timer;
+  const isBreak = mode === "pomodoro" && phase !== "focus";
+
+return (
+    <div style={{ maxWidth: 1120, margin: "0 auto", padding: "26px 8px 64px", display: "flex", flexDirection: "column", gap: 22 }}>
+      {/* TWO-COLUMN TOP — timer workspace (left) + task panel (right) */}
+      <div className="lg-focus-top">
+        <div className="lg-focus-in" style={{ animationDelay: "0ms" }}>
+          {/* THE TIMER — the whole room belongs to it */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {["flow", "pomodoro"].map(m => (
+            <div key={m} onClick={() => setMode(m)}
+              title={running ? "Stop the current session to change mode" : ""}
+              style={{
+                padding: "6px 16px", borderRadius: 7, fontSize: 10, letterSpacing: "0.16em",
+                textTransform: "uppercase", fontWeight: 600,
+                cursor: running ? "not-allowed" : "pointer",
+                background: mode === m ? hexToRgba(COLORS.accentFocus, 0.1) : "transparent",
+                color: mode === m ? COLORS.accentFocus : COLORS.faint,
+                border: `1px solid ${mode === m ? hexToRgba(COLORS.accentFocus, 0.4) : "rgba(255,255,255,0.08)"}`,
+                opacity: running && mode !== m ? 0.4 : 1,
+              }}>{m}</div>
+          ))}
+        </div>
+
+        <RingTimer mode={mode} phase={phase} elapsed={elapsed} phaseTarget={phaseTarget} running={running} />
+
+        {completedFlash && (
+          <div style={{ fontSize: 11.5, color: completedFlash.kind === "break" ? COLORS.warn : COLORS.done, letterSpacing: "0.04em" }}>
+            {completedFlash.message}
+          </div>
+        )}
+
+        {mode === "pomodoro" && !isBreak && (
+          <div style={{ display: "flex", gap: 6 }}>
+            {[15, 25, 45, 60].map(m => (
+              <div key={m} onClick={() => !running && setPomoMinutes(m)}
+                style={{
+                  padding: "5px 12px", borderRadius: 7, fontSize: 10.5, fontFamily: FONTS.mono,
+                  cursor: running ? "default" : "pointer",
+                  background: pomoMinutes === m ? hexToRgba(COLORS.accentFocus, 0.1) : "transparent",
+                  border: `1px solid ${pomoMinutes === m ? hexToRgba(COLORS.accentFocus, 0.4) : COLORS.border}`,
+                  color: pomoMinutes === m ? COLORS.text : COLORS.faint, opacity: running ? 0.6 : 1,
+                }}>{m}m</div>
+            ))}
+          </div>
+        )}
+        {mode === "pomodoro" && (
+          <div className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>
+            {isBreak ? "BREAK — NEXT FOCUS SESSION WAITING" : autoBreaks ? `CYCLE ${cycle + 1}/4 · LONG BREAK AFTER 4` : "FOCUS SESSION — AUTO BREAK OFF"}
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
+          <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>SUBJECT</span>
+          <Select value={subject || ""} onChange={e => setSubject(e.target.value)} disabled={running}
+            style={{ minWidth: 180, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 12, fontFamily: FONTS.mono, cursor: running ? "not-allowed" : "pointer" }}>
+            {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+          </Select>
+          {running && <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.faint }}>LOCKED</span>}
+        </div>
+
+        <TargetPicker tasks={tasks} setTasks={setTasks} profile={profile} focusSubject={subject || ""} running={running}
+          selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
+          {!running ? (
+            <button onClick={onStart} style={{
+              display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 26px", borderRadius: 9,
+              background: hexToRgba(COLORS.accentFocus, 0.14), border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.45)}`,
+              color: COLORS.accentFocus, fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 700,
+              fontFamily: FONTS.mono, cursor: "pointer",
+            }}><Play size={13} /> {isBreak ? "Start break" : elapsed > 0 ? "Resume" : "Start focus"}</button>
+          ) : (
+            <button onClick={onPause} style={{
+              display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 26px", borderRadius: 9,
+              background: "rgba(255,255,255,0.05)", border: `1px solid ${COLORS.border}`,
+              color: COLORS.text, fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 700,
+              fontFamily: FONTS.mono, cursor: "pointer",
+            }}>
+              <Pause size={13} /> Pause
+            </button>
+          )}
+          {isBreak ? (
+            <button onClick={onSkipBreak} style={{
+              padding: "11px 18px", borderRadius: 9, background: "transparent", border: `1px solid ${COLORS.border}`,
+              color: COLORS.faint, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: FONTS.mono, cursor: "pointer",
+            }}>Skip break</button>
+          ) : (
+            <button onClick={onStop} disabled={elapsed === 0 && !running} style={{
+              display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 18px", borderRadius: 9,
+              background: "transparent", border: `1px solid ${elapsed > 0 || running ? hexToRgba(COLORS.danger, 0.4) : COLORS.border}`,
+              color: elapsed > 0 || running ? hexToRgba(COLORS.danger, 0.9) : COLORS.faint,
+              fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: FONTS.mono, cursor: elapsed === 0 && !running ? "default" : "pointer",
+            }}>
+              <Square size={11} /> End & log
+            </button>
+          )}
+        </div>
+        <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.14em", color: COLORS.faint }}>KEEPS RUNNING BETWEEN SECTIONS — WATCH THE FLOATING BADGE</div>
+
+        {/* Alternate ways to see the SAME timer — float it above other apps,
+            or take over the whole screen. No second timer exists anywhere. */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={onOpenPip} disabled={!pipOk || pipOpen}
+            title={pipOk
+              ? (pipOpen ? "Floating window is open — look for it on your screen" : "Open a small floating window above other apps (Chromium/Edge only)")
+              : "Floating above other apps needs the Document Picture-in-Picture API — Chromium/Edge only. The rest of the app still works."}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 8,
+              background: pipOpen ? hexToRgba(COLORS.accentFocus, 0.12) : "transparent",
+              border: `1px solid ${pipOpen ? hexToRgba(COLORS.accentFocus, 0.45) : COLORS.border}`,
+              color: pipOk ? (pipOpen ? COLORS.accentFocus : COLORS.dim) : COLORS.faint,
+              fontSize: 9.5, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 700,
+              fontFamily: FONTS.mono, cursor: pipOk && !pipOpen ? "pointer" : "default",
+              opacity: pipOk ? 1 : 0.55,
+            }}>
+            <PictureInPicture2 size={12} /> {pipOpen ? "Floating" : "Float"}
+          </button>
+          <button onClick={onOpenImmersive}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 8,
+              background: "transparent", border: `1px solid ${COLORS.border}`,
+              color: COLORS.dim, fontSize: 9.5, letterSpacing: "0.16em", textTransform: "uppercase",
+              fontWeight: 700, fontFamily: FONTS.mono, cursor: "pointer",
+            }}>
+            <Maximize2 size={12} /> Immerse
+          </button>
+        </div>
+      </div>
+      </div>
+
+      {/* RIGHT COLUMN — the day's task panel */}
+      <div className="lg-focus-in" style={{ animationDelay: "60ms" }}>
+        <TaskPanel tasks={tasks} setTasks={setTasks} profile={profile} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />
+      </div>
+      </div>
+
+      {/* BELOW BOTH COLUMNS — stats, charts, history */}
+      <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} />
+    </div>
+  );
+}// ---------------- FLOATING TIMER ----------------
 // Persists across tab switches (state lives in App) and can be dragged
 // anywhere within the app shell so it stays out of the way of whatever
 // you're actually looking at while a session runs.
@@ -2289,9 +3294,13 @@ function FloatingTimer({ timer, appRef, activeTab, setTab, onPause, onResume, on
       title="Drag to reposition · click to expand or collapse"
       style={{
         position: "absolute", ...posStyle, zIndex: 60, cursor: draggingRef.current ? "grabbing" : "grab",
-        userSelect: "none", background: COLORS.panel, border: `1.5px solid ${COLORS.ink}`, borderRadius: collapsed ? 26 : 12,
-        boxShadow: "0 10px 30px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: collapsed ? 0 : 10,
-        padding: collapsed ? "10px" : "10px 12px", transition: "border-radius 0.15s",
+        userSelect: "none", background: COLORS.glassFillStrong,
+        WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.4)`,
+        backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.4)`,
+        border: `1.5px solid ${COLORS.accentFocus}66`, borderRadius: collapsed ? 999 : 999,
+        boxShadow: `0 14px 40px -14px ${COLORS.inkGlow}, inset 0 1px 0 rgba(255,255,255,0.12)`,
+        display: "flex", alignItems: "center", gap: collapsed ? 0 : 10,
+        padding: collapsed ? "10px" : "8px 14px 8px 16px", transition: "border-radius 0.2s, transform 0.2s cubic-bezier(0.22,1,0.36,1)",
       }}>
       <div style={{ width: 9, height: 9, borderRadius: "50%", background: timer.running ? COLORS.done : COLORS.warn, flexShrink: 0 }} />
       {!collapsed && (
@@ -2312,120 +3321,134 @@ function FloatingTimer({ timer, appRef, activeTab, setTab, onPause, onResume, on
     </div>
   );
 }
-function iconBtnStyle(danger) {
-  return { width: 22, height: 22, borderRadius: 5, border: `1px solid ${danger ? COLORS.danger + "66" : COLORS.border}`, background: COLORS.panel2, color: danger ? COLORS.danger : COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" };
-}
+// ---------------- IMMERSIVE TIMER ----------------
+// The whole screen *is* the timer. Esc exits, Space toggles pause/resume
+// (ignored while typing in an input). Controls stay hidden until the cursor
+// moves — nothing else shares this surface.
+function ImmersiveTimer({ timer, onClose, onPause, onResume, onStop, onSkipBreak }) {
+  const [hover, setHover] = useState(false);
 
-// ---------------- TASKS ----------------
-function Tasks({ tasks, setTasks, profile, dpp, setDpp }) {
-  const [text, setText] = useState("");
-  const [subject, setSubject] = useState(profile.subjects[0]);
-  const [priority, setPriority] = useState("medium");
-  const [customAdd, setCustomAdd] = useState("");
-  const today = todayStr();
-  const priorityRank = { high: 0, medium: 1, low: 2 };
-  const todayTasks = tasks.filter(t => t.date === today).slice().sort((a, b) => (priorityRank[a.priority || "medium"] ?? 1) - (priorityRank[b.priority || "medium"] ?? 1));
-  const missed = tasks.filter(t => t.date < today && !t.done);
+  const remaining = timer.mode === "pomodoro" ? Math.max(0, timer.phaseTarget - timer.elapsed) : timer.elapsed;
+  const frac = timer.mode === "pomodoro"
+    ? Math.min(1, timer.elapsed / Math.max(1, timer.phaseTarget))
+    : (timer.elapsed % 5400) / 5400;
+  const isBreak = timer.mode === "pomodoro" && timer.phase !== "focus";
 
-  const add = () => {
-    if (!text.trim()) return;
-    setTasks(prev => [...prev, { id: uid(), text: text.trim(), subject, priority, done: false, date: today }]);
-    setText("");
-  };
-  const toggle = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const remove = (id) => { if (window.confirm("Delete this task?")) setTasks(prev => prev.filter(t => t.id !== id)); };
-  const rescheduleToday = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, date: today } : t));
-  const rescheduleAll = () => setTasks(prev => prev.map(t => (t.date < today && !t.done) ? { ...t, date: today } : t));
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key === " ") {
+        const t = e.target;
+        if (t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+        e.preventDefault();
+        if (timer.running) onPause(); else onResume();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [timer.running, onClose, onPause, onResume]);
 
-  const doneN = todayTasks.filter(t => t.done).length;
-  const pct = todayTasks.length ? Math.round((doneN / todayTasks.length) * 100) : 0;
+  const chip = (extra = {}) => ({
+    display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 9,
+    background: "rgba(255,255,255,0.05)", border: `1px solid ${COLORS.border}`,
+    color: COLORS.text, fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase",
+    fontWeight: 700, fontFamily: FONTS.mono, cursor: "pointer",
+    ...extra,
+  });
 
-  const record = todayDppRecord(dpp);
-  const dppPct = record.target ? Math.min(100, Math.round((record.solved / record.target) * 100)) : 0;
-  const updateDpp = (patch) => {
-    setDpp(prev => {
-      const exists = prev.some(d => d.date === today);
-      const next = exists ? prev.map(d => d.date === today ? { ...d, ...patch } : d) : [...prev, { ...record, ...patch }];
-      return next;
-    });
-  };
-  const bumpSolved = (n) => updateDpp({ solved: Math.max(0, record.solved + n) });
-  const dppStreak = useMemo(() => {
-    let streak = 0, d = new Date();
-    while (true) {
-      const ds = todayStr(d);
-      const rec = dpp.find(x => x.date === ds);
-      if (rec && rec.target > 0 && rec.solved >= rec.target) { streak++; d.setDate(d.getDate() - 1); } else break;
-    }
-    return streak;
-  }, [dpp]);
+  const stateColor = timer.running ? COLORS.done : COLORS.accentWarm;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {missed.length > 0 && (
-        <Card title={`Missed from earlier days (${missed.length})`} right={<Btn variant="ghost" onClick={rescheduleAll}>Move all to today</Btn>}>
-          {missed.map(t => (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-              <span style={{ fontSize: 10, color: COLORS.faint }}>{t.date}</span>
-              <div style={{ flex: 1, color: COLORS.dim }}>{t.text}</div>
-              <div style={{ fontSize: 10, color: COLORS.faint, background: COLORS.panel2, padding: "3px 8px", borderRadius: 5 }}>{t.subject}</div>
-              <Btn variant="ghost" onClick={() => rescheduleToday(t.id)}>Move to today</Btn>
-              <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(t.id)} />
-            </div>
-          ))}
-        </Card>
-      )}
-      <Card title="Daily question practice" right={<div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 4 }}><Flame size={12} color={COLORS.warn} /> {dppStreak}d streak</div>}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.dim, marginBottom: 6 }}>
-              <span>{record.solved} / {record.target} questions</span>
-              <span style={{ color: COLORS.ink, fontFamily: FONTS.mono }}>{dppPct}%</span>
-            </div>
-            <div className="lg-progress" style={{ height: 8 }}>
-              <div className="lg-progress-fill" style={{ width: `${dppPct}%`, height: "100%", background: dppPct >= 100 ? `linear-gradient(90deg, ${darken(COLORS.done, 25)}, ${COLORS.done})` : undefined }} />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <Btn variant="subtle" onClick={() => bumpSolved(-1)}>-1</Btn>
-            <Btn variant="ink" onClick={() => bumpSolved(1)}>+1</Btn>
-            <Btn variant="ink" onClick={() => bumpSolved(5)}>+5</Btn>
-            <Input value={customAdd} onChange={e => setCustomAdd(e.target.value)} placeholder="n" type="number" style={{ width: 56 }} />
-            <Btn variant="ghost" onClick={() => { const n = parseInt(customAdd); if (!isNaN(n)) bumpSolved(n); setCustomAdd(""); }}>Add</Btn>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <label style={{ fontSize: 11, color: COLORS.faint }}>Target</label>
-            <Input type="number" value={record.target} onChange={e => updateDpp({ target: Math.max(1, parseInt(e.target.value) || 1) })} style={{ width: 64 }} />
-          </div>
-        </div>
-      </Card>
-      <Card title={`Today — ${doneN}/${todayTasks.length} complete`} right={<div style={{ fontFamily: FONTS.mono, fontSize: 13, color: COLORS.ink }}>{pct}%</div>}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <Input value={text} onChange={e => setText(e.target.value)} placeholder="What are you tackling today?" onKeyDown={e => e.key === "Enter" && add()} />
-          <Select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: 140 }}>
-            {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-          </Select>
-          <Select value={priority} onChange={e => setPriority(e.target.value)} style={{ width: 110 }}>
-            {PRIORITY_ORDER.map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-          </Select>
-          <Btn variant="ink" onClick={add}><Plus size={14} /></Btn>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {todayTasks.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No targets yet. Add one above.</div>}
-          {todayTasks.map(t => (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
-              <div onClick={() => toggle(t.id)} style={{ cursor: "pointer" }}>
-                {t.done ? <CheckCircle2 size={16} color={COLORS.done} /> : <Circle size={16} color={COLORS.faint} />}
-              </div>
-              <div title={`${PRIORITY_LABEL[t.priority || "medium"]} priority`} style={{ width: 7, height: 7, borderRadius: "50%", background: PRIORITY_COLORS[t.priority || "medium"], flexShrink: 0 }} />
-              <div style={{ flex: 1, fontSize: 13, textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</div>
-              <div style={{ fontSize: 10, color: COLORS.faint, background: COLORS.panel2, padding: "3px 8px", borderRadius: 5 }}>{t.subject}</div>
-              <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(t.id)} />
-            </div>
-          ))}
-        </div>
-      </Card>
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ position: "fixed", inset: 0, zIndex: 1000, overflow: "hidden",
+        background: `${COLORS.bg}`, display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 30 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 9, height: 9, borderRadius: "50%", background: stateColor,
+          boxShadow: `0 0 14px ${hexToRgba(stateColor, 0.6)}`, transition: "background 0.2s" }} />
+        <span className="sys" style={{ fontSize: 11, letterSpacing: "0.3em", color: COLORS.dim }}>
+          {timer.mode.toUpperCase()}{isBreak ? ` · ${timer.phase === "long_break" ? "LONG BREAK" : "SHORT BREAK"}` : ""}
+        </span>
+      </div>
+
+      <div className="num" style={{
+        fontSize: "clamp(88px, 17vw, 212px)", fontWeight: 800, lineHeight: 1,
+        letterSpacing: "-0.045em", color: COLORS.text,
+        textShadow: `0 0 90px ${hexToRgba(COLORS.accentFocus, 0.25)}`,
+      }}>{fmtClock(remaining)}</div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+        <span style={{ width: 7, height: 7, borderRadius: 2, background: subjectColor(timer.subject) }} />
+        <span style={{ fontSize: 13, letterSpacing: "0.3em", textTransform: "uppercase", fontWeight: 600, color: COLORS.faint }}>
+          {timer.subject || "FOCUS"}
+        </span>
+      </div>
+
+      {/* hairline progress along the bottom edge */}
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 2, background: "rgba(255,255,255,0.05)" }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: `linear-gradient(90deg, ${COLORS.accentFocus}, ${COLORS.accentProgress})`, transition: "width 1s linear" }} />
+      </div>
+
+      {/* quiet controls — only when the cursor is around */}
+      <div style={{ position: "absolute", bottom: 28, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 8,
+        opacity: hover ? 1 : 0, pointerEvents: hover ? "auto" : "none", transition: "opacity 0.22s ease-out" }}>
+        {timer.running ? (
+          <button onClick={onPause} style={chip()}><Pause size={12} /> Pause</button>
+        ) : (
+          <button onClick={onResume} style={chip({ background: hexToRgba(COLORS.accentFocus, 0.14), borderColor: hexToRgba(COLORS.accentFocus, 0.45), color: COLORS.accentFocus })}><Play size={12} /> {isBreak ? "Resume break" : "Resume"}</button>
+        )}
+        {isBreak ? (
+          <button onClick={onSkipBreak} style={chip()}>Skip break</button>
+        ) : (
+          <button onClick={onStop} style={chip({ color: hexToRgba(COLORS.danger, 0.9), borderColor: hexToRgba(COLORS.danger, 0.4) })}><Square size={11} /> End & log</button>
+        )}
+        <button onClick={onClose} style={chip()}>Exit</button>
+      </div>
+
+      <div className="sys" style={{ position: "absolute", top: 24, right: 28, fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>
+        ESC EXIT · SPACE {timer.running ? "PAUSE" : "RESUME"}
+      </div>
     </div>
+  );
+}
+
+function iconBtnStyle(danger) {
+  return { width: 24, height: 24, borderRadius: 999, border: `1px solid ${danger ? COLORS.danger + "66" : "rgba(255,255,255,0.12)"}`, background: danger ? `${COLORS.danger}1f` : "rgba(255,255,255,0.08)", color: danger ? COLORS.danger : COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background 0.15s ease-out, transform 0.15s ease-out" };
+}
+
+// ---------------- SHARED WIDGETS ----------------
+// DAILY QUESTION PRACTICE — one control unit, shared by the dashboard strip
+// and the tasks tab so the practice controls never fork. -1/+1/+5 stay quiet
+// ghost steppers, Add is the single filled-ink commit, Target is a compact
+// setting element beside the row.
+function PracticeCard({ record, dppStreak = 0, bumpSolved, updateTarget }) {
+  const [customAdd, setCustomAdd] = useState("");
+  const dppPct = record.target ? Math.min(100, Math.round((record.solved / record.target) * 100)) : 0;
+  return (
+    <Card title="Daily question practice" right={<div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 4 }}><Flame size={12} color={dppStreak > 0 ? COLORS.warn : COLORS.faint} /> {dppStreak}d streak</div>}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.dim, marginBottom: 6 }}>
+            <span style={{ fontFamily: FONTS.mono, fontVariantNumeric: "tabular-nums" }}>{record.solved} / {record.target} questions</span>
+            <span style={{ color: COLORS.ink, fontFamily: FONTS.mono }}>{dppPct}%</span>
+          </div>
+          <div className="lg-progress" style={{ height: 8 }}>
+            <div className="lg-progress-fill" style={{ width: `${dppPct}%`, "--lg-w": `${dppPct}%`, height: "100%", background: dppPct >= 100 ? `linear-gradient(90deg, ${darken(COLORS.done, 25)}, ${COLORS.done})` : undefined }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <Btn variant="ghost" onClick={() => bumpSolved(-1)}>-1</Btn>
+          <Btn variant="ghost" onClick={() => bumpSolved(1)}>+1</Btn>
+          <Btn variant="ghost" onClick={() => bumpSolved(5)}>+5</Btn>
+          <Input value={customAdd} onChange={e => setCustomAdd(e.target.value)} placeholder="custom" type="number" style={{ width: 64 }} />
+          <Btn variant="ink" onClick={() => { const n = parseInt(customAdd); if (!isNaN(n)) bumpSolved(n); setCustomAdd(""); }}><Plus size={13} /></Btn>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <label htmlFor="dpp-target" style={{ fontSize: 11, color: COLORS.faint }}>Target</label>
+          <Input id="dpp-target" type="number" value={record.target} onChange={e => updateTarget({ target: Math.max(1, parseInt(e.target.value) || 1) })} style={{ width: 64 }} />
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -2443,206 +3466,858 @@ function scheduleCard(card, grade) {
     else if (reps === 2) interval = 3;
     else interval = Math.round(interval * ease);
     if (grade === 1) { ease = Math.max(1.3, ease - 0.15); interval = Math.max(1, Math.round(interval * 0.8)); }
-    if (grade === 3) { ease = ease + 0.15; interval = Math.round(interval * 1.3); }
+    if (grade === 3) { ease = Math.min(5, ease + 0.15); interval = Math.round(interval * 1.3); }
   }
   return { ease, reps, interval, due: addDays(todayStr(), interval), lastReviewed: todayStr() };
 }
 
-function RecallDeck({ cards, setCards, profile }) {
-  const [subject, setSubject] = useState(profile.subjects[0]);
+function FlashSplit({ k, v, tint }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint }}>{k}</div>
+      <div className="num" style={{ fontSize: 15, fontWeight: 700, color: tint || COLORS.text, marginTop: 2 }}>{v}</div>
+    </div>
+  );
+}
+
+// Recall — a quiet spaced-repetition instrument. Every number rolls up from
+// the stored card schedule (due dates, intervals, lastReviewed) and nothing
+// is invented. The queue is the heart: overdue first, then today's due.
+function RecallDeck({ cards, setCards, profile, settings = {} }) {
+  const [subject, setSubject] = useState(profile.subjects[0] || "");
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
   const [reviewSubject, setReviewSubject] = useState("all");
+  const [dueFilter, setDueFilter] = useState("all");
+  const [deckQuery, setDeckQuery] = useState("");
   const [queue, setQueue] = useState(null);
   const [qi, setQi] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [sessionStats, setSessionStats] = useState(null);
+  const [sessStart, setSessStart] = useState(null);
+  const [tick, setTick] = useState(0);
+  const [focus, setFocus] = useState(false);
+  const [openId, setOpenId] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const today = todayStr();
-  const dueCards = cards.filter(c => c.due <= today && (reviewSubject === "all" || c.subject === reviewSubject));
+  const extraSubjects = [...new Set([...profile.subjects, ...cards.map(c => c.subject)])];
+  const overdue = cards.filter(c => c.due < today && (reviewSubject === "all" || c.subject === reviewSubject));
+  const dueToday = cards.filter(c => c.due === today && (reviewSubject === "all" || c.subject === reviewSubject));
+  const upcoming = cards.filter(c => c.due > today && daysBetween(parseLocalDate(today), parseLocalDate(c.due)) <= 7 && (reviewSubject === "all" || c.subject === reviewSubject));
+  const dueCards = [...overdue, ...dueToday];
+  const masteredN = cards.filter(c => (c.interval || 0) >= 30).length;
+  // per-card review count: the grade log holds the last 15 reviews, so once
+  // it fills, totalReviews must keep counting from reps (which only grows).
+  const rc = c => Math.max(c.reps || 0, (c.log && c.log.length) || 0);
+  const reviewed = cards.filter(c => rc(c) > 0);
+  const retained = reviewed.filter(c => (c.interval || 0) >= 21).length;
+  const retention = reviewed.length ? Math.round((retained / reviewed.length) * 100) : 0;
+  const totalReviews = cards.reduce((a, c) => a + rc(c), 0);
+  const avgEase = cards.length ? (cards.reduce((a, c) => a + (c.ease || 2.5), 0) / cards.length).toFixed(2) : "—";
+  const missedTotal = cards.reduce((a, c) => a + (c.missed || 0), 0);
+
+  // review streak = consecutive days ending today with at least one review
+  const reviewDays = new Set(cards.map(c => c.lastReviewed).filter(Boolean));
+  let streak = 0;
+  { const d = new Date(); while (reviewDays.has(todayStr(d))) { streak++; d.setDate(d.getDate() - 1); } }
+
+  // recent recall activity — all-time for the deck, grouped by reviewed date
+  const activity = useMemo(() => {
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const ds = todayStr(d);
+      out.push({ ds, n: cards.filter(c => c.lastReviewed === ds).length, label: d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase().slice(0, 2) });
+    }
+    return out;
+  }, [cards]);
+
+  // 12-week review heatmap (Mon-first weeks). Each cell = reviews that day,
+  // drawn from the per-card grade log, with legacy cards counted via lastReviewed.
+  const heat = useMemo(() => {
+    const logCount = new Map();
+    cards.forEach(c => (c.log || []).forEach(e => logCount.set(e.d, (logCount.get(e.d) || 0) + 1)));
+    const anchor = new Date(); anchor.setDate(anchor.getDate() - 77 - ((anchor.getDay() + 6) % 7));
+    const cols = [];
+    for (let w = 0; w < 12; w++) {
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(anchor); d.setDate(anchor.getDate() + w * 7 + i);
+        const ds = todayStr(d);
+        if (ds > today) { days.push(0); continue; }
+        const n = logCount.get(ds) || (cards.some(c => c.lastReviewed === ds) ? 1 : 0);
+        days.push(n);
+      }
+      cols.push(days);
+    }
+    return cols;
+  }, [cards, today]);
+
+  // 12-week forecast: cards due per week if every upcoming review goes "Good".
+  const forecast = useMemo(() => {
+    const weeks = Array(12).fill(0);
+    cards.forEach(c => {
+      let iv = c.interval || 0;
+      let off = Math.max(0, daysBetween(parseLocalDate(today), parseLocalDate(c.due || today)));
+      while (off < 12 * 7) {
+        weeks[Math.floor(off / 7)]++;
+        iv = iv === 0 ? 1 : iv < 3 ? 3 : Math.round(iv * 2.2);
+        off += iv;
+      }
+    });
+    return weeks;
+  }, [cards, today]);
+
+  const heatMax = Math.max(1, ...heat.flat());
+  const heatColor = n => n === 0 ? "rgba(255,255,255,0.055)" : hexToRgba(COLORS.accentFocus, 0.16 + 0.84 * Math.min(1, n / heatMax));
+
+  const bySubject = extraSubjects.map(s => ({ subject: s, count: cards.filter(c => c.subject === s).length })).filter(x => x.count > 0);
+  const missedCards = cards.filter(c => (c.missed || 0) > 0).sort((a, b) => (b.missed || 0) - (a.missed || 0)).slice(0, 8);
+  const lastMissOf = c => { const fails = (c.log || []).filter(e => e.g === 0); return fails.length ? fails[fails.length - 1].d : null; };
 
   const addCard = () => {
     if (!front.trim() || !back.trim()) return;
-    setCards(prev => [...prev, { id: uid(), subject, front: front.trim(), back: back.trim(), ease: 2.5, reps: 0, interval: 0, due: today, lastReviewed: null }]);
+    const sub = subject.trim() || profile.subjects[0] || "General";
+    setCards(prev => [...prev, { id: uid(), subject: sub, front: front.trim(), back: back.trim(), ease: 2.5, reps: 0, interval: 0, due: today, added: today, lastReviewed: null, missed: 0, log: [] }]);
     setFront(""); setBack("");
   };
-  const removeCard = (id) => { if (window.confirm("Delete this card?")) setCards(prev => prev.filter(c => c.id !== id)); };
+  const removeCard = (id) => {
+    if (!window.confirm("Delete this card?")) return;
+    setCards(prev => prev.filter(c => c.id !== id));
+    // If the deleted card is mid-session, drop it from the queue too so the
+    // session doesn't stall on a ghost card.
+    setQueue(prev => prev ? prev.filter(qid => qid !== id) : prev);
+  };
+  const makeDueNow = (id) => setCards(prev => prev.map(c => c.id === id ? { ...c, due: today } : c));
+
+  const scheduleSecs = (c, g) => {
+    const r = scheduleCard(c, g);
+    return daysBetween(parseLocalDate(today), parseLocalDate(r.due));
+  };
+
+  const orderCards = (list) => {
+    const order = settings.order === "newest" ? "newest" : settings.order === "shuffle" ? "shuffle" : "due";
+    const arr = [...list];
+    if (order === "due") arr.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : (b.reps || 0) - (a.reps || 0)));
+    else if (order === "newest") arr.reverse();
+    else arr.sort(() => Math.random() - 0.5);
+    return arr;
+  };
 
   const startReview = () => {
     if (dueCards.length === 0) return;
-    setQueue(dueCards.map(c => c.id));
-    setQi(0); setRevealed(false);
-  };
-  const grade = (g) => {
-    const id = queue[qi];
-    setCards(prev => prev.map(c => c.id === id ? { ...c, ...scheduleCard(c, g) } : c));
-    if (qi + 1 < queue.length) { setQi(qi + 1); setRevealed(false); }
-    else setQueue(null);
+    const newPerDay = Number(settings.newPerDay) || 12;
+    // New cards count toward the daily budget from the day they were added
+    // (addCard stamps `added`). Legacy cards without `added` fall back to
+    // their due date, so imported/old decks aren't mis-budgeted.
+    const newToday = cards.filter(c => (c.reps || 0) === 0 && ((c.added || c.due) === today)).length;
+    let ordered = orderCards(dueCards);
+    const newUn = ordered.filter(c => (c.reps || 0) === 0);
+    const rest = ordered.filter(c => (c.reps || 0) > 0);
+    const permit = Math.max(0, newPerDay - newToday);
+    ordered = [...rest, ...newUn.slice(0, permit)];
+    if (ordered.length === 0) return;
+    setQueue(ordered.map(c => c.id));
+    setQi(0); setRevealed(false); setSessionStats(null);
+    setSessStart(Date.now()); setTick(0);
   };
 
+  const grade = (g) => {
+    const id = queue[qi];
+    const updated = scheduleCard(cards.find(c => c.id === id), g);
+    setCards(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const log = [...(c.log || []), { d: updated.lastReviewed, g, e: updated.ease, iv: updated.interval }].slice(-15);
+      return { ...c, ...updated, log, missed: (c.missed || 0) + (g === 0 ? 1 : 0) };
+    }));
+    if (qi + 1 < queue.length) { setQi(qi + 1); setRevealed(false); }
+    else {
+      const seconds = sessStart ? Math.round((Date.now() - sessStart) / 1000) : 0;
+      setQueue(null); setSessStart(null); setRevealed(false); setFocus(false);
+      setSessionStats({ graded: queue.length, seconds });
+    }
+  };
+
+  // session clock
+  useEffect(() => {
+    if (!queue) return;
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [queue]);
+  const elapsed = sessStart ? Math.floor((Date.now() - sessStart) / 1000) : 0;
+
+  // keyboard: space/enter reveals, 1-4 grade, escape quits/focus
+  useEffect(() => {
+    if (!queue) return;
+    const h = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target && e.target.tagName) || "";
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+      if (e.repeat) return;
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); setRevealed(true); }
+      else if (e.key === "Escape") { setQueue(null); setRevealed(false); setFocus(false); setSessStart(null); }
+      else if (revealed && ["1", "2", "3", "4"].includes(e.key) && queue) grade(Number(e.key) - 1);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [queue, qi, revealed, focus]);
+
   const currentCard = queue ? cards.find(c => c.id === queue[qi]) : null;
+  const sessionTotal = queue ? queue.length : 0;
+
+  // Lock the page scroll while the fullscreen focus overlay is up so the
+  // deck under it can't be nudged mid-session.
+  useEffect(() => {
+    if (!focus || !queue) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, [focus, queue]);
+  const fmtClock = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const deckList = cards
+    .filter(c => !deckQuery.trim() || c.front.toLowerCase().includes(deckQuery.trim().toLowerCase()) || (c.back || "").toLowerCase().includes(deckQuery.trim().toLowerCase()))
+    .filter(c => reviewSubject === "all" || c.subject === reviewSubject)
+    .filter(c => dueFilter === "all" ? true : dueFilter === "overdue" ? c.due < today : dueFilter === "today" ? c.due === today : c.due > today)
+    .slice().reverse();
+
+  const exportDeck = () => {
+    const blob = new Blob([JSON.stringify(cards, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "recall-deck.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+
+  const importCards = () => {
+    const text = importText.trim();
+    if (!text) return;
+    let items = [];
+    if (text.startsWith("[")) {
+      try { items = JSON.parse(text).filter(x => x && x.front).map(x => ({ front: String(x.front), back: String(x.back || ""), subject: String(x.subject || "General") })); } catch (e) { items = []; }
+    }
+    if (!items.length) {
+      // CSV lines: front, back [, subject]. Fields may be quoted so commas
+      // and escaped quotes inside a field survive the split.
+      text.split("\n").forEach(line => {
+        if (!line.trim()) return;
+        const cells = [];
+        let cur = "", inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+            else inQ = !inQ;
+          } else if (ch === "," && !inQ) { cells.push(cur); cur = ""; }
+          else cur += ch;
+        }
+        cells.push(cur);
+        const cleaned = cells.map(s => s.trim());
+        if (cleaned.length < 2 || !cleaned[0]) return;
+        items.push({ front: cleaned[0], back: cleaned[1], subject: cleaned.length > 2 && cleaned[2] ? cleaned[2] : "General" });
+      });
+    }
+    const clean = items.filter(i => i.front && i.back);
+    if (!clean.length) return;
+    setCards(prev => {
+      const have = new Set(prev.map(c => `${c.subject}::${c.front}`));
+      const fresh = clean.filter(i => !have.has(`${i.subject}::${i.front}`)).map(i => ({ id: uid(), ease: 2.5, reps: 0, interval: 0, due: today, lastReviewed: null, missed: 0, log: [], ...i }));
+      return [...prev, ...fresh];
+    });
+    setImportText(""); setImportOpen(false);
+  };
+
+  const flipCard = (sub, repLabel, frontText, backText) => (
+    <div style={{ perspective: 1100, width: "100%" }}>
+      <div style={{ position: "relative", width: "100%", minHeight: 210, transformStyle: "preserve-3d", transform: revealed ? "rotateY(180deg)" : "rotateY(0deg)", transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1)" }}>
+        <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 210, textAlign: "center", padding: "26px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={subjectDot(sub)} />
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.dim }}>{sub}</span>
+            <span className="sys" style={{ fontSize: 8, letterSpacing: "0.12em", color: currentCard && currentCard.reps > 0 ? COLORS.faint : COLORS.done }}>{currentCard && currentCard.reps > 0 ? `REVIEW ${currentCard.reps + 1}` : "NEW"}</span>
+          </div>
+          <div style={{ fontSize: 17, color: COLORS.text, maxWidth: 560, lineHeight: 1.5 }}>{frontText}</div>
+          <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 10 }}>Recall the answer from memory first.</div>
+        </div>
+        <div style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", position: "absolute", inset: 0, transform: "rotateY(180deg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "26px 18px" }}>
+          <div style={{ fontSize: 11, color: COLORS.faint, maxWidth: 560, lineHeight: 1.55, marginBottom: 10 }}>{frontText}</div>
+          <div style={{ fontSize: 13.5, color: COLORS.ink, borderTop: `1px dashed ${COLORS.border}`, paddingTop: 14, maxWidth: 560, lineHeight: 1.6 }}>{backText}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const gradeRail = () => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+      <GradeBtn label="Again" hot="1" tint={COLORS.danger} next={scheduleSecs(currentCard, 0)} onGrade={() => grade(0)} />
+      <GradeBtn label="Hard" hot="2" tint={COLORS.warn} next={scheduleSecs(currentCard, 1)} onGrade={() => grade(1)} />
+      <GradeBtn label="Good" hot="3" tint={COLORS.done} next={scheduleSecs(currentCard, 2)} onGrade={() => grade(2)} />
+      <GradeBtn label="Easy" hot="4" tint={COLORS.accentFocus} next={scheduleSecs(currentCard, 3)} onGrade={() => grade(3)} />
+    </div>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-        <Stat label="Cards in deck" value={cards.length} />
-        <Stat label="Due today" value={dueCards.length} />
-        <Stat label="Mastered (30d+ interval)" value={cards.filter(c => c.interval >= 30).length} />
+      <PageHead
+        title="Recall"
+        lead="Your memory queue, optimized for what needs attention. Cards schedule themselves — you just grade honestly. Keys: space to flip, 1–4 to grade, esc to quit."
+        right={(
+          <div className="num" style={{ fontSize: 11, letterSpacing: "0.06em", color: COLORS.faint, marginTop: 26 }}>
+            {totalReviews} REVIEW{totalReviews === 1 ? "" : "S"} DONE · {streak}d STREAK
+          </div>
+        )}
+      />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <MiniStat k="Due today" v={dueToday.length + overdue.length} sub="Ready to review now" tint={dueToday.length + overdue.length > 0 ? COLORS.warn : undefined} />
+        <MiniStat k="Overdue" v={overdue.length} sub={overdue.length ? "Past their due date" : "Nothing behind"} tint={overdue.length > 0 ? COLORS.danger : undefined} />
+        <MiniStat k="Upcoming 7d" v={upcoming.length} sub="Scheduled ahead" />
+        <MiniStat k="Mastery" v={masteredN} sub="Interval 30d +" tint={masteredN > 0 ? COLORS.done : undefined} />
       </div>
 
-      {queue ? (
-        <Card title={`Reviewing — ${qi + 1}/${queue.length}`}>
-          <div style={{ minHeight: 140, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "20px 10px" }}>
-            <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>{currentCard?.subject}</div>
-            <div style={{ fontSize: 16, color: COLORS.text, marginBottom: revealed ? 16 : 0 }}>{currentCard?.front}</div>
-            {revealed && <div style={{ fontSize: 14, color: COLORS.ink, borderTop: `1px dashed ${COLORS.border}`, paddingTop: 14, marginTop: 4 }}>{currentCard?.back}</div>}
+      {/* Signals strip — retention, streak, subject mix, heat + forecast */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+        <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>DECK HEALTH</span>
           </div>
-          {!revealed ? (
-            <Btn variant="ink" style={{ width: "100%", justifyContent: "center" }} onClick={() => setRevealed(true)}>Show answer</Btn>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-              <Btn variant="danger" style={{ justifyContent: "center" }} onClick={() => grade(0)}>Again</Btn>
-              <Btn variant="subtle" style={{ justifyContent: "center" }} onClick={() => grade(1)}>Hard</Btn>
-              <Btn variant="ink" style={{ justifyContent: "center" }} onClick={() => grade(2)}>Good</Btn>
-              <Btn variant="ghost" style={{ justifyContent: "center" }} onClick={() => grade(3)}>Easy</Btn>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <FlashSplit k="Retention" v={`${retention}%`} />
+            <FlashSplit k="Review streak" v={`${streak}d`} />
+            <FlashSplit k="Avg ease" v={avgEase} />
+            <FlashSplit k="Forgotten" v={missedTotal} />
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 3, alignItems: "flex-end" }}>
+            {activity.map((a, i) => (
+              <div key={i} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{ height: `${Math.max(4, a.n * 9)}px`, background: a.n > 0 ? COLORS.accentFocus : "rgba(255,255,255,0.055)", borderRadius: 2, maxHeight: 44 }} />
+                <div className="sys" style={{ fontSize: 7, color: COLORS.faint, marginTop: 3 }}>{a.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>SUBJECT MIX</span>
+            <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{cards.length} CARDS</span>
+          </div>
+          {bySubject.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: COLORS.faint, lineHeight: 1.6 }}>No cards yet — add your first below and the spread will appear here.</div>
+          ) : bySubject.map(s => (
+            <div key={s.subject} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+              <span style={subjectDot(s.subject)} />
+              <span style={{ flex: 1, fontSize: 12, color: COLORS.text }}>{s.subject}</span>
+              <div className="lg-progress" style={{ width: 90, height: 3 }}>
+                <div style={{ width: `${Math.round((s.count / cards.length) * 100)}%`, height: "100%", background: subjectColor(s.subject), borderRadius: 2 }} />
+              </div>
+              <span className="num" style={{ fontSize: 10, color: COLORS.dim, width: 22, textAlign: "right" }}>{s.count}</span>
             </div>
-          )}
-        </Card>
-      ) : (
-        <Card title="Review session" right={
-          <Select value={reviewSubject} onChange={e => setReviewSubject(e.target.value)} style={{ width: 160 }}>
-            <option value="all">All subjects</option>
-            {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-          </Select>
-        }>
-          {dueCards.length === 0 ? (
-            <div style={{ fontSize: 12, color: COLORS.faint }}>Nothing due right now — add cards below or come back later.</div>
-          ) : (
-            <Btn variant="ink" onClick={startReview}><Layers size={14} /> Review {dueCards.length} card{dueCards.length === 1 ? "" : "s"}</Btn>
-          )}
-        </Card>
+          ))}
+        </div>
+        <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>HEATMAP · LAST 12 WEEKS</span>
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {heat.map((wk, i) => (
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+                {wk.map((n, j) => <div key={j} style={{ width: "100%", aspectRatio: "1", borderRadius: 2, background: heatColor(n) }} />)}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 14, marginBottom: 8 }}>
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>FORECAST · DUE PER WEEK</span>
+            <span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>IF EVERY REVIEW GOES "GOOD"</span>
+          </div>
+          <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 42 }}>
+            {forecast.map((n, i) => (
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <div style={{ width: "100%", maxWidth: 16, height: `${Math.max(2, Math.round((n / Math.max(1, ...forecast)) * 38))}px`, background: n > 0 ? hexToRgba(COLORS.accentFocus, 0.45 + 0.55 * (n / Math.max(1, ...forecast))) : "rgba(255,255,255,0.055)", borderRadius: 2 }} />
+                <div className="sys" style={{ fontSize: 6.5, color: COLORS.faint }}>w{i + 1}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Forgotten cards — the regrade shelf */}
+      {missedCards.length > 0 && (
+        <div style={{ border: `1px solid ${hexToRgba(COLORS.danger, 0.35)}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.danger }}>FORGOTTEN — REGRADE SHELF</span>
+            <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{missedCards.length} CARDS</span>
+          </div>
+          {missedCards.map(c => (
+            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <span style={subjectDot(c.subject)} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.front}</div>
+                <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 2 }}>{c.subject} · missed {c.missed}{lastMissOf(c) ? ` · last forgotten ${lastMissOf(c)}` : ""} · interval {(c.interval || 0)}d</div>
+              </div>
+              <button onClick={() => makeDueNow(c.id)} style={{ padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontSize: 9, letterSpacing: "0.1em", fontFamily: FONTS.mono, background: `${COLORS.danger}14`, border: `1px solid ${hexToRgba(COLORS.danger, 0.4)}`, color: COLORS.danger }}>RE-STUDY NOW</button>
+            </div>
+          ))}
+        </div>
       )}
 
-      <Card title="Add a card">
+      {/* Review stage */}
+      {queue ? (
+        <div style={{ border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.35)}`, borderRadius: RADIUS.card, overflow: "hidden", background: `linear-gradient(168deg, ${COLORS.glassFillStrong}, ${COLORS.glassFill})` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.accentFocus }}>REVIEW SESSION</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className="num" style={{ fontSize: 10.5, color: COLORS.faint }}>{fmtClock(elapsed)}</span>
+              <span className="num" style={{ fontSize: 10.5, color: COLORS.faint }}>{qi + 1} / {queue.length}</span>
+              <button onClick={() => setFocus(!focus)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 6, cursor: "pointer", fontSize: 8.5, letterSpacing: "0.12em", fontFamily: FONTS.mono, background: focus ? hexToRgba(COLORS.accentFocus, 0.16) : "transparent", border: `1px solid ${focus ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`, color: focus ? COLORS.accentFocus : COLORS.faint }}>
+                <Maximize2 size={10} /> FOCUS
+              </button>
+            </div>
+          </div>
+          {flipCard(currentCard?.subject, currentCard?.reps, currentCard?.front, currentCard?.back)}
+          <div style={{ padding: "0 16px 14px" }}>
+            {!revealed ? (
+              <button onClick={() => setRevealed(true)} style={{ width: "100%", padding: "11px 0", borderRadius: RADIUS.control, cursor: "pointer", background: `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 26)})`, border: "none", color: "#fff", fontFamily: FONTS.mono, fontSize: 11, letterSpacing: "0.18em", fontWeight: 700, textTransform: "uppercase" }}>
+                Show answer <span style={{ opacity: 0.6 }}>(space)</span>
+              </button>
+            ) : (
+              gradeRail()
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.dim }}>QUEUE</span>
+              <div style={{ display: "flex", gap: 5 }}>
+                {[["all", "All"], ["overdue", "Overdue"], ["today", "Today"], ["next", "Upcoming"]].map(([k, label]) => (
+                  <button key={k} onClick={() => setDueFilter(k)} style={{ padding: "3px 9px", borderRadius: 5, cursor: "pointer", fontSize: 9, letterSpacing: "0.08em", fontFamily: FONTS.mono, background: dueFilter === k ? hexToRgba(COLORS.accentFocus, 0.14) : "transparent", border: `1px solid ${dueFilter === k ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`, color: dueFilter === k ? COLORS.accentFocus : COLORS.faint }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <Select value={reviewSubject} onChange={e => setReviewSubject(e.target.value)} style={{ width: 150 }}>
+              <option value="all">All subjects</option>
+              {extraSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+            </Select>
+          </div>
+
+          <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 13.5, color: COLORS.text, fontWeight: 600 }}>{dueCards.length} card{dueCards.length === 1 ? "" : "s"} ready now</div>
+                <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 2 }}>
+                  {overdue.length > 0 ? `${overdue.length} overdue — these come first. ` : ""}{upcoming.length > 0 ? `${upcoming.length} scheduled inside the week.` : "Next review slot is free until you add a card."}
+                </div>
+              </div>
+              <Btn variant="ink" onClick={startReview} disabled={dueCards.length === 0} style={{ justifyContent: "center", opacity: dueCards.length === 0 ? 0.5 : 1 }}>
+                <Layers size={14} /> {dueCards.length ? `Review ${dueCards.length} now` : "Queue empty"}
+              </Btn>
+            </div>
+            {dueCards.length > 0 && (
+              <div style={{ marginTop: 14, display: "flex", flexDirection: "column" }}>
+                {dueCards.slice(0, 7).map(c => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
+                    <span style={subjectDot(c.subject)} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.front}</div>
+                      <div style={{ fontSize: 10, color: COLORS.faint, marginTop: 2 }}>{c.subject} · due {c.due}</div>
+                    </div>
+                    <span className="num" style={{ fontSize: 9.5, color: COLORS.dim }}>{c.interval}d{rc(c) ? ` · r${rc(c)}` : ""}</span>
+                    <Trash2 size={12} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeCard(c.id)} />
+                  </div>
+                ))}
+                {dueCards.length > 7 && <div style={{ fontSize: 10.5, color: COLORS.faint, padding: "8px 4px 2px" }}>…and {dueCards.length - 7} more in the queue.</div>}
+              </div>
+            )}
+            {dueCards.length === 0 && (
+              <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.6, marginTop: 8 }}>
+                {sessionStats ? `Session done — ${sessionStats.graded} review${sessionStats.graded === 1 ? "" : "s"} graded in ${fmtClock(sessionStats.seconds)}. ` : ""}
+                No reviews due right now. {cards.length === 0 ? "Add your first card below — it enters the queue immediately." : "Every card is ahead of its schedule."}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Focus overlay */}
+      {focus && queue && currentCard && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(7,9,14,0.97)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ width: "min(680px, 100%)", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.accentFocus }}>FOCUS · REVIEW {qi + 1} / {queue.length}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span className="num" style={{ fontSize: 11, color: COLORS.faint }}>{fmtClock(elapsed)}</span>
+                <button onClick={() => setFocus(false)} title="Exit focus (Esc)" style={{ padding: "5px 9px", borderRadius: 6, cursor: "pointer", background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.faint }}><X size={14} /></button>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.35)}`, borderRadius: RADIUS.card, padding: "26px 22px", background: `linear-gradient(168deg, ${COLORS.glassFillStrong}, ${COLORS.glassFill})` }}>
+              {flipCard(currentCard.subject, currentCard.reps, currentCard.front, currentCard.back)}
+              <div style={{ marginTop: 14 }}>
+                {!revealed ? (
+                  <button onClick={() => setRevealed(true)} style={{ width: "100%", padding: "13px 0", borderRadius: RADIUS.control, cursor: "pointer", background: `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 26)})`, border: "none", color: "#fff", fontFamily: FONTS.mono, fontSize: 12, letterSpacing: "0.18em", fontWeight: 700, textTransform: "uppercase" }}>
+                    Show answer <span style={{ opacity: 0.6 }}>(space)</span>
+                  </button>
+                ) : gradeRail()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import / export */}
+      {importOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(7,9,14,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ width: "min(560px, 100%)", border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "18px 20px", background: "rgba(12,15,22,0.98)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span className="sys" style={{ fontSize: 9, letterSpacing: "0.22em", color: COLORS.accentFocus }}>IMPORT CARDS</span>
+              <button onClick={() => setImportOpen(false)} style={{ padding: 4, borderRadius: 5, cursor: "pointer", background: "transparent", border: "none", color: COLORS.faint }}><X size={14} /></button>
+            </div>
+            <textarea value={importText} onChange={e => setImportText(e.target.value)} rows={8} placeholder={"One card per line:\nfront, back, subject\nfront, back\n\nOr paste a JSON array of {front, back, subject}."} style={{ width: "100%", boxSizing: "border-box", background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "10px 12px", color: COLORS.text, fontSize: 12, fontFamily: FONTS.mono, resize: "vertical" }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+              <Btn variant="ghost" onClick={exportDeck}><Download size={13} /> Export JSON</Btn>
+              <Btn variant="ink" onClick={importCards} style={{ justifyContent: "center" }}>Import cards</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add card */}
+      <Card id="recall-add" title="Add a card">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Select value={subject} onChange={e => setSubject(e.target.value)}>
-            {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-          </Select>
-          <textarea placeholder="Front — question or prompt" value={front} onChange={e => setFront(e.target.value)} rows={2} style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
-          <textarea placeholder="Back — answer" value={back} onChange={e => setBack(e.target.value)} rows={2} style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
+          <input list="recall-subjects" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject — pick one or type a new one…" style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body }} />
+          <datalist id="recall-subjects">{extraSubjects.map(s => <option key={s} value={s} />)}</datalist>
+          <textarea placeholder="Front — question or prompt" value={front} onChange={e => setFront(e.target.value)} rows={2} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
+          <textarea placeholder="Back — answer" value={back} onChange={e => setBack(e.target.value)} rows={2} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
           <Btn variant="ink" onClick={addCard} style={{ justifyContent: "center" }}><Plus size={14} /> Add card</Btn>
         </div>
       </Card>
 
-      <Card title={`All cards (${cards.length})`}>
-        {cards.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No cards yet — add your first one above.</div>}
-        {cards.slice().reverse().map(c => (
-          <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
-            <div style={{ flex: 1, fontSize: 12 }}>
-              <div style={{ color: COLORS.text }}>{c.front}</div>
-              <div style={{ color: COLORS.faint, fontSize: 10, marginTop: 2 }}>{c.subject} · due {c.due} · interval {c.interval}d</div>
+      {/* Deck */}
+      <Card title={`Deck (${cards.length})`} right={
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Input value={deckQuery} onChange={e => setDeckQuery(e.target.value)} placeholder="Search deck…" style={{ width: 150 }} />
+          <button onClick={() => setImportOpen(true)} title="Import / export" style={{ padding: "5px 8px", borderRadius: 6, cursor: "pointer", background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.faint }}><Download size={13} /></button>
+        </div>
+      }>
+        {deckList.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No cards match.{cards.length > 0 ? "" : " Add your first card above."}</div>}
+        {deckList.map(c => {
+          const state = c.due < today ? { label: "OVERDUE", tint: COLORS.danger } : c.due === today ? { label: "DUE TODAY", tint: COLORS.warn } : (c.reps || 0) === 0 && !(c.log && c.log.length) ? { label: "NEW", tint: COLORS.done } : { label: "SCHEDULED", tint: COLORS.faint };
+          const open = openId === c.id;
+          return (
+            <div key={c.id}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
+                <span style={subjectDot(c.subject)} />
+                <div style={{ flex: 1, fontSize: 12, minWidth: 0, cursor: "pointer" }} onClick={() => setOpenId(open ? null : c.id)}>
+                  <div style={{ color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.front}</div>
+                  <div style={{ color: COLORS.faint, fontSize: 10, marginTop: 2 }}>
+                    {c.subject} · interval {(c.interval || 0)}d · ease {(c.ease || 2.5).toFixed(2)}{rc(c) ? ` · ${rc(c)} reviews` : ""}{c.missed ? ` · ${c.missed} missed` : ""}{c.lastReviewed ? ` · reviewed ${c.lastReviewed}` : ""}
+                  </div>
+                </div>
+                <span className="sys" style={{ fontSize: 7.5, letterSpacing: "0.12em", color: state.tint, padding: "2px 6px", borderRadius: 4, border: `1px solid ${state.tint}44`, background: `${state.tint}10` }}>{state.label}</span>
+                <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>next {c.due}</span>
+                <button onClick={() => setOpenId(open ? null : c.id)} style={{ padding: "2px 4px", borderRadius: 5, cursor: "pointer", background: "transparent", border: "none", color: COLORS.faint, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s ease-out" }}><ChevronRight size={13} /></button>
+                <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeCard(c.id)} />
+              </div>
+              {open && (
+                <div style={{ padding: "10px 4px 12px 21px", borderBottom: `1px dashed ${COLORS.border}` }}>
+                  <div className="sys" style={{ fontSize: 7.5, letterSpacing: "0.2em", color: COLORS.dim, marginBottom: 8 }}>REVIEW LOG — LAST {Math.min(14, (c.log || []).length) || 0} GRADES</div>
+                  <div style={{ display: "flex", gap: 4, alignItems: "flex-end", minHeight: 26 }}>
+                    {(c.log || []).slice(-14).map((e, i) => (
+                      <div key={i} title={`${e.d} · grade ${["fail", "hard", "good", "easy"][e.g] || e.g}`} style={{ flex: 1, maxWidth: 22, height: `${Math.max(4, (e.iv || 1) * 1.6)}px`, maxHeight: 26, borderRadius: 2, background: [COLORS.danger, COLORS.warn, COLORS.done, COLORS.accentFocus][e.g] || COLORS.faint, opacity: 0.85 }} />
+                    ))}
+                    {!(c.log && c.log.length) && <span style={{ fontSize: 11, color: COLORS.faint }}>No grades yet — this card is waiting for its first review.</span>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", fontSize: 10, color: COLORS.faint, marginTop: 8, lineHeight: 1.8 }}>
+                    <span>Current ease {(c.ease || 2.5).toFixed(2)} · interval {(c.interval || 0)}d · reps {(c.reps || 0)} · last reviewed {c.lastReviewed || "never"}</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeCard(c.id)} />
-          </div>
-        ))}
+          );
+        })}
       </Card>
     </div>
   );
 }
 
-// ---------------- MOCKS ----------------
+function GradeBtn({ label, hot, tint, next, onGrade }) {
+  return (
+    <button onClick={onGrade} style={{
+      padding: "9px 6px", borderRadius: RADIUS.control, cursor: "pointer", border: `1px solid ${tint}44`,
+      background: `${tint}12`, color: tint, fontFamily: FONTS.mono, textAlign: "center", transition: "filter 0.14s ease-out",
+    }}>
+      <div className="sys" style={{ fontSize: 7, opacity: 0.6, letterSpacing: "0.14em", marginBottom: 3 }}>{hot}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: 9.5, opacity: 0.75, marginTop: 2, letterSpacing: "0.06em" }}>{next == null ? "—" : next >= 30 ? `${Math.round(next / 30)} mo` : `${next} d`}</div>
+    </button>
+  );
+}
+
+// ---------------- TESTS / ANALYZE ----------------
+// Every number on this panel is derived from the logged mocks array at
+// render time — nothing is stored as a cached stat, nothing is decorative.
 function Mocks({ mocks, setMocks, profile }) {
   const [name, setName] = useState("");
   const [max, setMax] = useState(300);
   const [total, setTotal] = useState("");
+  const [attempted, setAttempted] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [subjectScores, setSubjectScores] = useState(profile.subjects.map(s => ({ subject: s, obtained: "", max: "" })));
 
-  const addMock = () => {
-    if (!name.trim() || total === "") return;
-    setMocks(prev => [...prev, { id: uid(), date: todayStr(), name: name.trim(), total: parseFloat(total), max: parseFloat(max), subjectScores: subjectScores.map(s => ({ ...s, obtained: parseFloat(s.obtained) || 0, max: parseFloat(s.max) || 0 })) }]);
-    setName(""); setTotal("");
-  };
-  const removeMock = (id) => { if (window.confirm("Delete this mock test record?")) setMocks(prev => prev.filter(m => m.id !== id)); };
+  // Numeric fields reject non-numeric keystrokes at the source.
+  const cleanNum = (v) => String(v).replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1").slice(0, 12);
 
-  const trend = mocks.map((m, i) => ({ name: `T${i + 1}`, score: m.max ? Math.round((m.total / m.max) * 100) : 0 }));
-  const avg = mocks.length ? Math.round(mocks.reduce((a, m) => a + (m.max ? (m.total / m.max) * 100 : 0), 0) / mocks.length) : 0;
-  const best = mocks.length ? Math.round(Math.max(...mocks.map(m => (m.max ? (m.total / m.max) * 100 : 0)))) : 0;
-  const recentTrend = mocks.length >= 2 ? Math.round((mocks[mocks.length - 1].max ? (mocks[mocks.length - 1].total / mocks[mocks.length - 1].max) * 100 : 0)) - Math.round((mocks[mocks.length - 2].max ? (mocks[mocks.length - 2].total / mocks[mocks.length - 2].max) * 100 : 0)) : 0;
+  // Chronological series = log order, defensively sorted by date so old
+  // exports or hand-edited JSON can't scramble the trajectory.
+  const chrono = mocks
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => (a.m.date < b.m.date ? -1 : a.m.date > b.m.date ? 1 : a.i - b.i))
+    .map(x => x.m);
 
+  const pctOf = (m) => (Number(m.max) > 0 && isFinite(Number(m.total)) ? Math.min(100, (Number(m.total) / Number(m.max)) * 100) : null);
+
+  const pcts = chrono.map(pctOf);
+
+  const tests = mocks.length;
+  const validPcts = pcts.filter(p => p !== null);
+  const avg = validPcts.length ? Math.round(validPcts.reduce((a, b) => a + b, 0) / validPcts.length) : 0;
+  const best = validPcts.length ? Math.round(Math.max(...validPcts)) : 0;
+  const trend = tests >= 2 && pcts[pcts.length - 1] !== null && pcts[pcts.length - 2] !== null
+    ? Math.round(pcts[pcts.length - 1]) - Math.round(pcts[pcts.length - 2]) : null;
+  const trendTint = trend === null ? COLORS.faint : trend > 0 ? COLORS.done : trend < 0 ? hexToRgba(COLORS.danger, 0.85) : COLORS.faint;
+
+  // Subject averages use ONLY the tests where that subject was logged, so a
+  // mock without subject marks never drags the average down as a 0.
   const subjectAvg = profile.subjects.map(sub => {
-    // Guard against mocks whose subjectScores is missing (older exports /
-    // hand-edited JSON) — a bare `.find` on undefined would crash the tab.
-    const scores = mocks.map(m => (m.subjectScores || []).find(s => s.subject === sub)).filter(Boolean);
-    const pct = scores.length ? Math.round(scores.reduce((a, s) => a + (s.max ? (s.obtained / s.max) * 100 : 0), 0) / scores.length) : 0;
+    // Both fields must be real numbers — a legacy mock with a max but no
+    // obtained score must not count as a 0%.
+    const rows = mocks.map(m => (m.subjectScores || []).find(s => s.subject === sub))
+      .filter(s => s && s.obtained !== "" && s.obtained != null && Number(s.obtained) > 0 && Number(s.max) > 0);
+    const pct = rows.length
+      ? Math.round(rows.reduce((a, s) => a + (Number(s.obtained) / Number(s.max)) * 100, 0) / rows.length)
+      : null;
     return { subject: sub, pct };
   });
 
+  // Trajectory = actual scored percentages, in log order.
+  const trajectory = chrono.map((m, i) => ({
+    label: (m.name || "Mock").replace(/^(.*?)\s.*$/, "$1"),
+    fullName: m.name || `Mock ${i + 1}`,
+    score: pctOf(m) === null ? 0 : Math.round(pctOf(m)),
+  }));
+
+  // ---- form validation (computed live so the state machine can't lie) ----
+  const totalNum = total.trim() !== "" ? parseFloat(total) : NaN;
+  const maxNum = max !== "" ? parseFloat(max) : NaN;
+  const subErrors = subjectScores.map(s => {
+    const o = s.obtained.trim() !== "" ? parseFloat(s.obtained) : null;
+    const mx = s.max.trim() !== "" ? parseFloat(s.max) : null;
+    if (o !== null && mx === null) return "Max required";
+    if (o !== null && mx !== null && o > mx) return "Can't exceed max";
+    return null;
+  });
+  const subjectWarning = (() => {
+    const filled = subjectScores.filter(s => s.max.trim() !== "");
+    if (filled.length !== profile.subjects.length) return null;
+    const sum = filled.reduce((a, s) => a + Number(s.max), 0);
+    if (filled.length > 0 && !isNaN(maxNum) && Math.round(sum) !== Math.round(maxNum)) {
+      return `Subject max totals ${Math.round(sum)}, doesn't match Total max ${Math.round(maxNum)}`;
+    }
+    return null;
+  })();
+
+  const addMock = () => {
+    setAttempted(true);
+    const nameErr = !name.trim();
+    const totalErr = total.trim() === "" || !isFinite(totalNum);
+    const maxErr = max === "" || !isFinite(maxNum) || maxNum <= 0;
+    const totalVsMax = isFinite(totalNum) && isFinite(maxNum) && totalNum > maxNum;
+    const subErr = subErrors.some(Boolean);
+    if (nameErr || totalErr || maxErr || totalVsMax || subErr) return;
+
+    setMocks(prev => [...prev, {
+      id: uid(),
+      date: todayStr(),
+      name: name.trim(),
+      total: totalNum,
+      max: maxNum,
+      // only subjects with both fields filled are stored — a blank subject
+      // slot stays out of subjectScores so averages never see a phantom 0
+      subjectScores: subjectScores
+        .filter(s => s.obtained.trim() !== "" && s.max.trim() !== "")
+        .map(s => ({ subject: s.subject, obtained: Number(s.obtained) || 0, max: Number(s.max) || 0 })),
+    }]);
+    setName(""); setTotal(""); setMax(300);
+    setSubjectScores(profile.subjects.map(s => ({ subject: s, obtained: "", max: "" })));
+    setAttempted(false);
+    setTimeout(() => document.getElementById("mock-name")?.focus(), 0);
+  };
+  const removeMock = (id) => {
+    if (window.confirm("Delete this mock test record? The stats on this page recompute instantly.")) {
+      setMocks(prev => prev.filter(m => m.id !== id));
+    }
+  };
+
+  const historyRows = chrono.map((m, i) => {
+    const p = pcts[i];
+    const prev = i > 0 ? pcts[i - 1] : null;
+    return {
+      m,
+      pct: p === null ? null : Math.round(p),
+      delta: p !== null && prev !== null ? Math.round(p) - Math.round(prev) : null,
+    };
+  }).reverse();
+  const visibleRows = showAll ? historyRows : historyRows.slice(0, 10);
+
+  const accentBtn = { background: hexToRgba(COLORS.accentFocus, 0.14), border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.45)}`, color: COLORS.accentFocus };
+
+  const TrendTip = ({ active, payload }) => {
+    if (!active || !payload || !payload.length) return null;
+    const p = payload[0].payload;
+    return (
+      <div style={{ background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "6px 10px", boxShadow: elev("e2") }}>
+        <div style={{ fontSize: 11, color: COLORS.dim }}>{p.fullName}</div>
+        <div className="num" style={{ fontSize: 13, color: COLORS.text, marginTop: 2 }}>{p.score}%</div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <PageHead
+        title="Tests"
+        lead="Your mock-test record — scores, subject breakdown and the trajectory they're carving. Every number here is from a test you actually logged."
+        right={(
+          <div className="num" style={{ fontSize: 11, letterSpacing: "0.06em", color: COLORS.faint, marginTop: 26 }}>
+            {mocks.length} LOGGED · AVG {avg}%
+          </div>
+        )}
+      />
+
       <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
         <Stat label="Tests taken" value={mocks.length} />
         <Stat label="Avg score" value={`${avg}%`} />
         <Stat label="Best score" value={`${best}%`} />
-        <Stat label="Recent trend" value={`${recentTrend >= 0 ? "+" : ""}${recentTrend}%`} />
+        <Stat
+          label="Recent trend"
+          value={trend === null
+            ? <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>—<span style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.faint, flexShrink: 0 }} /></span>
+            : <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>{trend >= 0 ? "+" : ""}{trend}%<span style={{ width: 7, height: 7, borderRadius: "50%", background: trendTint, flexShrink: 0 }} /></span>}
+          sub={trend === null ? "Needs 2 tests" : trend > 0 ? "vs previous test" : trend < 0 ? "vs previous test" : "No change"}
+        />
       </div>
 
       <Card title="Performance trajectory">
-        <ResponsiveContainer width="100%" height={160}>
-          <LineChart data={trend}>
-            <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-            <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: 6 }} />
-            <Line type="monotone" dataKey="score" stroke={COLORS.ink} strokeWidth={2} dot={{ r: 3, fill: COLORS.ink }} />
-          </LineChart>
-        </ResponsiveContainer>
+        {mocks.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 4px 6px", flexWrap: "wrap" }}>
+            <EmptyArt variant="track" width={150} height={72} />
+            <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.6, maxWidth: 340 }}>
+              No test history yet.
+              <div style={{ color: COLORS.dim, fontSize: 11.5, marginTop: 3 }}>Log your first mock to start building your performance trajectory — every score after that plots here.</div>
+              <div style={{ marginTop: 10 }}>
+                <Btn variant="ghost" style={accentBtn} onClick={() => document.getElementById("mock-log")?.scrollIntoView({ behavior: "smooth", block: "center" })}><Plus size={14} /> Log your first test</Btn>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={trajectory} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
+              <YAxis tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} width={42} />
+              <Tooltip content={<TrendTip />} />
+              <Line type="monotone" dataKey="score" stroke={COLORS.ink} strokeWidth={2} dot={{ r: 3, fill: COLORS.ink, strokeWidth: 0 }} activeDot={{ r: 5, fill: COLORS.ink, stroke: COLORS.glassFillStrong, strokeWidth: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </Card>
 
       <Card title="Subject-wise average">
-        <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${profile.subjects.length}, 1fr)`, gap: 10 }}>
-          {subjectAvg.map(s => (
-            <div key={s.subject} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: COLORS.dim, marginBottom: 6 }}>{s.subject}</div>
-              <div style={{ height: 70, background: COLORS.panel2, borderRadius: 6, display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
-                <div style={{ width: "100%", height: `${s.pct}%`, background: COLORS.ink }} />
+        {mocks.length === 0 ? (
+          <div style={{ fontSize: 12, color: COLORS.faint, padding: "10px 4px 14px", lineHeight: 1.6 }}>
+            No subject data yet — once tests are logged, each subject's average will show here as its own bar.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {subjectAvg.map(s => (
+              <div key={s.subject}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: COLORS.text }}>{s.subject}</span>
+                  <span className="num" style={{ fontSize: 13, color: s.pct === null ? COLORS.faint : COLORS.text }}>{s.pct === null ? "—" : `${s.pct}%`}</span>
+                </div>
+                <div className="lg-progress" style={{ height: 6 }}>
+                  <div className="lg-progress-fill" style={{ width: s.pct === null ? "0%" : `${Math.min(100, s.pct)}%`, "--lg-w": `${s.pct === null ? 0 : Math.min(100, s.pct)}%`, height: "100%", borderRadius: 3 }} />
+                </div>
               </div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: 13, marginTop: 6 }}>{s.pct}%</div>
-            </div>
-          ))}
-        </div>
+            ))}
+            {subjectAvg.every(s => s.pct === null) && (
+              <div style={{ fontSize: 11.5, color: COLORS.faint, lineHeight: 1.6 }}>
+                None of your tests logged subject marks yet — log marks next to any subject to see its average here.
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
-      <Card title="Log a mock test">
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-          <Input placeholder="Test name (e.g. FT-12)" value={name} onChange={e => setName(e.target.value)} />
-          <Input placeholder="Total scored" type="number" value={total} onChange={e => setTotal(e.target.value)} />
-          <Input placeholder="Max marks" type="number" value={max} onChange={e => setMax(e.target.value)} />
+      <Card id="mock-log" title="Log a mock test">
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 4 }}>
+          <div>
+            <Input id="mock-name" placeholder="Test name (e.g. FT-12)" value={name} onChange={e => setName(e.target.value)} />
+            {attempted && !name.trim() && <div style={{ fontSize: 11, color: hexToRgba(COLORS.danger, 0.85), marginTop: 4 }}>Enter a test name</div>}
+          </div>
+          <div>
+            <Input placeholder="Total scored" type="number" inputMode="decimal" value={total} onChange={e => setTotal(cleanNum(e.target.value))} />
+            {attempted && (total.trim() === "" || !isFinite(totalNum)) && <div style={{ fontSize: 11, color: hexToRgba(COLORS.danger, 0.85), marginTop: 4 }}>Required</div>}
+            {attempted && isFinite(totalNum) && isFinite(maxNum) && totalNum > maxNum && <div style={{ fontSize: 11, color: hexToRgba(COLORS.danger, 0.85), marginTop: 4 }}>Can't exceed max</div>}
+          </div>
+          <div>
+            <Input placeholder="Max marks" type="number" inputMode="decimal" value={max} onChange={e => setMax(cleanNum(e.target.value))} />
+            {attempted && (max === "" || !isFinite(maxNum) || maxNum <= 0) && <div style={{ fontSize: 11, color: hexToRgba(COLORS.danger, 0.85), marginTop: 4 }}>Required</div>}
+          </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${profile.subjects.length}, 1fr)`, gap: 8, marginBottom: 12 }}>
+
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${profile.subjects.length}, 1fr)`, gap: 8, margin: "10px 0 2px" }}>
           {subjectScores.map((s, i) => (
-            <div key={s.subject} style={{ display: "flex", gap: 4 }}>
-              <Input placeholder={`${s.subject} obt.`} type="number" value={s.obtained} onChange={e => setSubjectScores(prev => prev.map((p, j) => j === i ? { ...p, obtained: e.target.value } : p))} />
-              <Input placeholder="max" type="number" value={s.max} onChange={e => setSubjectScores(prev => prev.map((p, j) => j === i ? { ...p, max: e.target.value } : p))} />
+            <div key={s.subject} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, margin: "0 2px 3px" }}>{s.subject}</div>
+              <div style={{ display: "flex", gap: 4, width: "100%" }}>
+                <Input placeholder="obtained" type="number" inputMode="decimal" value={s.obtained} onChange={e => setSubjectScores(prev => prev.map((p, j) => j === i ? { ...p, obtained: cleanNum(e.target.value) } : p))} />
+                <Input placeholder="max" type="number" inputMode="decimal" value={s.max} onChange={e => setSubjectScores(prev => prev.map((p, j) => j === i ? { ...p, max: cleanNum(e.target.value) } : p))} />
+              </div>
+              {attempted && subErrors[i] && <div style={{ fontSize: 11, color: hexToRgba(COLORS.danger, 0.85), marginTop: 4 }}>{subErrors[i]}</div>}
             </div>
           ))}
         </div>
-        <Btn variant="ink" onClick={addMock}><Plus size={14} /> Log mock</Btn>
+
+        {subjectWarning && <div style={{ fontSize: 11, color: COLORS.warn, marginTop: 10, lineHeight: 1.5 }}>{subjectWarning} — logging anyway.</div>}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 14 }}>
+          <Btn variant="ghost" style={accentBtn} onClick={addMock}><Plus size={14} /> Log mock</Btn>
+          <div style={{ fontSize: 11, color: COLORS.faint }}>Optional subject rows: fill both obtained + max to track a subject.</div>
+        </div>
       </Card>
 
       <Card title="Test history">
-        {mocks.slice().reverse().map(m => (
-          <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-            <div>{m.name} <span style={{ color: COLORS.faint, fontSize: 11 }}>· {m.date}</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ fontFamily: FONTS.mono, color: COLORS.ink }}>{m.total}/{m.max}</div>
-              <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeMock(m.id)} />
-            </div>
-          </div>
-        ))}
-        {mocks.length === 0 && (
+        {mocks.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: SPACE.sm, padding: "8px 0 4px" }}>
             <EmptyArt variant="ring" width={116} height={64} />
             <div style={{ fontSize: 12, color: COLORS.faint }}>No mocks logged yet — log your first test above.</div>
           </div>
+        ) : (
+          <>
+            {visibleRows.map(r => (
+              <div key={r.m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 4px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+                <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.name} <span style={{ color: COLORS.faint, fontSize: 11 }}>· {r.m.date}</span></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  <div className="num" style={{ fontSize: 12, color: COLORS.text }}>{r.pct}%</div>
+                  {r.delta !== null && r.delta !== 0 && (
+                    <div className="num" style={{ fontSize: 11, color: r.delta > 0 ? COLORS.done : hexToRgba(COLORS.danger, 0.85) }}>{r.delta > 0 ? "+" : ""}{r.delta}%</div>
+                  )}
+                  <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeMock(r.m.id)} />
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </Card>
     </div>
@@ -2651,7 +4326,7 @@ function Mocks({ mocks, setMocks, profile }) {
 
 // ---------------- ERROR LOG ----------------
 const ERROR_TYPES = ["Conceptual", "Calculative", "Silly mistake", "Formula", "Misread question"];
-const ERROR_COLORS = { Conceptual: "#C1443D", Calculative: "#C1592F", "Silly mistake": "#C98A3E", Formula: "#6FA287", "Misread question": "#6E8CA0" };
+const ERROR_COLORS = { Conceptual: "#FF6B6B", Calculative: "#FF8A65", "Silly mistake": "#FFB26B", Formula: "#5BE6A8", "Misread question": "#7C9BFF" };
 
 function ErrorLog({ errors, setErrors, mocks }) {
   const [topic, setTopic] = useState("");
@@ -2668,12 +4343,40 @@ function ErrorLog({ errors, setErrors, mocks }) {
 
   const profileData = ERROR_TYPES.map(t => ({ name: t, value: errors.filter(e => e.type === t).length })).filter(d => d.value > 0);
 
+  // Ledger rollups — counts, kinds and recurrences derived from the stored
+  // mistake rows themselves, nothing invented.
+  const typeCounts = {};
+  errors.forEach(e => { typeCounts[e.type] = (typeCounts[e.type] || 0) + 1; });
+  const leadingType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
+  const topicCounts = {};
+  errors.forEach(e => { if (e.topic) topicCounts[e.topic] = (topicCounts[e.topic] || 0) + 1; });
+  const recurring = Object.entries(topicCounts).filter(([, c]) => c >= 2);
+  const linkedN = errors.filter(e => e.mockId).length;
+  const mockName = (id) => { const m = mocks.find(x => x.id === id); return m ? m.name : null; };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <PageHead
+        title="Mistakes"
+        lead="The mistake ledger — every mark you dropped, typed and dated, so the pattern becomes visible. Review what you log, don't bury it."
+        right={(
+          <div className="num" style={{ fontSize: 11, letterSpacing: "0.06em", color: COLORS.faint, marginTop: 26 }}>
+            {errors.length} LOGGED{leadingType ? ` · MOSTLY ${leadingType[0].toUpperCase()}` : ""}
+          </div>
+        )}
+      />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <MiniStat k="Total logged" v={errors.length} sub={errors.length ? "Across all sessions" : "Nothing recorded yet"} tint={errors.length > 0 ? COLORS.danger : undefined} />
+        <MiniStat k="Recurring topics" v={recurring.length} sub={recurring.length ? recurring.slice(0, 2).map(([t]) => t).join(" · ") : "No repeats yet"} tint={recurring.length > 0 ? COLORS.warn : undefined} />
+        <MiniStat k="Linked to mocks" v={linkedN} sub={mocks.length ? `${mocks.length} mock${mocks.length === 1 ? "" : "s"} to link against` : "No mocks logged yet"} />
+        <MiniStat k="Most common kind" v={leadingType ? leadingType[0] : "—"} sub={leadingType ? `${leadingType[1]} instance${leadingType[1] === 1 ? "" : "s"}` : "Log one to find out"} />
+      </div>
+
       <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Card title="Log a mistake">
+        <Card id="mistake-log" title="Log a mistake">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Input placeholder="Topic / chapter" value={topic} onChange={e => setTopic(e.target.value)} />
+            <Input placeholder="Topic / chapter" value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === "Enter" && add()} />
             <Select value={type} onChange={e => setType(e.target.value)}>
               {ERROR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </Select>
@@ -2681,38 +4384,62 @@ function ErrorLog({ errors, setErrors, mocks }) {
               <option value="">No linked mock</option>
               {mocks.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </Select>
-            <textarea placeholder="What went wrong, and how to fix it next time…" value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
+            <textarea placeholder="What went wrong, and how to fix it next time…" value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, resize: "vertical" }} />
             <Btn variant="ink" onClick={add} style={{ justifyContent: "center" }}><Plus size={14} /> Log mistake</Btn>
           </div>
         </Card>
 
         <Card title="Mistake profile">
           {profileData.length === 0 ? (
-            <div style={{ fontSize: 12, color: COLORS.faint }}>Log your first mistake to see your profile.</div>
+            <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.6 }}>
+              Log your first mistake to see your profile — the chart breaks down which kind of mark drops the most.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie data={profileData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name} (${value})`} labelLine={false}>
                   {profileData.map((d, i) => <Cell key={i} fill={hexToRgba(ERROR_COLORS[d.name], 0.3)} stroke={ERROR_COLORS[d.name]} strokeWidth={1.2} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: COLORS.panel2, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: 6 }} />
+                <Tooltip contentStyle={{ background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, fontSize: 12, borderRadius: 6 }} />
               </PieChart>
             </ResponsiveContainer>
           )}
         </Card>
       </div>
 
-      <Card title="Recent errors">
-        {errors.slice().reverse().map(e => (
-          <div key={e.id} style={{ padding: "10px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 13 }}>{e.topic} <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, background: `${ERROR_COLORS[e.type]}22`, color: ERROR_COLORS[e.type], marginLeft: 6 }}>{e.type}</span></div>
-              <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => remove(e.id)} />
-            </div>
-            {e.description && <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 4 }}>{e.description}</div>}
-          </div>
-        ))}
-        {errors.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint }}>No errors logged yet — that's either great discipline or you haven't started reviewing mocks.</div>}
+      <Card title={`Mistake ledger${errors.length ? ` — ${errors.length}` : ""}`} right={<span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em" }}>TOPIC · KIND · DATE · SOURCE</span>}>
+        {errors.length === 0 ? (
+          <EmptyState icon={AlertTriangle} message="No mistakes logged yet. Log mistakes from your tests and study sessions to identify patterns — the ledger stays quiet until you feed it." action={
+            <Btn variant="ink" onClick={() => document.getElementById("mistake-log")?.scrollIntoView({ behavior: "smooth", block: "center" })}><Plus size={14} /> Log your first mistake</Btn>
+          } />
+        ) : (
+          errors.slice().reverse().map(e => {
+            const src = mockName(e.mockId);
+            return (
+              <div key={e.id} className="lg-row" style={{ padding: "11px 4px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: `${ERROR_COLORS[e.type]}22`, color: ERROR_COLORS[e.type], flexShrink: 0, marginTop: 2, fontWeight: 600 }}>{e.type}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, color: COLORS.text }}>{e.topic}</span>
+                    {recurring.some(([t]) => t === e.topic) && (
+                      <span title={`Shown ${topicCounts[e.topic]} times in the ledger`} style={{ fontSize: 9.5, letterSpacing: "0.1em", color: COLORS.warn, background: `${COLORS.warn}1c`, border: `1px solid ${COLORS.warn}44`, borderRadius: 4, padding: "1px 6px" }}>
+                        ×{topicCounts[e.topic]} RECURRING
+                      </span>
+                    )}
+                    <span className="num" style={{ fontSize: 9, color: COLORS.faint, letterSpacing: "0.08em" }}>{e.date}</span>
+                    {src && (
+                      <span style={{ fontSize: 9.5, color: COLORS.ink, background: `${COLORS.ink}14`, border: `1px solid ${COLORS.ink}33`, borderRadius: 4, padding: "1px 6px" }}>
+                        {src}
+                      </span>
+                    )}
+                  </div>
+                  {e.description && <div style={{ fontSize: 11.5, color: COLORS.dim, marginTop: 4, lineHeight: 1.5 }}>{e.description}</div>}
+                </div>
+                <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer", flexShrink: 0, marginTop: 4 }} onClick={() => remove(e.id)} />
+              </div>
+            );
+          })
+        )}
       </Card>
     </div>
   );
@@ -3131,7 +4858,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
         ) : (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {streakLeaders.map((p, i) => (
-              <div key={p.code} style={{ ...row(8), padding: "8px 12px", borderRadius: RADIUS.control, background: COLORS.panel2, border: `1px solid ${COLORS.border}` }}>
+              <div key={p.code} style={{ ...row(8), padding: "8px 12px", borderRadius: RADIUS.control, background: COLORS.glassFill, border: `1px solid ${COLORS.border}` }}>
                 <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: i === 0 ? COLORS.warn : COLORS.faint, fontWeight: 600 }}>#{i + 1}</span>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>{seatName(p.name)}</span>
                 <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.warn, fontWeight: 600 }}>{p.streak}d</span>
@@ -3173,31 +4900,33 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
 }
 
 // ---------------- SETTINGS ----------------
-function SettingsTab({ profile, setProfile, data, setters, settings, setSettings, onResetFloatPosition }) {
+const SETTINGS_CATS = [
+  { id: "profile", label: "Profile" },
+  { id: "study", label: "Study Preferences" },
+  { id: "notify", label: "Notifications" },
+  { id: "appearance", label: "Appearance" },
+  { id: "sync", label: "Data & Sync" },
+  { id: "account", label: "Account" },
+  { id: "danger", label: "Danger Zone" },
+];
+
+function SettingsTab({ profile, setProfile, data, setters, settings, setSettings, onResetFloatPosition, email, onSignOut, onSync, onWipeNow }) {
+  const [cat, setCat] = useState("profile");
   const [importError, setImportError] = useState("");
   const [importOk, setImportOk] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [syncedFlash, setSyncedFlash] = useState(false);
+  const [confirm, setConfirm] = useState(null); // "reset" | "delete" | null
+  const [subjMsg, setSubjMsg] = useState("");
+  const [doneMsg, setDoneMsg] = useState("");
+  const [newSubj, setNewSubj] = useState("");
 
   const copyText = (text, done) => { navigator.clipboard?.writeText(text); done(true); setTimeout(() => done(false), 1500); };
 
   const daysLeft = profile.targetDate ? daysBetween(new Date(), profile.targetDate) : null;
   const initials = (profile.name || "")
-    .replace(/\(.*?\)/g, "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0])
-    .join("")
-    .toUpperCase() || "?";
-
-  const previewFont = (t) => (FONT_PRESETS[t.font] || FONT_PRESETS.ledger).display;
-
-  const Chip = ({ icon: Icon }) => (
-    <div style={{ ...center(), width: 22, height: 22, borderRadius: 6, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, flexShrink: 0 }}>
-      <Icon size={11} color={COLORS.ink} />
-    </div>
-  );
+    .replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2)
+    .map(w => w[0]).join("").toUpperCase() || "?";
 
   const exportData = () => {
     const payload = { ...data, peers: data.peers || [], settings };
@@ -3219,8 +4948,15 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
       try { parsed = JSON.parse(reader.result); } catch (err) { setImportError("That file isn't valid JSON."); return; }
       if (!parsed || typeof parsed !== "object") { setImportError("Unrecognized file format."); return; }
       if (!window.confirm("Importing will overwrite your current data with the contents of this file. Continue?")) return;
-      if (parsed.profile) setProfile(parsed.profile);
-      if (Array.isArray(parsed.syllabus) === false && parsed.syllabus) setters.setSyllabus(parsed.syllabus);
+      // Normalize what the app itself normalizes on load — an old theme id or
+      // missing subjects array must not render a broken state.
+      if (parsed.settings && typeof parsed.settings === "object") {
+        setSettings({ ...parsed.settings, theme: normalizeTheme(parsed.settings.theme) });
+      }
+      if (parsed.profile) {
+        setProfile(Array.isArray(parsed.profile.subjects) ? parsed.profile : { ...parsed.profile, subjects: Array.isArray(parsed.profile.subjects) ? parsed.profile.subjects : [] });
+      }
+      if (parsed.syllabus && typeof parsed.syllabus === "object" && !Array.isArray(parsed.syllabus)) setters.setSyllabus(parsed.syllabus);
       if (Array.isArray(parsed.tasks)) setters.setTasks(parsed.tasks);
       if (Array.isArray(parsed.sessions)) setters.setSessions(parsed.sessions);
       if (Array.isArray(parsed.mocks)) setters.setMocks(parsed.mocks);
@@ -3228,7 +4964,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
       if (Array.isArray(parsed.dpp)) setters.setDpp(parsed.dpp);
       if (Array.isArray(parsed.cards)) setters.setCards(parsed.cards);
       if (Array.isArray(parsed.peers)) setters.setPeers(parsed.peers);
-      if (parsed.settings && typeof parsed.settings === "object") setSettings(parsed.settings);
+      if (Array.isArray(parsed.unlockedBadges) && setters.setUnlockedBadges) setters.setUnlockedBadges(parsed.unlockedBadges);
       setImportOk(true);
       setTimeout(() => setImportOk(false), 4000);
     };
@@ -3236,168 +4972,371 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
     reader.readAsText(file);
   };
 
+  // Single compact switch, reused by every settings toggle.
+  const Toggle = ({ checked, onChange }) => (
+    <label className="lg-switch" style={{ position: "relative", display: "inline-block", width: 40, height: 22, flexShrink: 0, cursor: "pointer" }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ opacity: 0, width: 0, height: 0, position: "absolute" }} />
+      <span style={{ position: "absolute", inset: 0, borderRadius: 999, background: checked ? COLORS.ink : COLORS.panel2, border: checked ? "1px solid transparent" : `1px solid ${COLORS.border}`, boxShadow: checked ? "inset 0 1px 0 rgba(255,255,255,0.2)" : "inset 0 1px 2px rgba(0,0,0,0.3)", transition: "background 0.16s ease-out, border-color 0.16s ease-out" }} />
+      <span style={{ position: "absolute", top: 3, left: checked ? 23 : 3, width: 14, height: 14, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.35)", transition: "left 0.18s cubic-bezier(0.2,0.8,0.2,1)" }} />
+    </label>
+  );
+
+  // Row + panel primitives — same language as the rest of the app.
+  const Row = ({ title, sub, children, warn, first, style }) => (
+    <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 18px", flexWrap: "wrap", borderTop: first ? "none" : `1px solid ${COLORS.border}`, ...style }}>
+      <div style={{ flex: "1 1 200px", minWidth: 200 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: warn ? hexToRgba(COLORS.danger, 0.9) : COLORS.text }}>{title}</div>
+        {sub && <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2, lineHeight: 1.5, maxWidth: 440 }}>{sub}</div>}
+      </div>
+      {children}
+    </div>
+  );
+
+  const Panel = ({ title, sub, children, danger }) => (
+    <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${danger ? hexToRgba(COLORS.danger, 0.24) : COLORS.border}`, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+        <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.22em", color: danger ? hexToRgba(COLORS.danger, 0.9) : COLORS.dim }}>{title}</span>
+        {sub && <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>{sub}</span>}
+      </div>
+      {children}
+    </div>
+  );
+
+  // Subject list — same chip language as the Coverage tabs, plus reorder.
+  const moveSubject = (i, dir) => {
+    const next = [...profile.subjects];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setProfile({ ...profile, subjects: next });
+  };
+  const removeSubject = (i) => {
+    if (!profile.subjects || profile.subjects.length <= 1) return;
+    const gone = profile.subjects[i];
+    setProfile({ ...profile, subjects: profile.subjects.filter((_, k) => k !== i) });
+    // Drop that subject's chapters too — otherwise the orphaned syllabus
+    // chapters keep inflating overall coverage and XP with rows the user
+    // can no longer see or edit.
+    setters.setSyllabus(prev => {
+      const next = { ...prev };
+      delete next[gone];
+      return next;
+    });
+  };
+  const addSubject = () => {
+    const s = newSubj.trim();
+    if (!s) { return; }
+    if ((profile.subjects || []).some(x => x.toLowerCase() === s.toLowerCase())) { setSubjMsg("That subject is already on the list."); return; }
+    setProfile({ ...profile, subjects: [...(profile.subjects || []), s] });
+    setNewSubj("");
+    setSubjMsg("");
+  };
+
+  const syncNow = async () => {
+    try { if (onSync) await onSync(); setSyncedFlash(true); setTimeout(() => setSyncedFlash(false), 2600); }
+    catch (e) { setSyncedFlash(false); setDoneMsg("Sync failed — check your connection and try again."); }
+  };
+
+  const wipeStudyData = () => {
+    setters.setSyllabus({});
+    setters.setTasks([]);
+    setters.setSessions([]);
+    setters.setMocks([]);
+    setters.setErrors([]);
+    setters.setDpp([]);
+    setters.setCards([]);
+    setters.setPeers([]);
+    if (setters.setUnlockedBadges) setters.setUnlockedBadges([]);
+  };
+  const resetAll = () => { wipeStudyData(); setConfirm(null); setDoneMsg("Progress reset — Ledger is back to a clean workspace."); };
+  const deleteEverything = () => { wipeStudyData(); if (onWipeNow) onWipeNow(); setConfirm(null); onSignOut(); };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 640 }}>
+    <div>
+      <PageHead
+        title="Settings"
+        lead="Tune Ledger for the way you study — goals, subjects, reminders, sync and your account. Every change saves the moment you make it."
+      />
 
-      {/* IDENTITY STRIP — read-only snapshot of real profile data */}
-      <div style={{ position: "relative", overflow: "hidden", borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, background: `radial-gradient(560px 180px at 10% -40%, ${hexToRgba(COLORS.ink, 0.1)}, transparent 66%), linear-gradient(165deg, ${hexToRgba(COLORS.panel, 0.9)}, ${hexToRgba(COLORS.panel2, 0.74)})`, backdropFilter: `blur(26px) saturate(1.3)`, WebkitBackdropFilter: `blur(26px) saturate(1.3)`, boxShadow: elev("e3"), padding: "16px 18px" }}>
-        <div style={{ position: "absolute", right: -38, top: -52, width: 180, height: 180, borderRadius: "50%", background: hexToRgba(COLORS.ink, 0.05) }} />
-        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ ...center(), width: 46, height: 46, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(150deg, ${hexToRgba(COLORS.ink, 0.2)}, ${COLORS.panel2})`, border: `1px solid ${hexToRgba(COLORS.ink, 0.45)}`, boxShadow: `0 2px 12px ${hexToRgba(COLORS.ink, 0.3)}` }}>
-            <span style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 700, color: COLORS.text }}>{initials}</span>
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontFamily: FONTS.display, fontSize: 16, fontWeight: 700, color: COLORS.text, lineHeight: 1.2 }}>{profile.name || "Study partner"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 3, fontSize: 11, color: COLORS.faint }}>
-              <span>{profile.exam || "Prep campaign"}</span>
-              {profile.exam && (
-                <>
-                  <span style={{ width: 3, height: 3, borderRadius: "50%", background: COLORS.border }} />
-                  <span style={{ fontFamily: FONTS.mono, fontWeight: 600, color: daysLeft !== null && daysLeft <= 0 ? COLORS.ink : COLORS.dim }}>
-                    {daysLeft === null ? "no date yet" : daysLeft > 0 ? `D-${daysLeft}` : daysLeft === 0 ? "D-day" : `D+${-1 * daysLeft}`}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>Your code</div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: 15, letterSpacing: "0.14em", fontWeight: 600, color: COLORS.text, marginTop: 2 }}>{profile.code}</div>
-            </div>
-            <Btn variant="ghost" style={{ padding: "5px 9px", fontSize: 11 }} onClick={() => copyText(profile.code, setCopied)}>
-              <Copy size={11} /> {copied ? "Copied" : "Copy"}
-            </Btn>
-          </div>
-        </div>
-      </div>
-      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <Chip icon={Target} />
-          <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Profile &amp; prep plan</span>
-          <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>Shown in your header</span>
-        </div>
-        <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", flexWrap: "wrap" }}>
-          <div style={{ width: "100%", maxWidth: 300 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>Display name</div>
-            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2 }}>How you appear in your circle.</div>
-          </div>
-          <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 180 }} />
-        </div>
-        <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", flexWrap: "wrap", borderTop: `1px solid ${COLORS.border}` }}>
-          <div style={{ width: "100%", maxWidth: 300 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>Target date</div>
-            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2 }}>
-              {daysLeft === null ? "Set a date and the countdown runs from here." : daysLeft === 0 ? "Exam day is today." : daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to go.` : `${-1 * daysLeft} days since — revise your goals?`}
-            </div>
-          </div>
-          <Input type="date" value={profile.targetDate} onChange={e => setProfile({ ...profile, targetDate: e.target.value })} style={{ flex: "1 1 200px", minWidth: 180 }} />
-        </div>
-      </div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 22, flexWrap: "wrap" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 2px 0" }}>
-        <Chip icon={Layers} />
-        <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Appearance</span>
-        <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>One design, two rooms</span>
-      </div>
-      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "14px 16px" }}>
-        <div style={{ fontSize: 11, color: COLORS.faint, lineHeight: 1.5, marginBottom: 12 }}>One Glass design system in two moods — same surfaces, typography and accent, just light or dark. Picking either repaints the whole app.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-          {Object.entries(THEME_PRESETS).map(([id, t]) => {
-            const active = settings.theme === id;
-            const preview = previewFont(t);
-            return (
-              <div
-                key={id}
-                role="button"
-                tabIndex={0}
-                aria-pressed={active}
-                aria-label={`Use the ${t.label} theme`}
-                className="lg-card lg-card-interactive"
-                onClick={() => setSettings(s => ({ ...s, theme: id }))}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSettings(s => ({ ...s, theme: id })); } }}
-                style={{ borderRadius: RADIUS.control, padding: 10, border: `1px solid ${active ? t.accent : t.border}`, background: `linear-gradient(170deg, ${t.panel}, ${t.panel2})`, boxShadow: active ? `0 0 0 2px ${hexToRgba(t.accent, 0.35)}, 0 14px 28px -16px ${hexToRgba(t.accent, 0.7)}` : undefined }}
-              >
-                <div style={{ border: `1px solid ${t.border}`, background: t.bg, borderRadius: 7, padding: "8px 9px", marginBottom: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 7 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 3, background: t.accent, boxShadow: `0 0 6px ${hexToRgba(t.accent, 0.8)}` }} />
-                    <span style={{ width: "46%", height: 3, borderRadius: 2, background: t.dim }} />
-                  </div>
-                  <div style={{ fontFamily: preview, fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.15 }}>Aa — {t.label}</div>
-                  <div style={{ marginTop: 8, height: 3, borderRadius: 2, background: t.border }} />
-                  <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: t.border, width: "62%" }} />
-                  <div style={{ marginTop: 8, height: 4, borderRadius: 2, width: "76%", background: `linear-gradient(90deg, ${t.accent}, ${hexToRgba(t.accent, 0.25)})` }} />
+        {/* In-page category nav — compact vertical list, 2px accent bar */}
+        <nav className="lg-settings-nav" style={{ width: 196, flexShrink: 0 }} aria-label="Settings sections">
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {SETTINGS_CATS.map(c => {
+              const active = cat === c.id;
+              return (
+                <button key={c.id} className="lg-settings-item lg-row" onClick={() => { setCat(c.id); setDoneMsg(""); }}
+                  aria-current={active ? "true" : undefined}
+                  style={{
+                    position: "relative", display: "flex", alignItems: "center",
+                    width: "100%", padding: "9px 10px 9px 16px", borderRadius: 7,
+                    border: "none", background: "transparent", cursor: "pointer",
+                    fontFamily: FONTS.body, fontSize: 12.5, textAlign: "left",
+                    color: active ? COLORS.text : COLORS.faint, fontWeight: active ? 600 : 500,
+                  }}>
+                  {active && <span style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", width: 2, height: 16, borderRadius: 999, background: `linear-gradient(180deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 32)})` }} />}
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* Category panels */}
+        <div style={{ flex: "1 1 440px", maxWidth: 720, minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {cat === "profile" && (
+            <Panel title="Identity" sub="Shown across your app">
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", flexWrap: "wrap" }}>
+                <div style={{ ...center(), width: 46, height: 46, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(150deg, ${hexToRgba(COLORS.ink, 0.22)}, ${COLORS.panel2})`, border: `1px solid ${hexToRgba(COLORS.ink, 0.45)}`, boxShadow: `0 2px 10px ${hexToRgba(COLORS.ink, 0.18)}` }}>
+                  <span style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 700, color: COLORS.text }}>{initials}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{t.label}</span>
-                  {active && (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700, color: t.accent }}>
-                      <CheckCircle2 size={11} /> Active
-                    </span>
-                  )}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, color: COLORS.text, lineHeight: 1.2 }}>{profile.name || "Study partner"}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 3, fontSize: 11, color: COLORS.faint }}>
+                    <span>{profile.exam || "Prep campaign"}</span>
+                    {profile.exam && (
+                      <>
+                        <span style={{ width: 3, height: 3, borderRadius: "50%", background: COLORS.border }} />
+                        <span className="num" style={{ fontWeight: 600, color: daysLeft !== null && daysLeft <= 0 ? COLORS.ink : COLORS.dim }}>
+                          {daysLeft === null ? "no date yet" : daysLeft > 0 ? `D-${daysLeft}` : daysLeft === 0 ? "D-day" : `D+${-daysLeft}`}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 8.5, letterSpacing: "0.16em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>Your code</div>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: 14, letterSpacing: "0.14em", fontWeight: 600, color: COLORS.text, marginTop: 2 }}>{profile.code}</div>
+                  </div>
+                  <Btn variant="ghost" style={{ padding: "5px 9px", fontSize: 11 }} onClick={() => copyText(profile.code, setCopied)}>
+                    <Copy size={11} /> {copied ? "Copied" : "Copy"}
+                  </Btn>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+              <Row title="Display name" sub="How you appear in your circle.">
+                <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
+              </Row>
+              <Row title="Target exam" sub="The plan your syllabus starts from.">
+                <Select value={profile.exam || "JEE Main"} onChange={e => setProfile({ ...profile, exam: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }}>
+                  {Object.keys(EXAM_SUBJECTS).map(k => <option key={k} value={k}>{k === "Both" ? "JEE + NEET" : k}</option>)}
+                </Select>
+              </Row>
+              <Row title="Target date" sub={daysLeft === null ? "Set a date and the countdown runs from there." : daysLeft === 0 ? "Exam day is today." : daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to go.` : `${-daysLeft} days since — revise your goals?`}>
+                <Input type="date" value={profile.targetDate} onChange={e => setProfile({ ...profile, targetDate: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
+              </Row>
+            </Panel>
+          )}
 
-      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <Chip icon={TimerIcon} />
-          <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Focus timer</span>
-          <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>Optional floating badge</span>
-        </div>
-        <div className="lg-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 18px", flexWrap: "wrap" }}>
-          <div style={{ minWidth: 200, flex: 1 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>Floating timer badge</div>
-            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2, maxWidth: 380, lineHeight: 1.5 }}>Shows a small draggable badge with the running time when you leave Deep Work for another section of Ledger.</div>
-          </div>
-          <label style={{ position: "relative", display: "inline-block", width: 40, height: 22, flexShrink: 0, cursor: "pointer" }}>
-            <input type="checkbox" checked={settings.floatingTimer !== false} onChange={e => setSettings(s => ({ ...s, floatingTimer: e.target.checked }))} style={{ opacity: 0, width: 0, height: 0 }} />
-            <span style={{ position: "absolute", inset: 0, borderRadius: 22, background: settings.floatingTimer !== false ? COLORS.ink : COLORS.panel2, border: settings.floatingTimer !== false ? "1px solid transparent" : `1px solid ${COLORS.border}`, boxShadow: settings.floatingTimer !== false ? `0 0 10px ${hexToRgba(COLORS.ink, 0.45)}` : "inset 0 1px 2px rgba(0,0,0,0.3)", transition: "background 0.15s, box-shadow 0.15s" }} />
-            <span style={{ position: "absolute", top: 2, left: settings.floatingTimer !== false ? 20 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.35)", transition: "left 0.15s" }} />
-          </label>
-        </div>
-        <div className="lg-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontSize: 11, color: COLORS.faint, maxWidth: 380, lineHeight: 1.5 }}>Dragged the badge somewhere awkward? Snap it back to the bottom-right corner.</div>
-          <Btn variant="ghost" onClick={onResetFloatPosition} style={{ flexShrink: 0 }}>Reset position</Btn>
-        </div>
-        <div style={{ fontSize: 11, color: COLORS.faint, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
-          <b style={{ color: COLORS.dim }}>Heads up:</b> Ledger runs inside a sandboxed panel in your browser, so it can't render on top of other apps or other browser tabs (like a video call or YouTube). The badge only floats within Ledger itself. If you switch away entirely, the timer keeps its place — it'll show the correct elapsed time the moment you come back — but it won't be visible while you're elsewhere.
-        </div>
-      </div>
+          {cat === "study" && (
+            <>
+              <Panel title="Study plan" sub="Drives the studied bar on Home">
+                <Row title="Daily study goal" sub="How many hours a day you're committing to." first>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 200px", maxWidth: 280 }}>
+                    <Input type="number" min={0} max={24} step={0.5} value={settings.goalMin / 60}
+                      onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n) && n >= 0 && n <= 24) setSettings(s => ({ ...s, goalMin: Math.round(n * 60) })); }}
+                      style={{ width: 84, textAlign: "center", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: COLORS.faint }}>hours / day</span>
+                  </div>
+                </Row>
+                <Row title="Default focus session" sub="Preselects the timer length in Deep Work.">
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 200px", maxWidth: 150 }}>
+                    <Input type="number" min={1} max={240} step={5} value={settings.defaultFocusMin}
+                      onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 1 && n <= 240) setSettings(s => ({ ...s, defaultFocusMin: n })); }}
+                      style={{ width: 84, textAlign: "center", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: COLORS.faint }}>min / session</span>
+                  </div>
+                </Row>
+              </Panel>
 
-      <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <Chip icon={ClipboardList} />
-          <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>Data — export &amp; restore</span>
-          <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>JSON, scoped to your account</span>
-        </div>
-        <div className="lg-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "13px 18px" }}>
-          <Btn variant="ghost" onClick={exportData}><Download size={14} /> Export all data (JSON)</Btn>
-          <input id="ledger-import-input" type="file" accept="application/json" onChange={handleImportFile} style={{ display: "none" }} />
-          <Btn variant="ghost" onClick={() => document.getElementById("ledger-import-input").click()}><ClipboardList size={14} /> Import from JSON</Btn>
-        </div>
-        {importError && <div style={{ fontSize: 11, color: COLORS.danger, padding: "0 18px 12px" }}>{importError}</div>}
-        {importOk && <div style={{ fontSize: 11, color: COLORS.done, padding: "0 18px 12px" }}>Import complete — your data has been restored.</div>}
-        <div style={{ fontSize: 11, color: COLORS.faint, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
-          Your data lives in Supabase, scoped to your account. Export regularly if you want an offline backup, and import that same file here to restore it.
-        </div>
-      </div>
+              <Panel title="Subjects" sub="Reordered, renamed, pruned">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "14px 18px 8px" }}>
+                  {(profile.subjects || []).map((s, i) => (
+                    <div key={s} style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 30, padding: "0 5px 0 11px", borderRadius: 7, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.border}` }}>
+                      <span style={subjectDot(s)} />
+                      <span style={{ fontSize: 12, color: COLORS.text }}>{s}</span>
+                      <span style={{ display: "inline-flex", gap: 2 }}>
+                        <button aria-label={`Move ${s} up`} title="Move up" disabled={i === 0} onClick={() => moveSubject(i, -1)} style={{ ...iconBtnStyle(false), opacity: i === 0 ? 0.35 : 1, cursor: i === 0 ? "default" : "pointer", width: 22, height: 22 }}>
+                          <ChevronUp size={11} strokeWidth={2} />
+                        </button>
+                        <button aria-label={`Move ${s} down`} title="Move down" disabled={i === profile.subjects.length - 1} onClick={() => moveSubject(i, 1)} style={{ ...iconBtnStyle(false), opacity: i === profile.subjects.length - 1 ? 0.35 : 1, cursor: i === profile.subjects.length - 1 ? "default" : "pointer", width: 22, height: 22 }}>
+                          <ChevronDown size={11} strokeWidth={2} />
+                        </button>
+                        <button aria-label={`Remove ${s}`} title="Remove" disabled={!profile.subjects || profile.subjects.length <= 1} onClick={() => removeSubject(i)} style={{ ...iconBtnStyle(true), opacity: !profile.subjects || profile.subjects.length <= 1 ? 0.35 : 1, cursor: !profile.subjects || profile.subjects.length <= 1 ? "default" : "pointer", width: 22, height: 22 }}>
+                          <X size={11} strokeWidth={2} />
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 18px 14px" }}>
+                  <Input value={newSubj} onChange={e => { setNewSubj(e.target.value); setSubjMsg(""); }} placeholder="Add a subject…" onKeyDown={e => e.key === "Enter" && addSubject()} style={{ flex: 1 }} />
+                  <Btn variant="ghost" onClick={addSubject}><Plus size={13} /> Add</Btn>
+                </div>
+                {subjMsg && <div style={{ fontSize: 11, color: COLORS.dim, padding: "0 18px 12px" }}>{subjMsg}</div>}
+              </Panel>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 2px 0" }}>
-        <Chip icon={ShieldCheck} />
-        <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>About this build</span>
-      </div>
-      <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.7, padding: "0 2px" }}>
-        Ledger — real syllabus tracking, real timers, real accounts and persistent storage. No invented numbers: every surface here is built from your own data.
+              <Panel title="Focus timer" sub="Optional floating badge">
+                <Row title="Floating timer badge" sub="Shows a small draggable badge with the running time when you leave Deep Work for another section of Ledger." first>
+                  <Toggle checked={settings.floatingTimer !== false} onChange={v => setSettings(s => ({ ...s, floatingTimer: v }))} />
+                </Row>
+                <Row title="Badge position" sub="Dragged the badge somewhere awkward? Snap it back to the bottom-right corner.">
+                  <Btn variant="ghost" onClick={onResetFloatPosition}>Reset position</Btn>
+                </Row>
+                <div style={{ fontSize: 11, color: COLORS.faint, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
+                  Ledger runs inside a sandboxed panel in your browser, so the badge only floats within Ledger itself — never over other apps or tabs. Leave and come back and it still shows the correct elapsed time.
+                </div>
+              </Panel>
+            </>
+          )}
+
+          {cat === "notify" && (
+            <Panel title="Notifications" sub="Quiet nudges, no alerts">
+              <Row title="Focus session reminders" sub="Lets you know when a focus session ends." first>
+                <Toggle checked={settings.reminders.study} onChange={v => setSettings(s => ({ ...s, reminders: { ...s.reminders, study: v } }))} />
+              </Row>
+              <Row title="Review due alerts" sub="A nudge when spaced-repetition cards come due.">
+                <Toggle checked={settings.reminders.review} onChange={v => setSettings(s => ({ ...s, reminders: { ...s.reminders, review: v } }))} />
+              </Row>
+              <Row title="Daily target check-in" sub="One quiet chime if the day's target still isn't met by the hour below.">
+                <Toggle checked={settings.reminders.targets} onChange={v => setSettings(s => ({ ...s, reminders: { ...s.reminders, targets: v } }))} />
+              </Row>
+              <Row title="Check time" sub="The hour when a missed target counts as missed.">
+                <Input type="time" value={settings.reminders.time} onChange={e => setSettings(s => ({ ...s, reminders: { ...s.reminders, time: e.target.value } }))} style={{ flex: "1 1 160px", maxWidth: 180 }} />
+              </Row>
+            </Panel>
+          )}
+
+          {cat === "appearance" && (
+            <Panel title="Appearance" sub="One system, kept calm">
+              <div style={{ fontSize: 11.5, color: COLORS.faint, lineHeight: 1.6, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+                Ledger ships with a single dark design system, tuned for long study sessions. These switches keep it that way on your screen.
+              </div>
+              <Row title="Reduced motion" sub="Disables entrance, shimmer and pulse animations." first>
+                <Toggle checked={settings.reducedMotion} onChange={v => setSettings(s => ({ ...s, reducedMotion: v }))} />
+              </Row>
+              <Row title="Density" sub="Tighter rows and spacing, or a roomier desktop.">
+                <div className="lg-seg">
+                  {[{ v: 1, label: "Comfortable" }, { v: 0.92, label: "Compact" }].map(o => (
+                    <button key={o.label} className={settings.density === o.v ? "lg-seg-item active" : "lg-seg-item"} onClick={() => setSettings(s => ({ ...s, density: o.v }))}>{o.label}</button>
+                  ))}
+                </div>
+              </Row>
+            </Panel>
+          )}
+
+          {cat === "sync" && (
+            <>
+              <Panel title="Sync" sub="Supabase, in real time">
+                <Row title="Sync status" sub="Every change is written to your account automatically. This pulls the latest state back down." first>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
+                    <span className="lg-statusdot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.done, boxShadow: `0 0 0 3px ${hexToRgba(COLORS.done, 0.12)}` }} />
+                    <span className="sys" style={{ fontSize: 10, color: syncedFlash ? COLORS.done : COLORS.faint }}>{syncedFlash ? "Synced just now" : "Synced"}</span>
+                    <Btn variant="ghost" onClick={syncNow}><RefreshCw size={12} /> Sync now</Btn>
+                  </div>
+                </Row>
+              </Panel>
+              <Panel title="Export & restore" sub="JSON, scoped to your account">
+                <div className="lg-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "13px 18px" }}>
+                  <Btn variant="ghost" onClick={exportData}><Download size={14} /> Export all data (JSON)</Btn>
+                  <input id="ledger-import-input" type="file" accept="application/json" onChange={handleImportFile} style={{ display: "none" }} />
+                  <Btn variant="ghost" onClick={() => document.getElementById("ledger-import-input").click()}><ClipboardList size={14} /> Import from JSON</Btn>
+                </div>
+                {importError && <div style={{ fontSize: 11, color: COLORS.danger, padding: "0 18px 12px" }}>{importError}</div>}
+                {importOk && <div style={{ fontSize: 11, color: COLORS.done, padding: "0 18px 12px" }}>Import complete — your data has been restored.</div>}
+                <div style={{ fontSize: 11, color: COLORS.faint, padding: "12px 18px", borderTop: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
+                  Your data lives in Supabase, scoped to your account. Export regularly for an offline backup; import that same file to restore it.
+                </div>
+              </Panel>
+            </>
+          )}
+
+          {cat === "account" && (
+            <>
+              <Panel title="Signed in">
+                <Row title="Email" sub="The address your magic link is sent to." first>
+                  <span style={{ fontFamily: FONTS.mono, fontSize: 12, color: COLORS.dim }}>{email || "—"}</span>
+                </Row>
+                <Row title="Sign-in method" sub="Magic links and Discord — no password to forget.">
+                  <span className="sys" style={{ fontSize: 9 }}>Magic link · Discord</span>
+                </Row>
+                <Row title="Sign out" sub="Ends this session on this device.">
+                  <Btn variant="danger" onClick={onSignOut}><LogOut size={13} /> Sign out</Btn>
+                </Row>
+              </Panel>
+              <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.7, padding: "2px 2px" }}>
+                Ledger — real syllabus tracking, real timers, real accounts and persistent storage. No invented numbers: every surface is built from your own data.
+              </div>
+            </>
+          )}
+
+          {cat === "danger" && (
+            <>
+              <Panel title="Danger zone" sub="Irreversible" danger>
+                <div style={{ fontSize: 11, color: COLORS.faint, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
+                  Both of these wipe tracked study data. Your identity, subject list, appearance and email are kept.
+                </div>
+                <Row title="Reset all progress" sub="Clears the syllabus, focus sessions, tasks, tests, mistakes, practice and recall cards." warn>
+                  {confirm === "reset" ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11.5, color: COLORS.faint }}>This is final.</span>
+                      <Btn variant="danger" onClick={resetAll} style={{ padding: "6px 10px", fontSize: 11.5 }}>Reset everything</Btn>
+                      <Btn variant="ghost" onClick={() => setConfirm(null)} style={{ padding: "6px 10px", fontSize: 11.5 }}>Cancel</Btn>
+                    </div>
+                  ) : (
+                    <Btn variant="danger" onClick={() => setConfirm("reset")} style={{ flexShrink: 0 }}>Reset progress</Btn>
+                  )}
+                </Row>
+                <Row title="Delete account & data" sub="The same clear as reset, then signs you out of this device." warn>
+                  {confirm === "delete" ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11.5, color: COLORS.faint }}>Last chance.</span>
+                      <Btn variant="danger" onClick={deleteEverything} style={{ padding: "6px 10px", fontSize: 11.5 }}>Delete everything</Btn>
+                      <Btn variant="ghost" onClick={() => setConfirm(null)} style={{ padding: "6px 10px", fontSize: 11.5 }}>Cancel</Btn>
+                    </div>
+                  ) : (
+                    <Btn variant="danger" onClick={() => setConfirm("delete")} style={{ flexShrink: 0 }}>Delete</Btn>
+                  )}
+                </Row>
+                {doneMsg && <div style={{ fontSize: 11, color: COLORS.done, padding: "0 18px 13px", borderTop: `1px solid ${COLORS.border}` }}>{doneMsg}</div>}
+              </Panel>
+              <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.7, padding: "2px 2px" }}>
+                Ledger — real syllabus tracking, real timers, real accounts and persistent storage. No invented numbers: every surface here is built from your own data.
+              </div>
+            </>
+          )}
+
+        </div>
       </div>
     </div>
   );
 }
 
 // ---------------- AUTH ----------------
+// A brand mark in the app's restraint idiom: no solid plate, just a quiet
+// accent-tinted tile with a mono "L" — the sidebar's mark, de-hearted.
+function LedgerMark({ size = 30 }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: size, height: size, flexShrink: 0, borderRadius: Math.max(7, Math.round(size * 0.26)),
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: `linear-gradient(150deg, ${hexToRgba(COLORS.ink, 0.17)}, ${hexToRgba(COLORS.ink, 0.05)})`,
+        border: `1px solid ${hexToRgba(COLORS.ink, 0.3)}`,
+        boxShadow: `inset 0 1px 0 ${hexToRgba(COLORS.ink, 0.14)}`,
+        fontFamily: FONTS.mono, fontWeight: 800, fontSize: Math.round(size * 0.44),
+        lineHeight: 1, color: COLORS.ink, letterSpacing: "-0.04em",
+        paddingTop: Math.round(size * 0.03), // optical centering, letters sit high
+      }}
+    >
+      L
+    </div>
+  );
+}
+
 // Gate the whole Workspace behind a Supabase session. Two paths: email
 // magic-link, or Discord OAuth. The post-auth redirect is configurable via
 // VITE_REDIRECT_URL (set it to your deployed URL so magic links and OAuth
@@ -3412,7 +5351,8 @@ function AuthScreen({ onDemo }) {
   const redirectTo = import.meta.env.VITE_REDIRECT_URL || window.location.origin;
 
   const sendLink = async () => {
-    if (!email.trim()) return;
+    if (loading || sent) return;
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Enter a valid email address."); return; }
     setLoading(true); setError("");
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
@@ -3434,51 +5374,61 @@ function AuthScreen({ onDemo }) {
     if (error) setError(error.message);
   };
 
-  return (
+return (
     <div style={{ background: "transparent", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.body, color: COLORS.text, padding: 20 }}>
       <style>{globalCss()}</style>
-      <div className="lg-card" style={{ width: 360, borderRadius: 16, border: `1px solid ${COLORS.border}`, padding: "32px 30px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-          <div className="lg-brand-plate">
-            <BookMarked size={15} color="#fff" />
+      <div className="lg-hero lg-page lg-stagger" style={{ width: 380, maxWidth: "100%", padding: "34px 32px 30px", boxShadow: elev("e2") }}>
+        <div className="lg-page" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 26, animationDelay: "0.1s" }}>
+          <LedgerMark size={34} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 17, lineHeight: 1.1, letterSpacing: "-0.01em" }}>Ledger</div>
+            <div className="sys" style={{ color: COLORS.dim }}>Study OS</div>
           </div>
-          <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 18 }}>Ledger</div>
         </div>
         {sent ? (
-          <div style={{ fontSize: 13, color: COLORS.dim, lineHeight: 1.6 }}>
-            Check <b style={{ color: COLORS.text }}>{email}</b> for a sign-in link. You can close this tab.
+          <div className="lg-pop" style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+            <CheckCircle2 size={17} color={COLORS.done} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13, color: COLORS.dim, lineHeight: 1.6 }}>
+              Check <b style={{ color: COLORS.text }}>{email}</b> for a sign-in link. You can close this tab.
+            </div>
           </div>
         ) : (
           <>
-            <button onClick={signInWithDiscord} disabled={discordLoading} style={{
+            <button onClick={signInWithDiscord} disabled={discordLoading} className="lg-page lg-btn lg-btn-ghost" style={{
               width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              padding: "10px 14px", borderRadius: 7, cursor: discordLoading ? "not-allowed" : "pointer",
-              background: COLORS.panel2, border: `1px solid ${COLORS.border}`, color: COLORS.text,
-              fontFamily: FONTS.body, fontSize: 13, fontWeight: 500, opacity: discordLoading ? 0.6 : 1,
+              padding: "10px 14px", border: `1px solid ${COLORS.border}`,
+              background: "transparent", color: COLORS.text, fontFamily: FONTS.body, fontSize: 13.5, fontWeight: 500,
+              cursor: discordLoading ? "not-allowed" : "pointer", opacity: discordLoading ? 0.6 : 1,
+              animationDelay: "0.14s",
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.44.87-.61 1.25a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.25.08.08 0 0 0-.08-.04 19.74 19.74 0 0 0-4.88 1.52.07.07 0 0 0-.04.05C1.72 8.13 1.06 11.8 1.38 15.43a.08.08 0 0 0 .03.05 19.9 19.9 0 0 0 6 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.89.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.92 1.8 8.16 1.8 12.04 0a.07.07 0 0 1 .08.01c.12.1.25.2.38.29a.08.08 0 0 1 0 .13c-.6.35-1.22.64-1.87.89a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6.01-3.03.08.08 0 0 0 .03-.05c.38-4.21-.63-7.85-2.67-11.01a.06.06 0 0 0-.03-.05ZM8.99 13.28c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.95 2.4-2.15 2.4Zm6.02 0c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.94 2.4-2.15 2.4Z" />
               </svg>
               {discordLoading ? "Redirecting to Discord…" : "Continue with Discord"}
             </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0" }}>
-              <div style={{ flex: 1, height: 1, background: COLORS.border }} />
-              <div style={{ fontSize: 11, color: COLORS.faint }}>or</div>
-              <div style={{ flex: 1, height: 1, background: COLORS.border }} />
+            <div className="lg-page" style={{ display: "flex", alignItems: "center", gap: 12, margin: "18px 0", animationDelay: "0.18s" }}>
+              <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.border})` }} />
+              <div className="sys">or</div>
+              <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${COLORS.border}, transparent)` }} />
             </div>
-            <div style={{ fontSize: 13, color: COLORS.dim, marginBottom: 16 }}>Sign in with your email — we'll send a one-click link, no password needed.</div>
-            <Input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendLink()} />
+            <div className="lg-page" style={{ fontSize: 12.5, color: COLORS.dim, lineHeight: 1.55, marginBottom: 14, animationDelay: "0.22s" }}>Sign in with your email — we'll send a one-click link, no password needed.</div>
+            <Input className="lg-page" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendLink()} style={{ animationDelay: "0.26s" }} />
             {error && <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 8 }}>{error}</div>}
-            <Btn variant="ink" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={loading} onClick={sendLink}>
-              {loading ? "Sending…" : "Send sign-in link"}
+            <Btn variant="ink" className={`lg-page${loading ? " lg-btn-shimmer" : ""}`} style={{ width: "100%", justifyContent: "center", marginTop: 14, animationDelay: "0.3s" }} disabled={loading} onClick={sendLink}>
+              <span className="lg-btn-label">
+                <span style={{ opacity: loading ? 0 : 1 }}>Send sign-in link</span>
+                <span style={{ opacity: loading ? 1 : 0 }}>Sending…</span>
+              </span>
             </Btn>
             {onDemo && (
               <button
                 onClick={onDemo}
+                className="lg-page lg-link-btn"
                 style={{
-                  width: "100%", marginTop: 12, padding: "8px 12px", background: "transparent",
-                  border: `1px dashed ${COLORS.border}`, borderRadius: 7, color: COLORS.dim,
-                  fontSize: 12, cursor: "pointer", fontFamily: FONTS.body,
+                  width: "100%", marginTop: 16, padding: "8px 12px",
+                  background: "transparent", border: "1px solid transparent",
+                  fontSize: 12.5, cursor: "pointer", fontFamily: FONTS.body,
+                  animationDelay: "0.34s",
                 }}
               >
                 Continue as Guest / Demo Mode
@@ -3503,8 +5453,8 @@ export default function AuthGate() {
   if (session === undefined) {
     return <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body }}>
       <style>{globalCss()}</style>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-        <div className="lg-brand-plate"><BookMarked size={15} color="#fff" /></div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+        <LedgerMark size={36} />
         <div className="lg-skeleton" style={{ height: 14, width: 220 }} />
       </div>
     </div>;
