@@ -17,6 +17,7 @@ Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
 } from "lucide-react";
 import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, FONT_CATALOG, TYPOGRAPHY_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, VIEW, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate, computeStreak, longestStreak } from "./lib/utils";
+import { DEFAULT_SYLLABUS, EXAM_SUBJECTS, EXAM_LABELS, examPresetsFor, buildInitialSyllabus } from "./lib/exams";
 import { pipSupported, openPipWindow, closePipWindow } from "./lib/pipTimer";
 import { unlockAudio, playTick, playReward, __ledgerAudioState } from "./lib/sounds.js";
 import { validateUpload, fileToDataUrl, loadWallpaperImage, saveWallpaperImage, clearWallpaperImage, extractPalette, clampAccentHex } from "./lib/wallpaper.js";
@@ -28,46 +29,6 @@ import WallpaperLayer from "./components/ui/WallpaperLayer";
 import { Card, Stat, MiniStat, PageHead, SectionHeader, EmptyState, EmptyArt, Btn, Input, SelectBox, Toggle, Row, Panel } from "./components/ui/Panels";
 import Stories from "./components/stories/Stories";
 import Community from "./components/community/Community";
-
-const DEFAULT_SYLLABUS = {
-  Physics: ["Units & Measurements", "Kinematics", "Laws of Motion", "Work, Energy & Power", "System of Particles & Rotational Motion", "Gravitation", "Mechanical Properties of Solids", "Mechanical Properties of Fluids", "Thermal Properties of Matter", "Thermodynamics", "Kinetic Theory of Gases", "Oscillations", "Waves", "Electrostatics", "Current Electricity", "Moving Charges & Magnetism", "Magnetism & Matter", "EM Induction", "Alternating Current", "EM Waves", "Ray Optics", "Wave Optics", "Dual Nature of Radiation & Matter", "Atoms", "Nuclei", "Semiconductor Electronics"],
-  Chemistry: ["Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements & Periodicity", "Chemical Bonding & Molecular Structure", "States of Matter", "Thermodynamics", "Equilibrium", "Redox Reactions", "s-Block Elements", "p-Block Elements (Gp 13-14)", "Organic Chemistry — Basic Principles", "Hydrocarbons", "Solid State", "Solutions", "Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "p-Block Elements (Gp 15-18)", "d & f-Block Elements", "Coordination Compounds", "Haloalkanes & Haloarenes", "Alcohols, Phenols & Ethers", "Aldehydes, Ketones & Carboxylic Acids", "Amines", "Biomolecules", "Polymers", "Chemistry in Everyday Life"],
-  Maths: ["Sets, Relations & Functions", "Complex Numbers", "Quadratic Equations", "Sequences & Series", "Permutations & Combinations", "Binomial Theorem", "Matrices", "Determinants", "Trigonometric Functions & Equations", "Straight Lines", "Conic Sections", "Limits, Continuity & Differentiability", "Differentiation", "Application of Derivatives", "Indefinite Integrals", "Definite Integrals & Applications", "Differential Equations", "Vectors", "3D Geometry", "Probability", "Statistics"],
-  Biology: ["Diversity in Living World", "Structural Organisation in Animals & Plants", "Cell Structure & Function", "Plant Physiology", "Human Physiology", "Reproduction", "Genetics & Evolution", "Biology & Human Welfare", "Biotechnology & Its Applications", "Ecology & Environment"],
-};
-
-const EXAM_SUBJECTS = {
-  "JEE Main": ["Physics", "Chemistry", "Maths"],
-  "JEE Advanced": ["Physics", "Chemistry", "Maths"],
-  "NEET": ["Physics", "Chemistry", "Biology"],
-  "Both": ["Physics", "Chemistry", "Maths", "Biology"],
-  "Custom": [],
-};
-
-// Target-date presets for onboarding, derived from past-year windows:
-// JEE Main Session 1 runs late January, Session 2 early April (2026: Jan
-// 21-30 / Apr 1-10); JEE Advanced is the 3rd Sunday of May (2026: May 17);
-// NEET the 1st Sunday of May (2026: May 3). The projected 2027 dates follow
-// the same pattern; the manual date input remains for exact/custom targets.
-const EXAM_DATE_PRESETS = {
-  "JEE Main": [
-    { date: "2027-01-30", label: "Jan 2027 · Session 1", basis: "past S1 windows: late Jan (2026: Jan 21–30)" },
-    { date: "2027-04-05", label: "Apr 2027 · Session 2", basis: "past S2 windows: early Apr (2026: Apr 1–10)" },
-  ],
-  "JEE Advanced": [
-    { date: "2027-05-16", label: "May 2027", basis: "3rd Sunday of May (2026: May 17)" },
-  ],
-  NEET: [
-    { date: "2027-05-02", label: "May 2027", basis: "1st Sunday of May (2026: May 3)" },
-  ],
-  Both: [
-    { date: "2027-01-30", label: "JEE Main · Jan 2027", basis: "late Jan window (2026: Jan 21–30)" },
-    { date: "2027-04-05", label: "JEE Main · Apr 2027", basis: "early Apr window (2026: Apr 1–10)" },
-    { date: "2027-05-02", label: "NEET · May 2027", basis: "1st Sunday of May (2026: May 3)" },
-    { date: "2027-05-16", label: "JEE Adv · May 2027", basis: "3rd Sunday of May (2026: May 17)" },
-  ],
-  Custom: [],
-};
 
 const STATUS_ORDER = ["todo", "doing", "done", "mastered"];
 const STATUS_LABEL = { todo: "To do", doing: "In progress", done: "Done", mastered: "Mastered" };
@@ -1012,17 +973,20 @@ function Workspace({ session }) {
 
   if (!profile) {
     return <Onboarding onDone={(p) => {
-      setProfile(p);
+      // Keep the persisted profile shape unchanged — onboarding payload extras
+      // (covered, goalMin, defaultFocusMin, next) never reach the kv row.
+      setProfile({ name: p.name, exam: p.exam, subjects: p.subjects, targetDate: p.targetDate, code: p.code, createdAt: p.createdAt });
       setTimerSubject(p.subjects[0]);
-      const subs = p.subjects;
-      const initSyll = {};
-      subs.forEach(sub => {
-        initSyll[sub] = (DEFAULT_SYLLABUS[sub] || []).map(name => ({
-          id: uid(), name, status: "todo", confidence: 0, pyq: 0, module: 0,
-          theory: false, examples: false, doneDate: null, revisionStage: -1, nextRevision: null, notes: "",
-        }));
-      });
-      setSyllabus(initSyll);
+      // One patch through the existing syllabus state/persistence path:
+      // bulk-marked chapters seed as done (revisionStage 0, review tomorrow),
+      // exactly matching the manual done-transition semantics.
+      setSyllabus(buildInitialSyllabus(p.subjects, p.covered, { firstReviewDays: REVISION_INTERVALS[0] }));
+      // Optional commitment writes into the existing settings fields the
+      // inputs were prefilled from — same keys, same save path, no dupes.
+      if (typeof p.goalMin === "number") setSettings(s => ({ ...s, goalMin: p.goalMin }));
+      if (typeof p.defaultFocusMin === "number") setSettings(s => ({ ...s, defaultFocusMin: p.defaultFocusMin }));
+      // Route into the chosen concrete next action.
+      setTab(p.next === "syllabus" ? "syllabus" : "timer");
     }} />;
   }
 
@@ -1305,34 +1269,68 @@ function Onboarding({ onDone }) {
   const [targetDate, setTargetDate] = useState(() => {
     const d = new Date(); d.setMonth(d.getMonth() + 6); return todayStr(d);
   });
+  // "Already studied?" — chapter names already covered, keyed by subject.
+  // Applied as a single initial-syllabus patch (buildInitialSyllabus), never
+  // per-chapter writes, so the existing debounced syllabus autosave handles
+  // persistence exactly like a fresh onboarding.
+  const [covered, setCovered] = useState({});
+  // Optional commitment step — both prefilled from the SAME settings fields
+  // they write into (goalMin / defaultFocusMin), so the plan can never drift
+  // from what Settings shows.
+  const [goalHours, setGoalHours] = useState(String(DEFAULT_SETTINGS.goalMin / 60));
+  const [focusMin, setFocusMin] = useState(String(DEFAULT_SETTINGS.defaultFocusMin));
 
   // When the target exam changes, snap to the nearest future preset derived
-  // from past-year windows (see EXAM_DATE_PRESETS) unless the user already
+  // from past-year windows (see examPresetsFor) unless the user already
   // picked a specific date.
   const lastPickedRef = useRef(false);
   useEffect(() => {
     if (lastPickedRef.current) return;
-    const presets = EXAM_DATE_PRESETS[exam] || [];
-    const today = todayStr(new Date());
-    const next = presets.map(p => p.date).filter(d => d > today).sort()[0];
-    if (next) setTargetDate(next);
+    const next = examPresetsFor(exam)[0];
+    if (next) setTargetDate(next.date);
   }, [exam]);
 
   const subjects = exam === "Custom"
     ? customSubjects.split(",").map(s => s.trim()).filter(Boolean)
     : EXAM_SUBJECTS[exam];
 
+  const toggleChapter = (sub, name) => setCovered(prev => {
+    const list = prev[sub] || [];
+    return { ...prev, [sub]: list.includes(name) ? list.filter(n => n !== name) : [...list, name] };
+  });
+  const toggleSubjectAll = (sub) => setCovered(prev => {
+    const names = DEFAULT_SYLLABUS[sub] || [];
+    const all = (prev[sub] || []).length === names.length;
+    return { ...prev, [sub]: all ? [] : [...names] };
+  });
+  const coveredCount = subjects.reduce((a, sub) => a + (covered[sub] || []).length, 0);
+  const totalChapters = subjects.reduce((a, sub) => a + (DEFAULT_SYLLABUS[sub] || []).length, 0);
+
   const canContinue = step === 0 ? name.trim().length > 0 : step === 1 ? subjects.length > 0 : true;
+
+  const finish = (next) => {
+    const goalH = parseFloat(goalHours);
+    const focus = parseFloat(focusMin);
+    onDone({
+      name: name.trim(), exam, subjects, targetDate, code: genCode(), createdAt: todayStr(),
+      covered,
+      goalMin: Number.isFinite(goalH) ? Math.max(0, Math.min(24 * 60, Math.round(goalH * 60))) : DEFAULT_SETTINGS.goalMin,
+      defaultFocusMin: Number.isFinite(focus) ? Math.max(1, Math.min(240, Math.round(focus))) : DEFAULT_SETTINGS.defaultFocusMin,
+      next,
+    });
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.body, color: COLORS.text, padding: 20 }}>
       <style>{globalCss()}</style>
       <div className="lg-card" style={{ borderRadius: 16, border: `1px solid ${COLORS.border}`, maxWidth: 560, width: "100%", padding: "32px 34px" }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.1em", color: COLORS.ink, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Step {step + 1} of 3</div>
+      <div style={{ fontSize: 10, letterSpacing: "0.1em", color: COLORS.ink, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>Step {step + 1} of 5</div>
       <div style={{ fontFamily: FONTS.display, fontSize: 24, fontWeight: 700, marginBottom: 18 }}>
         {step === 0 && "Who are you?"}
         {step === 1 && "What are you targeting?"}
         {step === 2 && "Lock the date"}
+        {step === 3 && "Already studied?"}
+        {step === 4 && "Set your daily commitment"}
       </div>
 
       {step === 0 && (
@@ -1347,7 +1345,7 @@ function Onboarding({ onDone }) {
           <div>
             <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Target exam</label>
             <SelectBox value={exam} onChange={setExam} ariaLabel="Target exam"
-              options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: k === "Both" ? "JEE + NEET" : k }))} />
+              options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: EXAM_LABELS[k] }))} />
           </div>
           {exam === "Custom" ? (
             <div>
@@ -1368,10 +1366,10 @@ function Onboarding({ onDone }) {
       {step === 2 && (
         <div>
           <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Exam date</label>
-          {(EXAM_DATE_PRESETS[exam] || []).length > 0 && (
+          {examPresetsFor(exam).length > 0 && (
             <div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                {(EXAM_DATE_PRESETS[exam] || []).map(p => {
+                {examPresetsFor(exam).map(p => {
                   const active = targetDate === p.date;
                   return (
                     <button key={p.date} type="button" onClick={() => { lastPickedRef.current = true; setTargetDate(p.date); }}
@@ -1398,12 +1396,95 @@ function Onboarding({ onDone }) {
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 28 }}>
+      {step === 3 && (
+        <div>
+          <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Mark chapters you've already covered</label>
+          <div style={{ fontSize: 11.5, color: COLORS.dim, marginBottom: 10 }}>
+            {totalChapters} chapters across {subjects.length} {subjects.length === 1 ? "subject" : "subjects"}. Skip if you're starting fresh — this only affects your starting coverage.
+          </div>
+          <div style={{ maxHeight: 300, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 6 }}>
+            {subjects.map(sub => {
+              const names = DEFAULT_SYLLABUS[sub] || [];
+              if (names.length === 0) {
+                return (
+                  <div key={sub} style={{ fontSize: 11.5, color: COLORS.dim }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={subjectDot(sub)} />
+                      <b style={{ fontSize: 12, color: COLORS.text }}>{sub}</b>
+                    </div>
+                    No preloaded chapters for this subject — add them later in Coverage.
+                  </div>
+                );
+              }
+              const list = covered[sub] || [];
+              const all = list.length === names.length;
+              return (
+                <div key={sub}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={subjectDot(sub)} />
+                    <b style={{ fontSize: 12, color: COLORS.text }}>{sub}</b>
+                    <span style={{ fontSize: 10.5, color: COLORS.faint, marginLeft: "auto" }}>{list.length}/{names.length}</span>
+                    <button type="button" onClick={() => toggleSubjectAll(sub)} aria-pressed={all}
+                      style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 6, cursor: "pointer", fontFamily: FONTS.body,
+                        background: all ? COLORS.ink : "transparent", color: all ? "#fff" : COLORS.text, border: `1px solid ${all ? COLORS.ink : COLORS.border}` }}>
+                      {all ? "Clear all" : "Mark all"}
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {names.map(name => {
+                      const on = list.includes(name);
+                      return (
+                        <button key={name} type="button" onClick={() => toggleChapter(sub, name)} aria-pressed={on}
+                          style={{ fontSize: 10.5, padding: "3px 8px", borderRadius: 6, cursor: "pointer", fontFamily: FONTS.body, lineHeight: 1.35,
+                            background: on ? COLORS.inkSoft : "transparent", color: on ? COLORS.ink : COLORS.text, border: `1px solid ${on ? COLORS.ink : COLORS.border}` }}>
+                          {on ? "✓ " : ""}{name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {coveredCount > 0 && (
+            <div style={{ marginTop: 10, fontSize: 11.5, color: COLORS.ink }}>
+              {coveredCount} {coveredCount === 1 ? "chapter" : "chapters"} will start as done.
+            </div>
+          )}
+        </div>
+      )}
+
+      {step === 4 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Daily study goal</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Input type="number" min={0} max={24} step={0.5} value={goalHours} onChange={e => setGoalHours(e.target.value)}
+                aria-label="Daily study goal" style={{ width: 84, textAlign: "center", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: COLORS.faint }}>hours / day</span>
+            </div>
+            <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 4 }}>This is the same daily goal you'll find under Settings → Study plan. Optional — keep the default if unsure.</div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Default focus session</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Input type="number" min={1} max={240} step={5} value={focusMin} onChange={e => setFocusMin(e.target.value)}
+                aria-label="Default focus session" style={{ width: 84, textAlign: "center", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: COLORS.faint }}>min / session</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 28, gap: 10 }}>
         <Btn variant="ghost" onClick={() => setStep(s => Math.max(0, s - 1))} style={{ visibility: step === 0 ? "hidden" : "visible" }}>Back</Btn>
-        {step < 2 ? (
+        {step < 4 ? (
           <Btn variant="ink" disabled={!canContinue} onClick={() => setStep(s => s + 1)}>Continue <ChevronRight size={14} /></Btn>
         ) : (
-          <Btn variant="ink" onClick={() => onDone({ name: name.trim(), exam, subjects, targetDate, code: genCode(), createdAt: todayStr() })}>Start tracking <ChevronRight size={14} /></Btn>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="ghost" onClick={() => finish("syllabus")}>Open your next chapter</Btn>
+            <Btn variant="ink" onClick={() => finish("timer")}>Start your first focus session <ChevronRight size={14} /></Btn>
+          </div>
         )}
       </div>
       </div>
@@ -4729,7 +4810,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
               </Row>
               <Row title="Target exam" sub="The plan your syllabus starts from.">
                 <SelectBox value={profile.exam || "JEE Main"} onChange={(v) => setProfile({ ...profile, exam: v })} ariaLabel="Target exam"
-                  options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: k === "Both" ? "JEE + NEET" : k }))}
+                  options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: EXAM_LABELS[k] }))}
                   style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>
               <Row title="Target date" sub={daysLeft === null ? "Set a date and the countdown runs from there." : daysLeft === 0 ? "Exam day is today." : daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to go.` : `${-daysLeft} days since — revise your goals?`}>

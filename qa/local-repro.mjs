@@ -80,7 +80,11 @@ await page.getByRole("button", { name: "Continue" }).click();
 await page.getByText("What are you targeting?").waitFor({ state: "visible", timeout: 10_000 });
 await page.getByRole("button", { name: "Continue" }).click();
 await page.getByText("Lock the date").waitFor({ state: "visible", timeout: 10_000 });
-await page.getByRole("button", { name: "Start tracking" }).click();
+await page.getByRole("button", { name: "Continue" }).click();
+await page.getByText("Already studied?").waitFor({ state: "visible", timeout: 10_000 });
+await page.getByRole("button", { name: "Continue" }).click();
+await page.getByText("Set your daily commitment").waitFor({ state: "visible", timeout: 10_000 });
+await page.getByRole("button", { name: "Start your first focus session" }).click();
 await page.locator('nav[aria-label="Primary"]').waitFor({ state: "visible", timeout: 20_000 });
 console.log(`demo dashboard up (${DEMO_NAME})`);
 

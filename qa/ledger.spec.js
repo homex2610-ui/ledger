@@ -15,7 +15,8 @@ import { todayStr } from "../src/lib/utils.js";
 
 // Enter the workspace via Demo Mode, clearing onboarding when the fresh
 // localStorage (no profile) shows it. Demo mode keeps storage local-only,
-// so no real Supabase rows are ever touched.
+// so no real Supabase rows are ever touched. Finishing onboarding routes to
+// the Focus tab; the helper then clicks Home so tests start on the dashboard.
 async function enterDemo(page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Continue as Guest / Demo Mode" }).click();
@@ -26,9 +27,27 @@ async function enterDemo(page) {
     await page.getByText("What are you targeting?").waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByText("Lock the date").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "Start tracking" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("Already studied?").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("Set your daily commitment").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Start your first focus session" }).click();
   }
   await page.locator('nav[aria-label="Primary"]').waitFor({ state: "visible", timeout: 20_000 });
+  await page.locator('nav[aria-label="Primary"]').getByTitle("Home").click();
+  // Move the mouse off the rail so sidebar :hover states don't linger.
+  await page.mouse.move(720, 450);
+  // Onboarding routes to the Focus tab, so the Home click re-routes the dock
+  // and the active-item color transitions for ~0.16s. Tests read computed
+  // styles immediately after, so wait for the transition to settle first.
+  await page.waitForFunction(() => {
+    const el = document.querySelector(".lg-nav-item.active");
+    if (!el) return false;
+    return new Promise((resolve) => {
+      const first = getComputedStyle(el).color;
+      setTimeout(() => resolve(getComputedStyle(el).color === first), 220);
+    });
+  });
 }
 
 const sideNav = (page) => page.locator('nav[aria-label="Primary"]');

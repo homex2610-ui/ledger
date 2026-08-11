@@ -188,7 +188,11 @@ async function runOnce(browser, index) {
     await tabA.getByText("What are you targeting?").waitFor({ state: "visible", timeout: 10_000 });
     await tabA.getByRole("button", { name: "Continue" }).click();
     await tabA.getByText("Lock the date").waitFor({ state: "visible", timeout: 10_000 });
-    await tabA.getByRole("button", { name: "Start tracking" }).click();
+    await tabA.getByRole("button", { name: "Continue" }).click();
+    await tabA.getByText("Already studied?").waitFor({ state: "visible", timeout: 10_000 });
+    await tabA.getByRole("button", { name: "Continue" }).click();
+    await tabA.getByText("Set your daily commitment").waitFor({ state: "visible", timeout: 10_000 });
+    await tabA.getByRole("button", { name: "Start your first focus session" }).click();
     await tabA.locator('nav[aria-label="Primary"]').waitFor({ state: "visible", timeout: 20_000 });
     // Timeline poller: runs the whole wait (the session can arrive 30s+ out).
     await tabA.evaluate(() => {

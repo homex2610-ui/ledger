@@ -22,9 +22,24 @@ async function enterDemo(page) {
     await page.getByText("What are you targeting?").waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByText("Lock the date").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "Start tracking" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("Already studied?").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("Set your daily commitment").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Start your first focus session" }).click();
   }
   await page.locator('nav[aria-label="Primary"]').waitFor({ state: "visible", timeout: 20_000 });
+  await page.locator('nav[aria-label="Primary"]').getByTitle("Home").click();
+  // Move the mouse off the rail so sidebar :hover states don't linger.
+  await page.mouse.move(720, 450);
+  await page.waitForFunction(() => {
+    const el = document.querySelector(".lg-nav-item.active");
+    if (!el) return false;
+    return new Promise((resolve) => {
+      const first = getComputedStyle(el).color;
+      setTimeout(() => resolve(getComputedStyle(el).color === first), 220);
+    });
+  });
 }
 
 const browser = await chromium.launch();
