@@ -179,8 +179,8 @@ export const THEME_PRESETS = {
   },
   "midnight": {
     label: "Midnight", sub: "Cool slate / desaturated blue", mode: "dark", swatch: "#6B8AA6", font: "grotesk",
-    canvas: "#0A0B0E", surface1: "#111318", surface2: "#161A20", surface3: "#1C2129",
-    sunken: "#0D0F13", overlay: "#232932", rail: "#13161B",
+    canvas: "#000000", surface1: "#111318", surface2: "#161A20", surface3: "#1C2129",
+    sunken: "#0D0F13", overlay: "#232932", rail: "#000000",
     hover: "rgba(255,255,255,0.05)", active: "rgba(255,255,255,0.09)",
     borderSubtle: "rgba(255,255,255,0.06)", borderDefault: "rgba(255,255,255,0.09)", borderStrong: "rgba(255,255,255,0.17)",
     text1: "#E9EAEE", text2: "#9FA3AD", text3: "#767B86", textMuted: "#4E5259",
@@ -290,9 +290,9 @@ export const LEGACY_THEME = {
   parchment: "parchment", rosequartz: "rose", "noir-mono": "noir",
 };
 export function normalizeTheme(id) {
-  if (!id) return "verdigris";
+  if (!id) return "midnight";
   if (THEME_PRESETS[id]) return id;
-  return LEGACY_THEME[id] || "verdigris";
+  return LEGACY_THEME[id] || "midnight";
 }
 
 export const FONT_PRESETS = {
@@ -344,7 +344,7 @@ function relLuminance(hex) {
 }
 
 export function applyTheme(themeId, opts = {}) {
-  const t = THEME_PRESETS[normalizeTheme(themeId)] || THEME_PRESETS["verdigris"];
+  const t = THEME_PRESETS[normalizeTheme(themeId)] || THEME_PRESETS["midnight"];
   const isLight = relLuminance(t.canvas) > 0.5;
   // Semantic palette → the flat COLORS surface every component consumes.
   // One palette field feeds exactly one COLORS role — nothing is re-mixed.
@@ -448,7 +448,7 @@ export function applyTheme(themeId, opts = {}) {
   }
 }
 
-applyTheme("verdigris");
+applyTheme("midnight");
 
 export const RANK_COLORS = ["#F2C94C", "#C7CDD6", "#D1965A"];
 

@@ -1,12 +1,12 @@
 // End-to-end assertions for Ledger (dev server, Demo Mode).
 //
 // The fixed color constants below document the CURRENT default appearance:
-// DEFAULT_SETTINGS.theme = "verdigris" (THEME_PRESETS.verdigris.focus
-// #6CCBC0). If the default theme ever changes, update them here — the test
+// DEFAULT_SETTINGS.theme = "midnight" (THEME_PRESETS.midnight.focus
+// #8AAAC6). If the default theme ever changes, update them here — the test
 // is meant to pin the palette the app actually ships with.
-const ACCENT_HEX = "#6CCBC0";            // emitted verbatim into the style tag
-const ACCENT_RGBA = "rgba(108,203,192,"; // hexToRgba form (no spaces)
-const ACCENT_RGB = "rgb(108, 203, 192)"; // what getComputedStyle normalizes to
+const ACCENT_HEX = "#8AAAC6";            // emitted verbatim into the style tag
+const ACCENT_RGBA = "rgba(138,170,198,"; // hexToRgba form (no spaces)
+const ACCENT_RGB = "rgb(138, 170, 198)"; // what getComputedStyle normalizes to
 const HEX = /^#[0-9A-F]{6}$/;
 
 import { test, expect } from "@playwright/test";
@@ -64,14 +64,14 @@ test("theme system: Ledger accent is emitted in the style tag and rendered on th
 
 test("countdown: the D-day numeral renders in the theme's coral token", async ({ page }) => {
   // Demo onboarding sets a target date, so the hero countdown is live. The
-  // numeral must carry the theme's dedicated countdown coral — in verdigris
-  // that is THEME_PRESETS.verdigris.countdown = #F0645A, independent of the
-  // teal accent, so an upcoming exam reads as a deadline, not a theme color.
+  // numeral must carry the theme's dedicated countdown coral — in midnight
+  // that is THEME_PRESETS.midnight.countdown = #EF6A60, independent of the
+  // slate accent, so an upcoming exam reads as a deadline, not a theme color.
   const coral = await page.locator("div.num").evaluateAll(els => {
     const el = els.find(e => e.nextElementSibling && e.nextElementSibling.textContent.includes("DAYS LEFT"));
     return el ? getComputedStyle(el).color : null;
   });
-  expect(coral).toBe("rgb(240, 100, 90)");
+  expect(coral).toBe("rgb(239, 106, 96)");
 });
 
 test("lg-mini: chapter action buttons render with the ghost system styling", async ({ page }) => {
@@ -372,8 +372,8 @@ test("countdown: the coral numeral survives a theme switch", async ({ page }) =>
       return el ? getComputedStyle(el).color : null;
     });
 
-  // Verdigris (default): coral #F0645A.
-  expect(await numeralColor()).toBe("rgb(240, 100, 90)");
+  // Midnight (default): coral #EF6A60.
+  expect(await numeralColor()).toBe("rgb(239, 106, 96)");
 
   await openSettings(page);
   await page.getByRole("button", { name: "Appearance", exact: true }).click();

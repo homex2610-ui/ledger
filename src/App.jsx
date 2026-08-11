@@ -82,7 +82,7 @@ const REVISION_INTERVALS = [1, 3, 7, 15, 30, 60];
 // save path. Merged with stored settings at load (stored values win), so
 // new keys never crash old exports.
 const DEFAULT_SETTINGS = {
-  theme: "verdigris",
+  theme: "midnight",
   accent: null,
   autoAccent: false,
   autoStartBreaks: true,
