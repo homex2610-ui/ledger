@@ -4722,6 +4722,11 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
   const removeWallpaper = () => { clearWallpaperImage(); setSettings(s => ({ ...s, wallpaper: "nebula", wallpaperSwatches: [], autoAccent: false, wallpaperAccent: null })); };
 
   const daysLeft = profile.targetDate ? daysBetween(new Date(), profile.targetDate) : null;
+  const todaySessions = (data.sessions || []).filter(s => s.date === todayStr());
+  const todayMin = todaySessions.reduce((a, s) => a + (s.minutes || 0), 0);
+  const checkGoal = Number(settings.goalMin) || 360;
+  const checkPct = checkGoal > 0 ? Math.min(100, Math.round((todayMin / checkGoal) * 100)) : 0;
+  const checkStreak = computeStreak(data.sessions || []);
   const initials = (profile.name || "")
     .replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2)
     .map(w => w[0]).join("").toUpperCase() || "?";
@@ -5092,7 +5097,32 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 
           {cat === "sync" && (
             <>
-              <Panel n="01" title="Sync" sub="Supabase, in real time">
+              <Panel n="01" title="Check-in" sub="Your day, at a glance">
+                <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "13px 18px" }}>
+                  <div style={{ flex: "1 1 160px", minWidth: 160 }}>
+                    <div style={{ fontSize: 10.5, color: COLORS.faint, marginBottom: 5, letterSpacing: "0.06em" }}>TODAY'S TARGET</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span className="num" style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{fmtMin(todayMin)}</span>
+                      <span style={{ fontSize: 10.5, color: COLORS.faint }}>of {fmtMin(checkGoal)}</span>
+                    </div>
+                    <div className="lg-progress" style={{ height: 5, marginTop: 8 }}>
+                      <div className="lg-progress-fill" style={{ width: `${checkPct}%`, "--lg-w": `${checkPct}%`, height: "100%" }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: checkPct >= 100 ? COLORS.done : COLORS.faint, marginTop: 6 }}>{checkPct >= 100 ? "Target hit — anything more is a bonus." : `${checkPct}% of today's goal`}</div>
+                  </div>
+                  <div style={{ flexShrink: 0, display: "flex", gap: 18, textAlign: "center" }}>
+                    <div>
+                      <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.18em", color: COLORS.faint }}>SESSIONS</div>
+                      <div className="num" style={{ fontSize: 18, fontWeight: 700, marginTop: 3 }}>{todaySessions.length}</div>
+                    </div>
+                    <div>
+                      <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.18em", color: COLORS.faint }}>STREAK</div>
+                      <div className="num" style={{ fontSize: 18, fontWeight: 700, marginTop: 3, color: checkStreak > 0 ? COLORS.accentWarm : COLORS.faint }}>{checkStreak}d</div>
+                    </div>
+                  </div>
+                </div>
+              </Panel>
+              <Panel n="02" title="Sync" sub="Supabase, in real time">
                 <Row title="Sync status" sub="Every change is written to your account automatically. This pulls the latest state back down." first>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
                     <span className="lg-statusdot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.done, boxShadow: `0 0 0 3px ${hexToRgba(COLORS.done, 0.12)}` }} />
@@ -5101,7 +5131,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                   </div>
                 </Row>
               </Panel>
-              <Panel n="02" title="Export & restore" sub="JSON, scoped to your account">
+              <Panel n="03" title="Export & restore" sub="JSON, scoped to your account">
                 <div className="lg-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "13px 18px" }}>
                   <Btn variant="ghost" onClick={exportData}><Download size={14} /> Export all data (JSON)</Btn>
                   <input id="ledger-import-input" type="file" accept="application/json" onChange={handleImportFile} style={{ display: "none" }} />

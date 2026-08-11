@@ -11,7 +11,7 @@ const HEX = /^#[0-9A-F]{6}$/;
 
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { todayStr } from "../src/lib/utils.js";
+import { todayStr, addDays } from "../src/lib/utils.js";
 
 // Enter the workspace via Demo Mode, clearing onboarding when the fresh
 // localStorage (no profile) shows it. Demo mode keeps storage local-only,
@@ -762,6 +762,36 @@ test("every route: numbered section headers stay sequential in DOM order", async
   await page.waitForTimeout(250);
   expect(await nums()).toEqual([1, 2, 3]);
   expect(await labels()).toEqual(["STUDY PLAN", "SUBJECTS", "FOCUS TIMER"]);
+});
+
+test("settings: Data & Sync check-in summarizes today's sessions against the daily goal", async ({ page }) => {
+  await openSettings(page);
+  await page.getByRole("button", { name: "Data & Sync" }).click();
+  await expect(page.getByText("CHECK-IN", { exact: true })).toBeVisible();
+  // Fresh demo profile: no sessions today — 0m against the 6h default goal.
+  await expect(page.getByText("0m", { exact: true })).toBeVisible();
+  await expect(page.getByText("0% of today's goal", { exact: true })).toBeVisible();
+  // Seed today + yesterday; the check-in re-renders straight from state.
+  await page.evaluate((d) => {
+    window.__ledgerSessions.seed([
+      { id: "qa-chk-1", date: d[0], minutes: 120, subject: "Physics", startHour: 9, mode: "manual" },
+      { id: "qa-chk-2", date: d[1], minutes: 30, subject: "Chemistry", startHour: 11, mode: "manual" },
+    ]);
+  }, [todayStr(), addDays(todayStr(), -1)]);
+  await expect(page.getByText("2h 0m", { exact: true })).toBeVisible();
+  await expect(page.getByText("33% of today's goal", { exact: true })).toBeVisible();
+  // Sessions column counts only today; streak spans yesterday + today.
+  await expect(page.getByText("SESSIONS", { exact: true }).locator("xpath=..").locator("div.num")).toHaveText("1");
+  await expect(page.getByText("STREAK", { exact: true }).first().locator("xpath=..").locator("div.num")).toHaveText("2d");
+  // Overshoot the goal and the check-in flips to the "hit" line, clamped at 100%.
+  await page.evaluate((d) => {
+    window.__ledgerSessions.seed([
+      { id: "qa-chk-1", date: d, minutes: 1440, subject: "Physics", startHour: 9, mode: "manual" },
+    ]);
+  }, todayStr());
+  await expect(page.getByText("Target hit — anything more is a bonus.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/day's goal/)).toHaveCount(0);
+  await expect(page.locator(".lg-progress-fill").first()).toHaveAttribute("style", /width: 100%/);
 });
 
 test("stories: opens a real 9:16 preview and switches recap/template", async ({ page }) => {
