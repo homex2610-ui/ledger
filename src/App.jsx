@@ -4721,6 +4721,38 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
     setSubjMsg("");
   };
 
+  // Changing the target exam only updates the label — it never silently adds
+  // or removes subjects. If the new exam implies subjects not already
+  // tracked, an inline prompt offers to apply its default chapter lists
+  // (opt-in, single syllabus patch, existing chapters untouched).
+  const [examPrompt, setExamPrompt] = useState(null); // { exam, added } | null
+  const [examMsg, setExamMsg] = useState("");
+  const onExamChange = (v) => {
+    if (v === profile.exam) return;
+    setProfile({ ...profile, exam: v });
+    const current = (profile.subjects || []).map(s => s.toLowerCase());
+    const added = (EXAM_SUBJECTS[v] || []).filter(s => !current.includes(s.toLowerCase()));
+    setExamPrompt(added.length > 0 ? { exam: v, added } : null);
+    setExamMsg("");
+  };
+  const applyExamDefaults = () => {
+    const added = examPrompt.added;
+    setProfile(p => ({ ...p, subjects: [...(p.subjects || []), ...added] }));
+    // Merge in default chapters for the new subjects only — one setSyllabus
+    // patch through the normal persistence path; existing chapters are never
+    // touched or duplicated (a subject that already has chapters is skipped).
+    setters.setSyllabus(prev => {
+      const fresh = buildInitialSyllabus(added, {}, {});
+      const next = { ...prev };
+      for (const sub of added) {
+        if (!next[sub] || next[sub].length === 0) next[sub] = fresh[sub];
+      }
+      return next;
+    });
+    setExamMsg(`Added ${added.map(s => s).join(", ")} with the ${EXAM_LABELS[examPrompt.exam]} default chapters.`);
+    setExamPrompt(null);
+  };
+
   const syncNow = async () => {
     try { if (onSync) await onSync(); setSyncedFlash(true); setTimeout(() => setSyncedFlash(false), 2600); }
     catch (e) { setSyncedFlash(false); setDoneMsg("Sync failed — check your connection and try again."); }
@@ -4808,11 +4840,21 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
               <Row title="Display name" sub="How you appear in your circle.">
                 <Input aria-label="Display name" value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>
-              <Row title="Target exam" sub="The plan your syllabus starts from.">
-                <SelectBox value={profile.exam || "JEE Main"} onChange={(v) => setProfile({ ...profile, exam: v })} ariaLabel="Target exam"
+              <Row title="Target exam" sub="The plan your syllabus starts from. Changing it never touches your subjects or progress — unless you opt in below.">
+                <SelectBox value={profile.exam || "JEE Main"} onChange={onExamChange} ariaLabel="Target exam"
                   options={Object.keys(EXAM_SUBJECTS).map(k => ({ value: k, label: EXAM_LABELS[k] }))}
                   style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>
+              {examPrompt && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 18px", background: hexToRgba(COLORS.ink, 0.06), borderTop: `1px solid ${COLORS.border}` }}>
+                  <span style={{ fontSize: 11.5, color: COLORS.dim, flex: "1 1 260px", lineHeight: 1.5 }}>
+                    <b style={{ color: COLORS.text }}>{EXAM_LABELS[examPrompt.exam]}</b> also tracks {examPrompt.added.join(", ")} — add the default chapter lists for it (opt-in)?
+                  </span>
+                  <Btn variant="ink" style={{ padding: "6px 11px", fontSize: 11.5 }} onClick={applyExamDefaults}>Add {examPrompt.added.join(", ")}</Btn>
+                  <Btn variant="ghost" style={{ padding: "6px 11px", fontSize: 11.5 }} onClick={() => { setExamPrompt(null); setExamMsg(""); }}>Keep as is</Btn>
+                </div>
+              )}
+              {examMsg && <div style={{ fontSize: 11, color: COLORS.done, padding: "0 18px 12px", borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>{examMsg}</div>}
               <Row title="Target date" sub={daysLeft === null ? "Set a date and the countdown runs from there." : daysLeft === 0 ? "Exam day is today." : daysLeft > 0 ? `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to go.` : `${-daysLeft} days since — revise your goals?`}>
                 <Input type="date" value={profile.targetDate} onChange={e => setProfile({ ...profile, targetDate: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>

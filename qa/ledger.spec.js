@@ -1,8 +1,8 @@
-// End-to-end assertions for Ledger (dev server, Demo Mode).
+﻿// End-to-end assertions for Ledger (dev server, Demo Mode).
 //
 // The fixed color constants below document the CURRENT default appearance:
 // DEFAULT_SETTINGS.theme = "midnight" (THEME_PRESETS.midnight.focus
-// #8AAAC6). If the default theme ever changes, update them here — the test
+// #8AAAC6). If the default theme ever changes, update them here â€” the test
 // is meant to pin the palette the app actually ships with.
 const ACCENT_HEX = "#8AAAC6";            // emitted verbatim into the style tag
 const ACCENT_RGBA = "rgba(138,170,198,"; // hexToRgba form (no spaces)
@@ -52,8 +52,8 @@ async function enterDemo(page) {
 
 const sideNav = (page) => page.locator('nav[aria-label="Primary"]');
 
-// Settings isn't on the dock — it lives in the account popover (avatar
-// button → "Settings" menuitem).
+// Settings isn't on the dock â€” it lives in the account popover (avatar
+// button â†’ "Settings" menuitem).
 async function openSettings(page) {
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Settings" }).click();
@@ -70,7 +70,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("theme system: Ledger accent is emitted in the style tag and rendered on the nav", async ({ page }) => {
-  // (a) The applied accent must appear in the emitted CSS — both the raw
+  // (a) The applied accent must appear in the emitted CSS â€” both the raw
   // hex (the .lg-nav-item.active color rule) and the rgba forms (the
   // ::before glow / active background hexToRgba() calls).
   const css = await styleTagText(page);
@@ -83,7 +83,7 @@ test("theme system: Ledger accent is emitted in the style tag and rendered on th
 
 test("countdown: the D-day numeral renders in the theme's coral token", async ({ page }) => {
   // Demo onboarding sets a target date, so the hero countdown is live. The
-  // numeral must carry the theme's dedicated countdown coral — in midnight
+  // numeral must carry the theme's dedicated countdown coral â€” in midnight
   // that is THEME_PRESETS.midnight.countdown = #EF6A60, independent of the
   // slate accent, so an upcoming exam reads as a deadline, not a theme color.
   const coral = await page.locator("div.num").evaluateAll(els => {
@@ -140,14 +140,14 @@ test("wallpaper hooks: extractPalette and clampAccentHex behave in-page", async 
 test("settings flow: wallpaper mode, clock style + 24h, sound toggle all render", async ({ page }) => {
   await openSettings(page);
 
-  // Wallpaper: pick Black — the layer behind everything must flip to it.
+  // Wallpaper: pick Black â€” the layer behind everything must flip to it.
   await page.getByRole("button", { name: "Wallpaper", exact: true }).click();
   const blackCard = page.getByRole("button", { name: /^Black/ });
   await blackCard.click();
   await expect(blackCard).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('[data-wallpaper="black"]').last()).toBeAttached();
 
-  // Clock: flip style + 24h — then prove the Home clock actually renders it.
+  // Clock: flip style + 24h â€” then prove the Home clock actually renders it.
   await page.getByRole("button", { name: "Clock", exact: true }).click();
   await page.getByRole("button", { name: "Flip", exact: true }).click();
   await expect(page.locator(".lg-seg-item.active")).toHaveText("Flip");
@@ -163,7 +163,7 @@ test("settings flow: wallpaper mode, clock style + 24h, sound toggle all render"
   await expect(page.locator(".lg-switch input")).toBeChecked();
 });
 
-test("settings: typing into Display name keeps focus — no per-keystroke remount", async ({ page }) => {
+test("settings: typing into Display name keeps focus â€” no per-keystroke remount", async ({ page }) => {
   // Regression for the old remount bug: Settings used to define local
   // components (Panel et al.) inside its own body, so every keystroke in the
   // Display name field remounted the subtree and dropped focus mid-typing.
@@ -183,13 +183,13 @@ test("settings: typing into Display name keeps focus — no per-keystroke remoun
 });
 
 test("auth: fresh session after demo lands on Onboarding, never the demo dashboard", async ({ page }) => {
-  // Simulates the demo → real-account transition. __ledgerAuth drives the
+  // Simulates the demo â†’ real-account transition. __ledgerAuth drives the
   // same setSession terminal the real Supabase auth listener uses, so the
   // Workspace sees an ordinary session change (userId identity swap re-fires
   // the boot load AND every save effect). Fresh accounts have no profile, so
   // the app must end on Onboarding and must never keep showing the demo
   // user's dashboard during the reload. In the e2e env the simulated user has
-  // no real Supabase session, so RLS blocks its writes — the persistence
+  // no real Supabase session, so RLS blocks its writes â€” the persistence
   // corruption half of the race can only be confirmed live (real OTP).
   await expect(sideNav(page)).toBeVisible();
   await page.evaluate(() => {
@@ -197,9 +197,9 @@ test("auth: fresh session after demo lands on Onboarding, never the demo dashboa
   });
   // The demo dashboard (nav included) must detach promptly: the boot effect
   // resets ready/profile synchronously on the session change, so the reload
-  // window renders the loading state — never a stale flash of the previous
+  // window renders the loading state â€” never a stale flash of the previous
   // user's data. (Pre-fix, the dashboard persisted through the whole reload;
-  // that failure mode was reproduced during the audit — this test now pins
+  // that failure mode was reproduced during the audit â€” this test now pins
   // the fixed contract.)
   await page.waitForSelector('nav[aria-label="Primary"]', { state: "detached", timeout: 2_000 });
   await expect(page.getByText("Who are you?")).toBeVisible({ timeout: 15_000 });
@@ -218,11 +218,11 @@ test("error boundary: forced render crash shows the friendly fallback with reloa
   await expect(page.getByRole("button", { name: "Reload Ledger" })).toBeVisible();
   await expect(page.locator('pre[data-dev-only="stack"]')).toContainText("ledger-qa-crash");
   await expect(sideNav(page)).toHaveCount(0);
-  // componentDidCatch runs and routes the full detail to the dev console —
+  // componentDidCatch runs and routes the full detail to the dev console â€”
   // the build-time grep pins that production only logs the sanitized marker.
   await expect.poll(() => fatalLogs.length, { timeout: 5000 }).toBeGreaterThan(0);
   // The Reload action must recover the app. The demo session is memory-only
-  // (never persisted), so the reload boots to the auth screen — re-entering
+  // (never persisted), so the reload boots to the auth screen â€” re-entering
   // demo proves the app works again instead of a dead fallback.
   await page.getByRole("button", { name: "Reload Ledger" }).click();
   await enterDemo(page);
@@ -231,7 +231,7 @@ test("error boundary: forced render crash shows the friendly fallback with reloa
 test("audio: one shared context, created by the first real gesture", async ({ page }) => {
   // A real user gesture (pointerdown anywhere) is the app's only unlock
   // trigger. The module-owned ctx and the window.__ledgerAudioCtx handle the
-  // timer chime reads must be the SAME object — the single-owner contract.
+  // timer chime reads must be the SAME object â€” the single-owner contract.
   await page.evaluate(() => window.dispatchEvent(new PointerEvent("pointerdown")));
   const state = await page.evaluate(() => {
     const s = window.__ledgerSound.state();
@@ -272,7 +272,7 @@ test("wallpaper upload: custom mode, persisted image, palette pins, accent takeo
 
   // The extraction pipeline drove the accent: back on Home, the nav accent
   // must become the clamped extraction of the test image's dominant teal
-  // (#37C8A4 — deterministic from the 3:1 teal:coral canvas). The nav color
+  // (#37C8A4 â€” deterministic from the 3:1 teal:coral canvas). The nav color
   // transitions over 160ms, so poll for the exact end value.
   await expect.poll(async () => {
     await sideNav(page).getByRole("button", { name: "Home" }).click();
@@ -305,7 +305,7 @@ test("sidebar: rail is opaque in all states; wordmark never overlaps nav items",
   // Wordmark is hidden in collapsed (opacity 0)
   await expect(wordmark).toHaveCSS("opacity", "0");
 
-  // Pin the rail to expand it — pin button only appears on hover, so hover first
+  // Pin the rail to expand it â€” pin button only appears on hover, so hover first
   await rail.hover();
   await page.locator(".lg-pin-btn").click();
   await expect(rail).toHaveClass(/lg-side-pinned/);
@@ -314,7 +314,7 @@ test("sidebar: rail is opaque in all states; wordmark never overlaps nav items",
   bg = await rail.evaluate(el => getComputedStyle(el).backgroundColor);
   expect(bg).toMatch(/^rgb\(/);
 
-  // Wordmark visible and positioned inside brand cell — not overlapping nav items
+  // Wordmark visible and positioned inside brand cell â€” not overlapping nav items
   await expect(wordmark).toHaveCSS("opacity", "1");
   const wordmarkRect = await wordmark.evaluate(el => el.getBoundingClientRect());
   const navItems = page.locator(".lg-nav-item");
@@ -375,8 +375,8 @@ test("sidebar: label text AND empty row space are click targets (full-row nav)",
   await page.mouse.click(lb.x + lb.width / 2, lb.y + lb.height / 2);
   await expect(sideNav(page).getByRole("button", { name: "Coverage" })).toHaveAttribute("aria-current", "page");
 
-  // (b) Click EMPTY SPACE inside the "Focus" row — 20px from the row's right
-  // edge, far from both icon and label — still navigates.
+  // (b) Click EMPTY SPACE inside the "Focus" row â€” 20px from the row's right
+  // edge, far from both icon and label â€” still navigates.
   const focusRow = sideNav(page).getByRole("button", { name: "Focus" });
   const rb = await focusRow.boundingBox();
   await page.mouse.click(rb.x + rb.width - 20, rb.y + rb.height / 2);
@@ -400,12 +400,12 @@ test("countdown: the coral numeral survives a theme switch", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Switch to Noir Mono" })).toHaveAttribute("aria-pressed", "true");
   await sideNav(page).getByRole("button", { name: "Home" }).click();
 
-  // Noir's countdown coral #F26A5E — deliberately NOT the acid-lime accent.
+  // Noir's countdown coral #F26A5E â€” deliberately NOT the acid-lime accent.
   expect(await numeralColor()).toBe("rgb(242, 106, 94)");
 });
 
 test("weekly segments: empty state, seeded sessions render segments/tooltips, trigger fires", async ({ page }) => {
-  // Fresh demo: no week strip yet — it only renders once at least one day in
+  // Fresh demo: no week strip yet â€” it only renders once at least one day in
   // the trailing week has focus logged.
   await expect(page.locator(".lg-week-ring-wrap")).not.toBeAttached();
   await expect(page.locator(".lg-week-seg")).toHaveCount(0);
@@ -429,17 +429,17 @@ test("weekly segments: empty state, seeded sessions render segments/tooltips, tr
     ]);
   }, [today, yesterday, dayBefore]);
 
-  // Return to Home — Dashboard mounts with sessions already in state
+  // Return to Home â€” Dashboard mounts with sessions already in state
   await sideNav(page).getByRole("button", { name: "Home" }).click();
 
   // Park the pointer in the content area so the rail collapses and the page
-  // settles — the rail now reserves its expanded width, so collapsing it
+  // settles â€” the rail now reserves its expanded width, so collapsing it
   // slides content right-to-left (by design). Hovering a segment mid-slide
   // would move the segment out from under the pointer.
   await page.mouse.move(800, 400);
   await page.waitForTimeout(400);
 
-  // The dashboard is ONE continuous page — the segment strip is on the page
+  // The dashboard is ONE continuous page â€” the segment strip is on the page
   // and Playwright scrolls it into view for the hover below.
   await page.locator(".lg-week-ring-wrap").scrollIntoViewIfNeeded();
   await page.waitForTimeout(250);
@@ -488,7 +488,7 @@ test("trigger: session logged on Focus tab still fires tick (audio only, no shak
   const audioState = await page.evaluate(() => window.__ledgerSound.state());
   expect(audioState.ticks).toBe(1);
 
-  // Return to Home — shake should have fired on mount since ringBurst changed
+  // Return to Home â€” shake should have fired on mount since ringBurst changed
   await sideNav(page).getByRole("button", { name: "Home" }).click();
   await expect.poll(async () => {
     return await page.locator(".lg-week-ring-wrap").evaluate(el => el.classList.contains("lg-ring-burst"));
@@ -538,6 +538,51 @@ test("typography: presets and font roles update the live preview", async ({ page
   await expect.poll(async () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-display"))).toMatch(/Manrope/);
 });
 
+test("settings: changing the target exam offers an opt-in apply of subject defaults; keeping as-is touches nothing", async ({ page }) => {
+  await openSettings(page);
+  const examBox = page.getByRole("button", { name: "Target exam" });
+
+  // Demo onboarding starts on JEE Main (PCM). Switch to NEET: the exam label
+  // changes, but Biology must NOT be added until the user opts in.
+  await examBox.click();
+  await page.getByRole("option", { name: "NEET", exact: true }).click();
+  await expect(page.getByText(/also tracks Biology/)).toBeVisible();
+  // Keep as is → no prompt residue, no Biology anywhere.
+  await page.getByRole("button", { name: "Keep as is" }).click();
+  await expect(page.getByText(/also tracks Biology/)).toHaveCount(0);
+  await page.getByRole("button", { name: "Study Preferences" }).click();
+  await expect(page.getByRole("button", { name: /Remove Biology/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Profile" }).click();
+
+  // Revert path: the exam is still NEET (Keep as is kept it). Switch away to
+  // JEE Main first — PCM only, nothing new implied, so no prompt — then switch
+  // back to NEET. The prompt must re-arm: nothing may cache "already offered
+  // defaults for NEET" from the earlier keep-as-is round-trip.
+  await examBox.click();
+  await page.getByRole("option", { name: "JEE Main", exact: true }).click();
+  await expect(page.getByText(/also tracks Biology/)).toHaveCount(0);
+  await examBox.click();
+  await page.getByRole("option", { name: "NEET", exact: true }).click();
+  await expect(page.getByText(/also tracks Biology/)).toBeVisible();
+  await page.getByRole("button", { name: "Add Biology" }).click();
+  await expect(page.getByText(/Added Biology with the NEET default chapters/)).toBeVisible();
+  // Biology appears on the subject list (Study Preferences panel).
+  await page.getByRole("button", { name: "Study Preferences" }).click();
+  await expect(page.getByRole("button", { name: /Remove Biology/ })).toBeVisible();
+
+  // The default chapters landed in the syllabus: Coverage shows Biology rows
+  // once the Biology tab is active (rows render per active subject).
+  await sideNav(page).getByRole("button", { name: "Coverage" }).click();
+  await expect(page.getByText("Coverage / Knowledge map")).toBeVisible();
+  await page.getByRole("tab", { name: /Biology/ }).click();
+  const bioRows = page.locator(".lg-coverage-page .lg-coverage-row", { hasText: "Diversity in Living World" });
+  await expect(bioRows.first()).toBeVisible();
+  // And the existing PCM chapters were preserved, not duplicated.
+  await page.getByRole("tab", { name: /Physics/ }).click();
+  const physRows = page.locator(".lg-coverage-page .lg-coverage-row", { hasText: "Units & Measurements" });
+  await expect(physRows.first()).toBeVisible();
+});
+
 test("profile: account command center shows real identity, metrics and actions; closes on Escape/outside click", async ({ page }) => {
   const trigger = page.getByRole("button", { name: "Account" });
   await trigger.click();
@@ -563,7 +608,7 @@ test("profile: account command center shows real identity, metrics and actions; 
 });
 
 test("dashboard: section headers render 01..08 sequential in DOM order (04 appears once data exists)", async ({ page }) => {
-  // Section headers are identified structurally — a div whose direct children
+  // Section headers are identified structurally â€” a div whose direct children
   // are a 2-digit span.num (the numeral) followed by a span.sys (the label).
   // Deliberately not a component-name selector: it must survive the
   // LedgerRule -> SectionHeader rename and keep catching render-order bugs.
@@ -580,7 +625,7 @@ test("dashboard: section headers render 01..08 sequential in DOM order (04 appea
   });
 
   // Fresh demo profile: no sessions/tasks/mocks yet, so 04 TODAY is
-  // intentionally hidden — the remaining headers must still be sequential.
+  // intentionally hidden â€” the remaining headers must still be sequential.
   const empty = await seq();
   expect(empty.length).toBeGreaterThanOrEqual(7);
   for (let i = 1; i < empty.length; i++) {
@@ -611,8 +656,8 @@ test("dashboard: section headers render 01..08 sequential in DOM order (04 appea
 });
 
 test("every route: numbered section headers stay sequential in DOM order", async ({ page }) => {
-  // Same structural selector as the dashboard book test — numeral + label
-  // siblings — so every route keeps the numbered-book contract.
+  // Same structural selector as the dashboard book test â€” numeral + label
+  // siblings â€” so every route keeps the numbered-book contract.
   const seq = () => page.evaluate(() => {
     const out = [];
     document.querySelectorAll("div").forEach(e => {
@@ -646,7 +691,7 @@ test("every route: numbered section headers stay sequential in DOM order", async
   expect(await nums()).toEqual([1, 2, 3]);
   expect(await labels()).toEqual(["LOG A MISTAKE", "MISTAKE PROFILE", "MISTAKE LEDGER"]);
 
-  // Recall on a fresh profile: 05 FORGOTTEN — REGRADE SHELF is hidden until
+  // Recall on a fresh profile: 05 FORGOTTEN â€” REGRADE SHELF is hidden until
   // a card is forgotten, so the visible book skips 04 -> 06 but stays
   // strictly sequential.
   await go("Recall");
@@ -696,7 +741,7 @@ test("save failure: a failed storage write surfaces a toast, then auto-dismisses
   await expect(toast).toBeVisible();
   // Auto-dismisses after the 4.5s display window + 180ms exit animation.
   await expect(toast).toBeHidden({ timeout: 8000 });
-  // No seam armed: the next save succeeds silently — no toast returns.
+  // No seam armed: the next save succeeds silently â€” no toast returns.
   await page.evaluate(() => window.__ledgerSessions.seed([]));
   await expect(toast).toHaveCount(0);
 });
