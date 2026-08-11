@@ -1473,10 +1473,6 @@ input[type="range"] { accent-color: ${glowC}; cursor: pointer; }
 .app-shell > .app-main { position: relative; z-index: 1; }
 .app-shell > .lg-side-wrap { position: relative; z-index: 3; }
 
-/* ---------- Dashboard coverage ring: static, no ambient pulse ---------- */
-.lg-ring-pulse { transform-origin: center; }
-.lg-ring-pulse-static { transform-origin: center; }
-
 /* ---------- Weekly ring: shake burst on session log ---------- */
 @keyframes lg-ringShake {
   0%, 100% { transform: translateX(0); }
@@ -1486,9 +1482,10 @@ input[type="range"] { accent-color: ${glowC}; cursor: pointer; }
   80% { transform: translateX(2px); }
 }
 .lg-ring-burst { animation: lg-ringShake 160ms ease-out; transform-origin: center; }
-/* The days ring is a static instrument — no ambient breathing. A live session
-   reads through the week-segment pulse instead, which communicates state. */
-.lg-days-ring .lg-ring-pulse { transform-origin: center; }
+/* The seven-day segment strip is a static instrument when idle — no ambient
+   breathing, no animation running at all outside a live session. A running
+   focus session reads through the .lg-week-seg-live pulse on today's segment;
+   the session-log shake is .lg-ring-burst. Keep the idle state animation-free. */
 .lg-tests-hero { display: grid; grid-template-columns: minmax(260px, 1.3fr) repeat(3, minmax(130px, 0.7fr)); align-items: stretch; gap: 1px; background: ${COLORS.border}; border: 1px solid ${COLORS.border}; border-radius: ${RADIUS.card}px; overflow: hidden; }
 .lg-tests-score { padding: 24px 26px; background: ${COLORS.panel2}; }
 .lg-tests-score-number { color: ${COLORS.text}; font-family: ${FONTS.mono}; font-size: clamp(54px, 7vw, 82px); font-weight: 700; line-height: 0.95; letter-spacing: -0.08em; margin: 18px 0 14px; }
@@ -1527,6 +1524,7 @@ input[type="range"] { accent-color: ${glowC}; cursor: pointer; }
   .lg-week-seg-enter { animation: none !important; opacity: 1 !important; transform: scale(1) !important; }
   .lg-week-seg-live { animation: none !important; }
   .lg-week-seg-pulse { animation: none !important; }
+  .lg-ring-burst { animation: none !important; }
 }
 
 /* ---------- 7-day ring companion widget (dashboard hero) ---------- */

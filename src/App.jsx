@@ -24,7 +24,6 @@ import { computeRingSegments, fmtTotal } from "./lib/ringSegments.js";
 import Sidebar from "./components/layout/Sidebar";
 import { DAILY_GOAL_MIN, FocusRing } from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
-import GlobalSwipe from "./components/layout/GlobalSwipe";
 import WallpaperLayer from "./components/ui/WallpaperLayer";
 import { Card, Stat, MiniStat, PageHead, SectionHeader, EmptyState, EmptyArt, Btn, Input, SelectBox, Toggle, Row, Panel } from "./components/ui/Panels";
 import Stories from "./components/stories/Stories";
@@ -219,6 +218,14 @@ function useStorage(session) {
   // the user's real data — so save() refuses those keys until a load
   // succeeds.
   const failedLoadsRef = useRef(new Set());
+  // Which userId's data has finished loading. Every write funnels through
+  // save(), so one guard here covers all paths (autosave effects, the
+  // debounced syllabus/cards flush, the pagehide flush, and the leaderboard
+  // publish) — a session change re-keys load()/save() and re-fires every
+  // save effect with the previous user's stale in-memory values; without
+  // this, those stale writes could land under the new user's rows before
+  // the new user's data is read back.
+  const loadedRef = useRef(null);
 
   const load = useCallback(async (key, fallback, shared = false) => {
     if (!userId) return fallback;
@@ -241,8 +248,17 @@ function useStorage(session) {
     }
   }, [userId]);
 
+  const markLoaded = useCallback((uid) => {
+    loadedRef.current = uid;
+    console.warn(`[storage] markLoaded -> ${uid}`);
+  }, []);
+
   const save = useCallback(async (key, value, shared = false) => {
     if (!userId) return;
+    if (loadedRef.current !== userId) {
+      console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — load for ${userId} not completed yet (loadedRef=${loadedRef.current})`);
+      return;
+    }
     const k = `${key}:${shared}`;
     if (failedLoadsRef.current.has(k)) {
       // Last read failed, so `value` may be the fallback (e.g. an empty
@@ -250,6 +266,7 @@ function useStorage(session) {
       console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — last load failed`);
       return;
     }
+    console.warn(`[storage] PASS save for "${key}" (shared=${shared}) uid=${userId} loadedRef=${loadedRef.current}`);
     try {
       await supabase.from("kv_store").upsert(
         { owner_id: userId, key, shared, value, updated_at: new Date().toISOString() },
@@ -259,7 +276,7 @@ function useStorage(session) {
       console.error(`[storage] save failed for "${key}" (shared=${shared})`, e);
     }
   }, [userId]);
-  return { load, save };
+  return { load, save, markLoaded };
 }
 function Bubble({ status, size = 20, onClick, disabled }) {
   const colorMap = { todo: COLORS.faint, doing: COLORS.warn, done: COLORS.done, mastered: COLORS.ink };
@@ -310,7 +327,7 @@ function useDevHooks({ sessions, setSessions }) {
 // once a Supabase session exists. See AuthGate below for the login screen
 // and the real default export of this file.
 function Workspace({ session }) {
-  const { load, save } = useStorage(session);
+  const { load, save, markLoaded } = useStorage(session);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState("dashboard");
   const [profile, setProfile] = useState(null);
@@ -722,13 +739,33 @@ function Workspace({ session }) {
   // and the loaded renders.
   const timerRef = useRef(null);
 
+  // Generation counter for the boot load: only the LAST-started load may
+  // commit its results. A slower earlier load resolving after a newer
+  // session change must not repaint state — or reopen the save window — for
+  // a user whose session is no longer current. userId inside the async IIFE
+  // is closure-frozen, so it can't be compared against the live userId; the
+  // generation is the mutable value that spans the closure boundary.
+  const bootGenRef = useRef(0);
+
   useEffect(() => {
+    const gen = ++bootGenRef.current;
+    const uid = userId;
+    console.warn(`[storage] boot effect gen=${gen} uid=${uid}`);
+    // A session change must never keep rendering the previous user's data
+    // while the new user's rows load — reset synchronously, before the async
+    // read, so the reload window shows the loading state instead of a stale
+    // flash. This also drops the stale profile so the onboarding gate
+    // (`if (!profile)`) evaluates against a clean slate.
+    setReady(false);
+    setProfile(null);
     (async () => {
       const [p, s, t, se, m, er, pe, dq, cd, ub, st] = await Promise.all([
         load("profile", null), load("syllabus", {}), load("tasks", []),
         load("sessions", []), load("mocks", []), load("errors", []), load("peers", []),
         load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", DEFAULT_SETTINGS),
       ]);
+      if (gen !== bootGenRef.current) return; // a newer boot started — this one is stale
+      console.warn(`[storage] boot gen=${gen} loads resolved, committing state for uid=${uid} (gen now ${bootGenRef.current})`);
       // Migrate any persisted pre-Glass theme id (or an unknown/undefined id)
       // to the equivalent Glass variant so the app never renders an undefined
       // theme. If the stored value needed migrating we pass the corrected
@@ -737,6 +774,7 @@ function Workspace({ session }) {
        const mergedSafe = { ...DEFAULT_SETTINGS, ...(st || {}), theme: stTheme, typography: { ...DEFAULT_SETTINGS.typography, ...((st && st.typography) || {}) } };
       setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(mergedSafe);
       setTimerSubject((p && p.subjects && p.subjects[0]) || null);
+      markLoaded(uid);
       setReady(true);
     })();
   }, [load]);
@@ -957,8 +995,7 @@ function Workspace({ session }) {
 
       <div className="app-main lg-main">
         <Header profile={profile} sessions={sessions} tasks={tasks} />
-        <GlobalSwipe tab={tab} onNav={setTab}>
-          <div className="lg-page" key={tab}>
+        <div className="lg-page" key={tab}>
              {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} setDpp={setDpp} peers={peers} peerData={peerData} unlockedBadges={unlockedBadges} setTab={setTab} timer={timer} onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)} onShareStories={() => setStoriesOpen(true)} dashboardSettings={settings.dashboard} goalMin={settings.goalMin} dateFormat={settings.dateFormat} clockStyle={settings.clockStyle} />}
             {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} settings={settings.recall} />}
             {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} settings={settings.coverage} />}
@@ -983,7 +1020,6 @@ function Workspace({ session }) {
               onWipeNow={wipeNow}
             />}
           </div>
-        </GlobalSwipe>
       </div>
 
       {settings.floatingTimer !== false && (
@@ -1445,8 +1481,6 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const [weekTip, setWeekTip] = useState(null);
   const weekEntries = Array.from({ length: 7 }, (_, i) => { const date = addDays(todayStr(), -i); return { date, minutes: sessions.filter(s => s.date === date).reduce((a, s) => a + (s.minutes || 0), 0) }; }).filter(x => x.minutes > 0).reverse();
   const goalPct = Math.min(100, Math.round((todayMin / goal) * 100));
-  const weeklyAvgMin = Math.round(sessions.filter(s => s.date >= addDays(todayStr(), -6)).reduce((a, s) => a + (s.minutes || 0), 0) / 7);
-  const weeklyRingDash = Math.round(188 * Math.min(1, weeklyAvgMin / Math.max(1, goal)));
   const goalHours = goal / 60;
   const timerRunningSec = timer ? timer.elapsed : 0;
   const timerShowingRunning = !!(timer && timer.running && timer.elapsed > 0);
@@ -1508,10 +1542,11 @@ return (
           <div className="sys" style={{ fontSize: 9.5, letterSpacing: "0.26em", color: COLORS.faint }}>{examTitle} · {targetYear}</div>
           <div className="num" style={{ fontSize: "clamp(72px, 10vw, 148px)", fontWeight: 800, lineHeight: 0.78, letterSpacing: "-0.05em", fontVariantNumeric: "tabular-nums", color: daysLeft === null ? COLORS.faint : COLORS.countdownAccent, marginTop: 10 }}>{daysLeft === null ? "—" : daysLeft}</div>
            <div className="sys" style={{ fontSize: 11, letterSpacing: "0.42em", color: daysLeft === null ? COLORS.faint : urgent ? COLORS.danger : COLORS.dim, marginTop: 12 }}>{daysLeft === null ? "NO DATE SET" : "DAYS LEFT"}</div>
-           <div className={`lg-week-ring-wrap lg-days-ring${sessions.length ? " lg-ring-burst" : ""}`} style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 22 }}>
+           {weekEntries.length > 0 && (
+           <div className={`lg-week-ring-wrap${sessions.length ? " lg-ring-burst" : ""}`} style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 22 }}>
              <div style={{ position: "relative", display: "flex", gap: 6 }}>{weekEntries.map((x, i) => <span key={x.date} className={`lg-week-seg${x.date === todayStr() ? " lg-week-seg-live" : ""}`} title={`${parseLocalDate(x.date).toLocaleDateString(undefined, { weekday: "short" })} · ${fmtMin(x.minutes)}`} onMouseEnter={() => setWeekTip(`${parseLocalDate(x.date).toLocaleDateString(undefined, { weekday: "short" })} · ${fmtMin(x.minutes)}`)} onMouseLeave={() => setWeekTip(null)} style={{ width: 12, height: 12, borderRadius: 3, background: COLORS.chart[i % COLORS.chart.length] }} />)}{weekTip && <div className="lg-tooltip" style={{ position: "absolute", right: 0, top: 18, zIndex: 4, padding: "5px 8px", borderRadius: 5, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 10, whiteSpace: "nowrap" }}>{weekTip}</div>}</div>
-             <svg width="78" height="78" viewBox="0 0 78 78" aria-label="Weekly subject focus ring"><circle cx="39" cy="39" r="30" fill="none" stroke={COLORS.border} strokeWidth="6" /><circle className="lg-ring-pulse" cx="39" cy="39" r="30" fill="none" stroke={COLORS.accentFocus} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${weeklyRingDash} 188`} transform="rotate(-90 39 39)" /><text x="39" y="43" textAnchor="middle" fill={COLORS.text} fontSize="11" fontFamily={FONTS.mono}>{fmtMin(weeklyAvgMin)}</text></svg>
            </div>
+           )}
         </div>
         )}
       </div>
@@ -4596,7 +4631,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                 </div>
               </div>
               <Row title="Display name" sub="How you appear in your circle.">
-                <Input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
+                <Input aria-label="Display name" value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} style={{ flex: "1 1 200px", minWidth: 150, maxWidth: 280 }} />
               </Row>
               <Row title="Target exam" sub="The plan your syllabus starts from.">
                 <SelectBox value={profile.exam || "JEE Main"} onChange={(v) => setProfile({ ...profile, exam: v })} ariaLabel="Target exam"
@@ -5001,6 +5036,19 @@ export default function AuthGate() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // Dev-only: drive session changes through the exact same setSession
+  // terminal the real getSession()/onAuthStateChange() listeners above use,
+  // so e2e can simulate an auth transition without shortcutting the
+  // Workspace's userId derivation or effect scheduling.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__ledgerAuth = {
+      signInAs: (user) => setSession({ user }),
+      signOut: () => setSession(null),
+    };
+    return () => { if (import.meta.env.DEV) delete window.__ledgerAuth; };
   }, []);
 
   if (session === undefined) {

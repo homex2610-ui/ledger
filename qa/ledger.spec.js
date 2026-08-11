@@ -143,6 +143,49 @@ test("settings flow: wallpaper mode, clock style + 24h, sound toggle all render"
   await expect(page.locator(".lg-switch input")).toBeChecked();
 });
 
+test("settings: typing into Display name keeps focus — no per-keystroke remount", async ({ page }) => {
+  // Regression for the old remount bug: Settings used to define local
+  // components (Panel et al.) inside its own body, so every keystroke in the
+  // Display name field remounted the subtree and dropped focus mid-typing.
+  // A value-only assertion would still pass then (React reconciles the final
+  // value regardless), so focus must be asserted after EVERY character.
+  await openSettings(page);
+  const input = page.getByRole("textbox", { name: "Display name" });
+  await input.focus();
+  await input.press("Control+a");
+  await input.press("Delete");
+  const name = "Juno-42";
+  for (const ch of name) {
+    await page.keyboard.type(ch);
+    await expect(input).toBeFocused();
+  }
+  await expect(input).toHaveValue(name);
+});
+
+test("auth: fresh session after demo lands on Onboarding, never the demo dashboard", async ({ page }) => {
+  // Simulates the demo → real-account transition. __ledgerAuth drives the
+  // same setSession terminal the real Supabase auth listener uses, so the
+  // Workspace sees an ordinary session change (userId identity swap re-fires
+  // the boot load AND every save effect). Fresh accounts have no profile, so
+  // the app must end on Onboarding and must never keep showing the demo
+  // user's dashboard during the reload. In the e2e env the simulated user has
+  // no real Supabase session, so RLS blocks its writes — the persistence
+  // corruption half of the race can only be confirmed live (real OTP).
+  await expect(sideNav(page)).toBeVisible();
+  await page.evaluate(() => {
+    window.__ledgerAuth.signInAs({ id: "11111111-2222-3333-4444-555555555555", email: "fresh@example.com" });
+  });
+  // The demo dashboard (nav included) must detach promptly: the boot effect
+  // resets ready/profile synchronously on the session change, so the reload
+  // window renders the loading state — never a stale flash of the previous
+  // user's data. (Pre-fix, the dashboard persisted through the whole reload;
+  // that failure mode was reproduced during the audit — this test now pins
+  // the fixed contract.)
+  await page.waitForSelector('nav[aria-label="Primary"]', { state: "detached", timeout: 2_000 });
+  await expect(page.getByText("Who are you?")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("QA Tester")).toHaveCount(0);
+});
+
 test("audio: one shared context, created by the first real gesture", async ({ page }) => {
   // A real user gesture (pointerdown anywhere) is the app's only unlock
   // trigger. The module-owned ctx and the window.__ledgerAudioCtx handle the
@@ -319,48 +362,11 @@ test("countdown: the coral numeral survives a theme switch", async ({ page }) =>
   expect(await numeralColor()).toBe("rgb(242, 106, 94)");
 });
 
-test("swipe: horizontal gestures page between workspaces; vertical stays native", async ({ page }) => {
-  const pageEl = () => page.locator(".lg-page");
-
-  // Trackpad horizontal wheel: HOME → FOCUS
-  await pageEl().dispatchEvent("wheel", { deltaX: -140, bubbles: true });
-  await expect(sideNav(page).getByRole("button", { name: "Focus" })).toHaveAttribute("aria-current", "page");
-  await expect(sideNav(page).getByRole("button", { name: "Home" })).not.toHaveAttribute("aria-current", "page");
-
-  // Trackpad horizontal wheel right: FOCUS → HOME
-  await pageEl().dispatchEvent("wheel", { deltaX: 140, bubbles: true });
-  await expect(sideNav(page).getByRole("button", { name: "Home" })).toHaveAttribute("aria-current", "page");
-
-  // Vertical wheel must NOT navigate (normal scrolling preserved).
-  await pageEl().dispatchEvent("wheel", { deltaY: 500, bubbles: true });
-  await expect(sideNav(page).getByRole("button", { name: "Home" })).toHaveAttribute("aria-current", "page");
-
-  // Touch drag left (synthetic pointer stream): HOME → FOCUS
-  const box = await pageEl().boundingBox();
-  const cx = box.x + Math.min(300, box.width / 2);
-  const cy = box.y + 60;
-  const drag = (fromX, toX) => {
-    pageEl().dispatchEvent("pointerdown", { clientX: fromX, clientY: cy, pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true });
-    pageEl().dispatchEvent("pointermove", { clientX: fromX - 60, clientY: cy, pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true, cancelable: true });
-    pageEl().dispatchEvent("pointermove", { clientX: toX, clientY: cy, pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true, cancelable: true });
-    pageEl().dispatchEvent("pointerup", { clientX: toX, clientY: cy, pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true });
-  };
-  await drag(cx, cx - 150);
-  await expect(sideNav(page).getByRole("button", { name: "Focus" })).toHaveAttribute("aria-current", "page");
-
-  // Mouse-drag fallback (real pointer stream): FOCUS → COVERAGE
-  await page.mouse.move(cx, cy);
-  await page.mouse.down();
-  await page.mouse.move(cx - 160, cy, { steps: 8 });
-  await page.mouse.up();
-  await expect(sideNav(page).getByRole("button", { name: "Coverage" })).toHaveAttribute("aria-current", "page");
-});
-
-test("weekly subject ring: empty state, seeded sessions render segments/center/legend, trigger fires", async ({ page }) => {
-  // Fresh demo: ring shows empty state
-  await expect(page.locator(".lg-week-ring-wrap")).toBeVisible();
-  const centerText = await page.locator(".lg-week-ring-wrap text").first().evaluate(el => el.textContent);
-  expect(centerText).toMatch(/^0m$/);
+test("weekly segments: empty state, seeded sessions render segments/tooltips, trigger fires", async ({ page }) => {
+  // Fresh demo: no week strip yet — it only renders once at least one day in
+  // the trailing week has focus logged.
+  await expect(page.locator(".lg-week-ring-wrap")).not.toBeAttached();
+  await expect(page.locator(".lg-week-seg")).toHaveCount(0);
 
   // Enable ring pulse in Settings
   await openSettings(page);
@@ -391,17 +397,13 @@ test("weekly subject ring: empty state, seeded sessions render segments/center/l
   await page.mouse.move(800, 400);
   await page.waitForTimeout(400);
 
-  // The dashboard is ONE continuous page — the ring is on the page and
-  // Playwright scrolls it into view for the hover below.
+  // The dashboard is ONE continuous page — the segment strip is on the page
+  // and Playwright scrolls it into view for the hover below.
   await page.locator(".lg-week-ring-wrap").scrollIntoViewIfNeeded();
   await page.waitForTimeout(250);
 
-  // Ring now shows 3 segments
+  // Strip now shows 3 segments
   await expect(page.locator(".lg-week-seg")).toHaveCount(3);
-
-  // Center = 7-day average: 195m across 7 days = 28m/day
-  const totalText = await page.locator(".lg-week-ring-wrap text").first().evaluate(el => el.textContent);
-  expect(totalText).toBe("28m");
 
   // Hover tooltip interaction - hover a segment and verify tooltip shows day's data
   await page.locator(".lg-week-seg").first().hover();
