@@ -583,6 +583,13 @@ function Workspace({ session }) {
   const [selectedTargetId, setSelectedTargetId] = useState(null);
   const timerTargetRef = useRef(null);
 
+  // After a session is logged, if it had a subject with chapters in the
+  // syllabus, an inline prompt offers to stamp the chapter it covered. The
+  // choice is filtered to the session's subject, the user confirms it, and
+  // the chapter gets a "doing" status (never auto-completed) plus a
+  // lastStudied date. Skipping records the session with no chapter link.
+  const [pendingChapterLog, setPendingChapterLog] = useState(null); // { sessionId, subject } | null
+
   // Pomodoro now auto-cycles through work + break phases instead of just
   // resetting to a blank timer on completion. Every 4th focus session earns
   // a long break; the others get a short one. Breaks aren't logged as focus
@@ -670,13 +677,36 @@ function Workspace({ session }) {
   const startTimer = () => { stopRequestedRef.current = false; timerTargetRef.current = selectedTargetId; unlockAudio(); setTimerRunning(true); };
   const resumeTimer = () => { stopRequestedRef.current = false; setTimerRunning(true); };
 
+  // Single funnel for every session record (timer completions, manual stops,
+  // manual logs): appends the row, then — if the session's subject has
+  // chapters — raises the chapter-stamp prompt so the user can (optionally)
+  // link what they covered. No auto-complete anywhere: the prompt only ever
+  // marks a chapter "doing" at the user's explicit confirmation.
+  const logSession = (session) => {
+    setSessions(prev => [...prev, session]);
+    if (session.subject && (syllabus[session.subject] || []).length > 0) setPendingChapterLog({ sessionId: session.id, subject: session.subject });
+  };
+  const stampChapter = (chapterId, chapterName) => {
+    if (!pendingChapterLog) return;
+    const { sessionId, subject } = pendingChapterLog;
+    setSyllabus(prev => ({
+      ...prev,
+      [subject]: (prev[subject] || []).map(c => c.id === chapterId
+        ? { ...c, status: c.status === "todo" ? "doing" : c.status, lastStudied: todayStr() }
+        : c),
+    }));
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, chapterId, chapterName } : s));
+    setPendingChapterLog(null);
+  };
+  const skipChapterLog = () => setPendingChapterLog(null);
+
   // Pomodoro phase completion: focus -> auto-starts a break; break -> chimes
   // and hands control back for the next focus session.
   useEffect(() => {
     if (timerMode !== "pomodoro" || !timerRunning || timerElapsed < phaseTarget) return;
     if (stopRequestedRef.current) return;
     if (pomoPhase === "focus") {
-      setSessions(prev => [...prev, { id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(pomoTarget / 60), startHour: new Date().getHours(), mode: timerMode, targetId: timerTargetRef.current }]);
+      logSession({ id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(pomoTarget / 60), startHour: new Date().getHours(), mode: timerMode, targetId: timerTargetRef.current });
       if (settings.autoStartBreaks === false) {
         // Auto-start disabled: session is logged, timer hands control back.
         setTimerRunning(false);
@@ -730,7 +760,7 @@ function Workspace({ session }) {
       return;
     }
     if (timerElapsed >= 60) {
-      setSessions(prev => [...prev, { id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(timerElapsed / 60), startHour: new Date().getHours(), mode: timerMode, targetId: timerTargetRef.current }]);
+      logSession({ id: uid(), date: todayStr(), subject: timerSubject, minutes: Math.round(timerElapsed / 60), startHour: new Date().getHours(), mode: timerMode, targetId: timerTargetRef.current });
     }
     setTimerElapsed(0);
   };
@@ -1033,7 +1063,7 @@ function Workspace({ session }) {
               setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
               onStart={startTimer} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak}
               tasks={tasks} setTasks={setTasks} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId}
-              pipOk={pipSupported()} pipOpen={pipOpen} onOpenPip={openPip} onOpenImmersive={() => setImmersiveOpen(true)} autoBreaks={settings.autoStartBreaks} />}
+              pipOk={pipSupported()} pipOpen={pipOpen} onOpenPip={openPip} onOpenImmersive={() => setImmersiveOpen(true)} onLogSession={logSession} autoBreaks={settings.autoStartBreaks} />}
             {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} settings={settings.tests} />}
              {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} profile={profile} settings={settings.mistakes} />}
              {tab === "community" && <Community profile={profile} userId={userId} sessions={sessions} circleRows={circleRows} onConnectCircle={connectCircle} onSearchGroups={searchGroups}
@@ -1065,6 +1095,15 @@ function Workspace({ session }) {
       )}
 
       {storiesOpen && <Stories sessions={sessions} dpp={dpp} mocks={mocks} profile={profile} onClose={() => setStoriesOpen(false)} />}
+
+      {pendingChapterLog && (
+        <ChapterLogPrompt
+          subject={pendingChapterLog.subject}
+          chapters={syllabus[pendingChapterLog.subject] || []}
+          onStamp={stampChapter}
+          onSkip={skipChapterLog}
+        />
+      )}
 
       {saveToast && (
         <div role="status"
@@ -2022,7 +2061,7 @@ const recommendation = (c) => {
     // Duplicate names would collide in the byName maps that drive
     // dependencies, the concept map, and the review chain — reject them.
     if (chapters.some(c => c.name.toLowerCase() === name.toLowerCase())) return;
-    setSyllabus(prev => ({ ...prev, [activeSubject]: [...(prev[activeSubject] || []), { id: uid(), name, status: "todo", confidence: 0, pyq: 0, module: 0, theory: false, examples: false, doneDate: null, revisionStage: -1, nextRevision: null, notes: "" }] }));
+    setSyllabus(prev => ({ ...prev, [activeSubject]: [...(prev[activeSubject] || []), { id: uid(), name, status: "todo", confidence: 0, pyq: 0, module: 0, theory: false, examples: false, doneDate: null, revisionStage: -1, nextRevision: null, lastStudied: null, notes: "" }] }));
     setNewChapter("");
   };
   const removeChapter = (id) => { if (window.confirm("Delete this chapter and its progress?")) setSyllabus(prev => ({ ...prev, [activeSubject]: prev[activeSubject].filter(c => c.id !== id) })); };
@@ -2990,7 +3029,49 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
 // Every number below is derived from the real sessions/tasks arrays — the
 // same data Dashboard, badges and XP read. Ranges re-derive the window;
 // there is no second copy of anything.
-function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories }) {
+// Modal for the session→chapter stamp: shows only chapters of the logged
+// session's subject; the user confirms the one they studied. Stamping marks
+// it "doing" (from todo) and sets lastStudied — it never auto-completes a
+// chapter, and "Skip" records the session with no chapter link.
+function ChapterLogPrompt({ subject, chapters, onStamp, onSkip }) {
+  const [picked, setPicked] = useState(null);
+  const statusLabel = { todo: "Not started", doing: "In progress", done: "Done", mastered: "Mastered" };
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="ledger-chapter-log-title" style={{ position: "fixed", inset: 0, zIndex: 210, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, overflow: "auto" }}>
+      <div style={{ width: "min(440px, 100%)", background: COLORS.bg1, border: `1px solid ${COLORS.borderStrong}`, borderRadius: RADIUS.modal, boxShadow: elev("e3"), padding: "20px 22px" }}>
+        <div id="ledger-chapter-log-title" style={{ color: COLORS.text, fontFamily: FONTS.display, fontWeight: 800, fontSize: 17 }}>Which chapter did you study?</div>
+        <div style={{ color: COLORS.faint, fontSize: 12, marginTop: 4, lineHeight: 1.55 }}>
+          {subject} session logged — stamp the chapter it covered so Coverage reflects the work. Leaving it blank records the session without a chapter.
+        </div>
+        <div style={{ marginTop: 12, maxHeight: "40vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+          {chapters.length === 0 && <div style={{ fontSize: 12, color: COLORS.faint, padding: "6px 2px" }}>No chapters for {subject} yet.</div>}
+          {chapters.map(c => (
+            <button key={c.id} onClick={() => setPicked(picked === c.id ? null : c.id)} aria-pressed={picked === c.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "9px 12px", borderRadius: 9, cursor: "pointer",
+                border: `1px solid ${picked === c.id ? hexToRgba(COLORS.accentFocus, 0.55) : COLORS.border}`,
+                background: picked === c.id ? hexToRgba(COLORS.accentFocus, 0.09) : "transparent", color: COLORS.text, fontSize: 12.5, fontFamily: FONTS.body,
+              }}>
+              <Bubble status={c.status} size={16} />
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+              <span className="sys" style={{ fontSize: 8, letterSpacing: "0.12em", color: COLORS.faint }}>{statusLabel[c.status] || c.status}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onSkip} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.dim, fontSize: 11.5, fontFamily: FONTS.body, cursor: "pointer", letterSpacing: "0.08em" }}>Skip</button>
+          <button onClick={() => picked && onStamp(picked, chapters.find(c => c.id === picked).name)} disabled={!picked}
+            style={{
+              padding: "8px 16px", borderRadius: 8, border: "none", cursor: picked ? "pointer" : "not-allowed", opacity: picked ? 1 : 0.45,
+              background: COLORS.accentFocus, color: COLORS.bg, fontSize: 11.5, fontFamily: FONTS.body, fontWeight: 700, letterSpacing: "0.08em",
+            }}>Stamp chapter</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories, onLogSession }) {
   const today = todayStr();
   const [range, setRange] = useState("7");
   const [logOpen, setLogOpen] = useState(false);
@@ -3071,7 +3152,8 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories 
     const h = parseFloat(logHours) || 0, m = parseFloat(logMinutes) || 0;
     const totalMin = Math.round(h * 60 + m);
     if (totalMin <= 0 || !logDate) return;
-    setSessions(prev => [...prev, { id: uid(), date: logDate, subject: logSubject, minutes: totalMin, startHour: new Date().getHours(), mode: "manual", manual: true }]);
+    if (onLogSession) onLogSession({ id: uid(), date: logDate, subject: logSubject, minutes: totalMin, startHour: new Date().getHours(), mode: "manual", manual: true });
+    else setSessions(prev => [...prev, { id: uid(), date: logDate, subject: logSubject, minutes: totalMin, startHour: new Date().getHours(), mode: "manual", manual: true }]);
     setLogHours(""); setLogMinutes("");
     setLogSaved(true);
     setTimeout(() => setLogSaved(false), 2500);
@@ -3217,7 +3299,8 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories 
                     </div>
                     <div style={{ color: COLORS.text, fontSize: 12.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.subject}
-                      {s.targetId && targetById[s.targetId] && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
+                      {s.chapterName && <span style={{ color: COLORS.dim }}> → {s.chapterName}</span>}
+                      {s.targetId && targetById[s.targetId] && !s.chapterName && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
                     </div>
                   </div>
                 </div>
@@ -3229,7 +3312,7 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories 
   );
 }
 
-function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak, tasks, setTasks, selectedTargetId, setSelectedTargetId, pipOk = false, pipOpen = false, onOpenPip, onOpenImmersive, onShareStories, autoBreaks = true }) {
+function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak, tasks, setTasks, selectedTargetId, setSelectedTargetId, pipOk = false, pipOpen = false, onOpenPip, onOpenImmersive, onShareStories, onLogSession, autoBreaks = true }) {
   const { mode, running, elapsed, subject, pomoMinutes, phase, phaseTarget, cycle, completedFlash } = timer;
   const isBreak = mode === "pomodoro" && phase !== "focus";
   const ringState = completedFlash ? "complete" : !running ? (elapsed > 0 ? "paused" : "ready") : "focusing";
@@ -3395,7 +3478,7 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
 
       {/* BELOW BOTH COLUMNS — stats, charts, history */}
       <div className="lg-focus-side">
-        <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} onShareStories={onShareStories} />
+        <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} onShareStories={onShareStories} onLogSession={onLogSession} />
       </div>
     </div>
   );

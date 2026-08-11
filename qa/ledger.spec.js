@@ -228,6 +228,57 @@ test("error boundary: forced render crash shows the friendly fallback with reloa
   await enterDemo(page);
 });
 
+test("focus: logging a session offers a chapter-stamp prompt filtered by subject; stamp marks doing + lastStudied, never auto-completes; skip leaves no trace", async ({ page }) => {
+  await enterDemo(page);
+  await sideNav(page).getByRole("button", { name: "Focus" }).click();
+
+  // Manual log on the Focus tab opens the same funnel as timer completions.
+  await page.getByRole("button", { name: "Log", exact: true }).click();
+  await page.getByRole("spinbutton", { name: "Session hours" }).fill("1");
+  await page.getByRole("button", { name: "Add session" }).click();
+
+  // Prompt is keyed to the logged subject (Physics by default) — only its
+  // chapters are offered, and it's a confirmation, never an auto-complete.
+  const dialog = page.getByRole("dialog", { name: /Which chapter did you study/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Units & Measurements")).toBeVisible();
+  await expect(dialog.getByText("Diversity in Living World")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Stamp chapter" })).toBeDisabled();
+
+  // Skip: session stays, no chapter is touched.
+  await dialog.getByRole("button", { name: "Skip" }).click();
+  await expect(dialog).toHaveCount(0);
+  await sideNav(page).getByRole("button", { name: "Coverage" }).click();
+  await page.getByRole("tab", { name: /Physics/ }).click();
+  const firstRow = page.locator(".lg-coverage-page .lg-coverage-row", { hasText: "Units & Measurements" }).first();
+  await expect(firstRow.getByText("In progress")).toHaveCount(0);
+  await expect(firstRow.getByText("Done")).toHaveCount(0);
+
+  // Log again, stamp the first Physics chapter this time.
+  await sideNav(page).getByRole("button", { name: "Focus" }).click();
+  await page.getByRole("button", { name: "Log", exact: true }).click();
+  await page.getByRole("spinbutton", { name: "Session hours" }).fill("2");
+  await page.getByRole("button", { name: "Add session" }).click();
+  const dialog2 = page.getByRole("dialog", { name: /Which chapter did you study/ });
+  await expect(dialog2).toBeVisible();
+  await dialog2.getByRole("button", { name: /Units & Measurements/ }).click();
+  await dialog2.getByRole("button", { name: "Stamp chapter" }).click();
+  await expect(dialog2).toHaveCount(0);
+
+  // Stamped: status "doing" (not done/mastered) + lastStudied date shown.
+  await sideNav(page).getByRole("button", { name: "Coverage" }).click();
+  await page.getByRole("tab", { name: /Physics/ }).click();
+  const stamped = page.locator(".lg-coverage-page .lg-coverage-row", { hasText: "Units & Measurements" }).first();
+  const rowClass = await stamped.getAttribute("class");
+  expect(rowClass).toContain("state-doing");
+  expect(rowClass).not.toContain("state-done");
+  expect(rowClass).not.toContain("state-mastered");
+
+  // The session record itself carries the chapter link.
+  await sideNav(page).getByRole("button", { name: "Focus" }).click();
+  await expect(page.getByText("Physics → Units & Measurements")).toBeVisible();
+});
+
 test("audio: one shared context, created by the first real gesture", async ({ page }) => {
   // A real user gesture (pointerdown anywhere) is the app's only unlock
   // trigger. The module-owned ctx and the window.__ledgerAudioCtx handle the

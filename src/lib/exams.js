@@ -102,6 +102,7 @@ export function buildInitialSyllabus(subjects, covered = {}, { today = todayStr(
         doneDate: done ? today : null,
         revisionStage: done ? 0 : -1,
         nextRevision: done ? addDays(today, firstReviewDays) : null,
+        lastStudied: null,
         notes: "",
       };
     });
