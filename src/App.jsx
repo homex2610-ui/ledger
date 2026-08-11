@@ -350,6 +350,14 @@ function useDevHooks({ sessions, setSessions }) {
 function Workspace({ session }) {
   const { load, save, markLoaded } = useStorage(session);
   const [ready, setReady] = useState(false);
+  // Dev-only crash seam for the error-boundary e2e: throws during render so
+  // the boundary fallback can be exercised. DEV-gated — absent from prod.
+  const [qaCrash, setQaCrash] = useState(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__ledgerBoundary = { crash: () => setQaCrash(true) };
+    return () => { delete window.__ledgerBoundary; };
+  }, []);
   const [tab, setTab] = useState("dashboard");
   const [profile, setProfile] = useState(null);
   const [syllabus, setSyllabus] = useState({});
@@ -944,6 +952,8 @@ function Workspace({ session }) {
       xpCap: XP_PER_LEVEL,
     };
   }, [sessions, tasks, mocks, syllabus, dpp]);
+
+  if (import.meta.env.DEV && qaCrash) throw new Error("ledger-qa-crash");
 
   if (!ready) {
     return (

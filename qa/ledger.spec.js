@@ -186,6 +186,23 @@ test("auth: fresh session after demo lands on Onboarding, never the demo dashboa
   await expect(page.getByText("QA Tester")).toHaveCount(0);
 });
 
+test("error boundary: forced render crash shows the friendly fallback with reload, never the app chrome", async ({ page }) => {
+  // __ledgerBoundary is a DEV-only seam (throws during Workspace render);
+  // the same boundary that ships in production must replace the whole app
+  // with the friendly fallback + Reload action. The stack pane is dev-only:
+  // the AGENTS.md build-time grep pins that `data-dev-only` never ships.
+  await page.evaluate(() => window.__ledgerBoundary.crash());
+  await expect(page.getByText("Ledger hit an unexpected error")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reload Ledger" })).toBeVisible();
+  await expect(page.locator('pre[data-dev-only="stack"]')).toContainText("ledger-qa-crash");
+  await expect(sideNav(page)).toHaveCount(0);
+  // The Reload action must recover the app. The demo session is memory-only
+  // (never persisted), so the reload boots to the auth screen — re-entering
+  // demo proves the app works again instead of a dead fallback.
+  await page.getByRole("button", { name: "Reload Ledger" }).click();
+  await enterDemo(page);
+});
+
 test("audio: one shared context, created by the first real gesture", async ({ page }) => {
   // A real user gesture (pointerdown anywhere) is the app's only unlock
   // trigger. The module-owned ctx and the window.__ledgerAudioCtx handle the
