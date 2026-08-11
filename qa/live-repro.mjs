@@ -143,7 +143,9 @@ async function runOnce(browser, index) {
       const c = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const sr = await c.auth.setSession(saved.session);
       const uid = sr.data.session?.user?.id;
-      if (uid) {
+      if (!uid) {
+        log(`REPEAT ${index}: purge skipped — no session from dump (expired?)`);
+      } else {
         const { error } = await c.from("kv_store").delete().eq("owner_id", uid);
         log(`REPEAT ${index}: purged kv_store rows for ${uid} (${error ? "error: " + error.message : "ok"})`);
       }
@@ -296,16 +298,22 @@ async function runOnce(browser, index) {
     }
 
     // --- verdict ---
+    // Tuples are [t, nav, onb, sess, skel]. The demo dashboard stays up for
+    // the ~300-500ms it takes the storage event to reach React; that latency
+    // is NOT a flash. A flash means nav reappearing AFTER the boot reset
+    // (skeleton/onboarding) committed.
     const tSession = tl.filter(([, , , s]) => s);
     const transitionHappened = tSession.length > 0;
-    const navAfterSession = transitionHappened && tl.some(([, nav, , s]) => s && nav);
+    const sessStartIdx = tl.findIndex(([, , , s]) => s);
+    const resetIdx = tl.findIndex(([t, , , , k], i) => i > sessStartIdx && (k || tl[i][2]));
+    const navAfterReset = resetIdx > 0 && tl.slice(resetIdx).some(([, nav]) => nav);
     const contaminated =
       (probe.profile !== null && probe.profile?.name === DEMO_NAME) ||
       (probe.lb !== null && probe.lb?.name === DEMO_NAME);
     let verdict;
     if (!transitionHappened) verdict = "no-transition (session never landed in tab A)";
     else if (!final.onboarding && final.nav) verdict = "SYMPTOM (a): demo dashboard persisted — onboarding skipped";
-    else if (navAfterSession) verdict = "SYMPTOM (b): demo dashboard flash during the reload, then onboarding";
+    else if (navAfterReset) verdict = "SYMPTOM (b): demo dashboard flash after the boot reset, then onboarding";
     else verdict = contaminated ? "SILENT CONTAMINATION: onboarding shown but demo data reached the fresh account" : "clean";
 
     // windowed timeline print: 20 ticks before the session to ~6s after
@@ -356,7 +364,7 @@ for (let i = 1; i <= REPEATS; i++) {
 }
 await browser.close();
 
-const cleanVerdicts = ["SYMPTOM (a): demo dashboard persisted — onboarding skipped", "SYMPTOM (b): demo dashboard flash during the reload, then onboarding", "SILENT CONTAMINATION: onboarding shown but demo data reached the fresh account", "clean"];
+const cleanVerdicts = ["SYMPTOM (a): demo dashboard persisted — onboarding skipped", "SYMPTOM (b): demo dashboard flash after the boot reset, then onboarding", "SILENT CONTAMINATION: onboarding shown but demo data reached the fresh account", "clean"];
 log(`SUMMARY (${results.length} repeats)`);
 log(`  symptom (a): ${results.filter((r) => r.verdict.includes("SYMPTOM (a)")).length} | symptom (b): ${results.filter((r) => r.verdict.includes("SYMPTOM (b)")).length} | silent contamination: ${results.filter((r) => r.verdict.includes("SILENT")).length} | clean: ${results.filter((r) => r.verdict === "clean").length} | failures: ${results.filter((r) => !cleanVerdicts.some((v) => r.verdict.includes(v))).length}`);
 for (const r of results) log(`  [${r.index}] ${r.email} — ${r.verdict}`);

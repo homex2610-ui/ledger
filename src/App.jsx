@@ -248,15 +248,12 @@ function useStorage(session) {
     }
   }, [userId]);
 
-  const markLoaded = useCallback((uid) => {
-    loadedRef.current = uid;
-    console.warn(`[storage] markLoaded -> ${uid}`);
-  }, []);
+  const markLoaded = useCallback((uid) => { loadedRef.current = uid; }, []);
 
   const save = useCallback(async (key, value, shared = false) => {
     if (!userId) return;
     if (loadedRef.current !== userId) {
-      console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — load for ${userId} not completed yet (loadedRef=${loadedRef.current})`);
+      console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — load for ${userId} not completed yet`);
       return;
     }
     const k = `${key}:${shared}`;
@@ -266,7 +263,6 @@ function useStorage(session) {
       console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — last load failed`);
       return;
     }
-    console.warn(`[storage] PASS save for "${key}" (shared=${shared}) uid=${userId} loadedRef=${loadedRef.current}`);
     try {
       await supabase.from("kv_store").upsert(
         { owner_id: userId, key, shared, value, updated_at: new Date().toISOString() },
@@ -750,7 +746,6 @@ function Workspace({ session }) {
   useEffect(() => {
     const gen = ++bootGenRef.current;
     const uid = userId;
-    console.warn(`[storage] boot effect gen=${gen} uid=${uid}`);
     // A session change must never keep rendering the previous user's data
     // while the new user's rows load — reset synchronously, before the async
     // read, so the reload window shows the loading state instead of a stale
@@ -765,7 +760,6 @@ function Workspace({ session }) {
         load("dpp", []), load("cards", []), load("unlockedBadges", []), load("settings", DEFAULT_SETTINGS),
       ]);
       if (gen !== bootGenRef.current) return; // a newer boot started — this one is stale
-      console.warn(`[storage] boot gen=${gen} loads resolved, committing state for uid=${uid} (gen now ${bootGenRef.current})`);
       // Migrate any persisted pre-Glass theme id (or an unknown/undefined id)
       // to the equivalent Glass variant so the app never renders an undefined
       // theme. If the stored value needed migrating we pass the corrected
