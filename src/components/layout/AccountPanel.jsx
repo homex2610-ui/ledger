@@ -5,9 +5,11 @@
 // fabricated statistics, no fake badges, no invented statuses.
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Flame, LogOut, Palette, Settings as SettingsIcon, User, X } from "lucide-react";
+import { Flame, LogOut, Palette, Settings as SettingsIcon, User, X, ExternalLink } from "lucide-react";
 import { COLORS, FONTS, THEME_PRESETS, normalizeTheme, hexToRgba } from "../../lib/theme";
 import { fmtMin, daysBetween, parseLocalDate } from "../../lib/utils";
+import { DiscordIcon } from "../ui/DiscordIcon";
+import { discordInviteUrl, hasDiscordInvite, DISCORD_CTA_LABEL } from "../../lib/discord";
 
 const PANEL_W = 360;
 const GAP = 12;
@@ -270,6 +272,21 @@ export default function AccountPanel({ open, onClose, anchorRef, onPanelRef, pro
           <Palette size={13} color={COLORS.faint} />Appearance<span className="lg-ap-value">{themeLabel}</span>
         </button>
       </div>
+
+      {/* Community — Discord invite, configured per deployment */}
+      {hasDiscordInvite && (
+        <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "12px 16px 13px" }}>
+          <div className="sys" style={{ color: COLORS.faint }}>COMMUNITY</div>
+          <a href={discordInviteUrl} target="_blank" rel="noopener noreferrer" aria-label={DISCORD_CTA_LABEL}
+            className="lg-ap-item lg-focus-ring" style={{ marginTop: 7, textDecoration: "none" }}>
+            <DiscordIcon size={13} color={COLORS.faint} />
+            Ledger Discord
+            <span className="lg-ap-value" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              Join <ExternalLink size={11} />
+            </span>
+          </a>
+        </div>
+      )}
 
       {/* Account info */}
       <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "12px 16px 13px" }}>

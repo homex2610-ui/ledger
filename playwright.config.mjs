@@ -21,10 +21,23 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "npm run dev",
+      url: "http://localhost:5173",
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+    // Second instance with VITE_DISCORD_INVITE_URL set, so qa/discord.spec.js
+    // can test the "configured" CTA state. serve-configured.mjs sets a
+    // test-only invite value; the :5173 instance (no variable) covers the
+    // unconfigured state. Never reuse a stray :5174 — the env must be the
+    // QA one, or the tests would assert against the wrong build.
+    {
+      command: "node qa/serve-configured.mjs",
+      url: "http://localhost:5174",
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
 });

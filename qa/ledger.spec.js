@@ -11,6 +11,7 @@ const HEX = /^#[0-9A-F]{6}$/;
 
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { todayStr } from "../src/lib/utils.js";
 
 // Enter the workspace via Demo Mode, clearing onboarding when the fresh
 // localStorage (no profile) shows it. Demo mode keeps storage local-only,
@@ -569,18 +570,22 @@ test("dashboard: section headers render 01..08 sequential in DOM order (04 appea
   expect(empty.some(x => x.label === "TODAY")).toBe(false);
 
   // Seed one session dated today via the existing dev hook, on the Focus
-  // tab first (Dashboard doesn't pick up late seeds while mounted).
+  // tab first (Dashboard doesn't pick up late seeds while mounted). Use the
+  // app's own local-date formatter: toISOString() is UTC, so seeding that
+  // breaks "04 TODAY" for any timezone east of UTC after midnight (the
+  // AGENTS.md date-math gotcha).
   await sideNav(page).getByRole("button", { name: "Focus" }).click();
-  const today = new Date().toISOString().slice(0, 10);
   await page.evaluate(([t]) => {
     window.__ledgerSessions.seed([
       { id: "qa-order-1", date: t, subject: "Physics", minutes: 60, startHour: 9, mode: "manual" },
     ]);
-  }, [today]);
+  }, [todayStr()]);
   await sideNav(page).getByRole("button", { name: "Home" }).click();
-  await page.waitForTimeout(400);
 
-  // With data, the full book renders 01..08 in DOM order.
+  // With data, the full book renders 01..08 in DOM order. Poll instead of a
+  // fixed sleep: the seed + re-render can take longer than 400ms when the
+  // suite's second dev server (:5174, Discord configured) shares the load.
+  await expect.poll(async () => (await seq()).map(x => x.n), { timeout: 8_000 }).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   const full = await seq();
   expect(full.map(x => x.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   expect(full.map(x => x.label)).toEqual(["STATUS", "SESSION", "YEAR", "TODAY", "SUBJECTS", "PRACTICE", "WORKSPACES", "SYSTEM"]);

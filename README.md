@@ -64,6 +64,23 @@ The sign-in screen has a "Continue with Discord" button. To enable it:
 4. Until Discord is enabled in Supabase, the button shows an error message
    when clicked instead of crashing — no code change needed once it's set up.
 
+### Discord community invite (optional)
+
+"Join Ledger Discord" CTAs (Community tab, the profile panel, and Stories)
+point at the official Discord server. The invite is **not hardcoded** — each
+deployment configures the destination:
+
+1. Create the invite in Discord → **Server Settings → Invites** (a public
+   `discord.gg/...` link).
+2. In Vercel, add the environment variable `VITE_DISCORD_INVITE_URL` set to
+   that URL, then redeploy.
+3. Locally, add the same line to `.env.local` (`VITE_DISCORD_INVITE_URL=...`).
+
+When the variable is absent or empty, all Discord CTAs are hidden — nothing
+broken renders. This is only a server invite (a plain external link); it has
+nothing to do with Discord OAuth sign-in and no scopes, bots, roles or
+account linking.
+
 ## 4. A few things to know before real users show up
 
 - **Free-tier Supabase projects pause after 7 days with no API traffic.**
