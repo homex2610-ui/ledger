@@ -44,6 +44,31 @@ const EXAM_SUBJECTS = {
   "Custom": [],
 };
 
+// Target-date presets for onboarding, derived from past-year windows:
+// JEE Main Session 1 runs late January, Session 2 early April (2026: Jan
+// 21-30 / Apr 1-10); JEE Advanced is the 3rd Sunday of May (2026: May 17);
+// NEET the 1st Sunday of May (2026: May 3). The projected 2027 dates follow
+// the same pattern; the manual date input remains for exact/custom targets.
+const EXAM_DATE_PRESETS = {
+  "JEE Main": [
+    { date: "2027-01-30", label: "Jan 2027 · Session 1", basis: "past S1 windows: late Jan (2026: Jan 21–30)" },
+    { date: "2027-04-05", label: "Apr 2027 · Session 2", basis: "past S2 windows: early Apr (2026: Apr 1–10)" },
+  ],
+  "JEE Advanced": [
+    { date: "2027-05-16", label: "May 2027", basis: "3rd Sunday of May (2026: May 17)" },
+  ],
+  NEET: [
+    { date: "2027-05-02", label: "May 2027", basis: "1st Sunday of May (2026: May 3)" },
+  ],
+  Both: [
+    { date: "2027-01-30", label: "JEE Main · Jan 2027", basis: "late Jan window (2026: Jan 21–30)" },
+    { date: "2027-04-05", label: "JEE Main · Apr 2027", basis: "early Apr window (2026: Apr 1–10)" },
+    { date: "2027-05-02", label: "NEET · May 2027", basis: "1st Sunday of May (2026: May 3)" },
+    { date: "2027-05-16", label: "JEE Adv · May 2027", basis: "3rd Sunday of May (2026: May 17)" },
+  ],
+  Custom: [],
+};
+
 const STATUS_ORDER = ["todo", "doing", "done", "mastered"];
 const STATUS_LABEL = { todo: "To do", doing: "In progress", done: "Done", mastered: "Mastered" };
 
@@ -1241,6 +1266,18 @@ function Onboarding({ onDone }) {
     const d = new Date(); d.setMonth(d.getMonth() + 6); return todayStr(d);
   });
 
+  // When the target exam changes, snap to the nearest future preset derived
+  // from past-year windows (see EXAM_DATE_PRESETS) unless the user already
+  // picked a specific date.
+  const lastPickedRef = useRef(false);
+  useEffect(() => {
+    if (lastPickedRef.current) return;
+    const presets = EXAM_DATE_PRESETS[exam] || [];
+    const today = todayStr(new Date());
+    const next = presets.map(p => p.date).filter(d => d > today).sort()[0];
+    if (next) setTargetDate(next);
+  }, [exam]);
+
   const subjects = exam === "Custom"
     ? customSubjects.split(",").map(s => s.trim()).filter(Boolean)
     : EXAM_SUBJECTS[exam];
@@ -1291,7 +1328,30 @@ function Onboarding({ onDone }) {
       {step === 2 && (
         <div>
           <label style={{ fontSize: 12, color: COLORS.dim, display: "block", marginBottom: 6 }}>Exam date</label>
-          <Input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} />
+          {(EXAM_DATE_PRESETS[exam] || []).length > 0 && (
+            <div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                {(EXAM_DATE_PRESETS[exam] || []).map(p => {
+                  const active = targetDate === p.date;
+                  return (
+                    <button key={p.date} type="button" onClick={() => { lastPickedRef.current = true; setTargetDate(p.date); }}
+                      aria-pressed={active}
+                      style={{
+                        fontSize: 12, padding: "6px 11px", borderRadius: 7, cursor: "pointer",
+                        fontFamily: FONTS.body, lineHeight: 1.4, textAlign: "left",
+                        background: active ? COLORS.ink : "transparent",
+                        color: active ? "#fff" : COLORS.text,
+                        border: `1px solid ${active ? COLORS.ink : COLORS.border}`,
+                      }}>
+                      {p.label}
+                      <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>{p.basis}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <Input type="date" value={targetDate} onChange={e => { lastPickedRef.current = true; setTargetDate(e.target.value); }} />
           <div style={{ marginTop: 14, fontSize: 12, color: COLORS.dim }}>
             That's <b style={{ color: COLORS.ink }}>{Math.max(0, daysBetween(new Date(), targetDate))} days</b> from today. Syllabus for {subjects.join(", ")} will be pre-loaded so you start with real chapters, not a blank page.
           </div>
