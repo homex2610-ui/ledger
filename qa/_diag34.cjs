@@ -1,0 +1,25 @@
+const fs = require("fs");
+const src = fs.readFileSync("src/App.jsx", "utf8");
+
+console.log("=== settings.X reads (all, unique) ===");
+const reads = new Set();
+for (const m of src.matchAll(/settings\.(\w+)/g)) reads.add(m[1]);
+console.log([...reads].sort().join(", "));
+console.log("=== settings.sub reads ===");
+const subs = new Set();
+for (const m of src.matchAll(/settings\.(coverage|recall|tests|mistakes)\.(\w+)/g)) subs.add(m[1] + "." + m[2]);
+console.log([...subs].sort().join(", "));
+console.log("=== flags usage in Dashboard ===");
+const d = src.indexOf("function Dashboard");
+const seg = src.slice(d, d + 90000);
+const flags = new Set();
+for (const m of seg.matchAll(/flags\.(\w+)/g)) flags.add(m[1]);
+console.log("flags reads:", [...flags].join(", "));
+const f2 = seg.match(/const flags = \{[\s\S]{0,400}?}/);
+console.log("flags def:", f2 ? f2[0].replace(/\s+/g, " ").slice(0, 400) : "(none)");
+console.log("=== landingPage select ===");
+const st = src.indexOf("function SettingsTab");
+const stseg = src.slice(st, st + 90000);
+for (const m of stseg.matchAll(/landingPage[\s\S]{0,500}?<\/Row>/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 500));
+console.log("=== reminder time / clockStyle options ===");
+for (const m of stseg.matchAll(/clockStyle[\s\S]{0,400}?<\/Row>/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 400));

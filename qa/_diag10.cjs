@@ -1,0 +1,23 @@
+const fs = require("fs");
+const src = fs.readFileSync("src/App.jsx", "utf8");
+
+console.log("=== PageHead full usages ===");
+for (const m of src.matchAll(/<PageHead[\s\S]{0,400}?\/>/g)) console.log("---\n" + m[0]);
+console.log("=== <Timer usages ===");
+for (const m of src.matchAll(/<Timer\b[\s\S]{0,120}?>/g)) console.log("  " + m[0].replace(/\s+/g, " "));
+console.log("=== BookOpen usage ===");
+for (const m of src.matchAll(/.{0,60}BookOpen.{0,60}/g)) console.log("  " + m[0].replace(/\s+/g, " "));
+console.log("=== LineChart/PieChart (icon vs recharts) usages ===");
+for (const m of src.matchAll(/.{0,50}\bLineChart\b.{0,50}/g)) console.log("  LC: " + m[0].replace(/\s+/g, " "));
+for (const m of src.matchAll(/.{0,50}\bPieChart\b.{0,50}/g)) console.log("  PC: " + m[0].replace(/\s+/g, " "));
+console.log("=== dateFormat usages ===");
+for (const m of src.matchAll(/.{0,80}dateFormat.{0,60}/g)) console.log("  " + m[0].replace(/\s+/g, " "));
+console.log("=== fmtDateStr call contexts ===");
+for (const m of src.matchAll(/.{0,90}fmtDateStr\(.{0,80}/g)) console.log("  " + m[0].replace(/\s+/g, " "));
+console.log("=== COLORS keys in theme.js ===");
+const th = fs.readFileSync("src/lib/theme.js", "utf8");
+const col = th.match(/COLORS\s*=\s*\{[\s\S]{0,1800}/)[0];
+console.log(col.replace(/\s+/g, " ").slice(0, 1500));
+console.log("=== ProgressRing status/color handling ===");
+const pr = fs.readFileSync("src/components/ui/ProgressRing.jsx", "utf8");
+console.log(pr.split("\n").filter(x => /status|color|todo|doing|mastered|done/i.test(x)).slice(0, 20).join("\n"));

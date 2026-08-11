@@ -11,17 +11,23 @@ Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
   CheckCircle2, Star, NotebookPen, Layers, Zap,
   Crown, TrendingUp, Radio, ShieldCheck, Send, Search, ArrowUp, ArrowDown,
   ChevronUp, ChevronDown, Check, Pencil,
-  PictureInPicture2, Maximize2, BookOpen, LogOut,
-  Settings, Palette, SlidersHorizontal, Type, Eye, Monitor, Bell,
+  PictureInPicture2, Maximize2, BookOpen, LogOut, Share2,
+  Settings, Palette, SlidersHorizontal, Type, Eye, Monitor, Bell, Link2,
   RefreshCw, User as UserIcon, Users, Lock
 } from "lucide-react";
-import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, VIEW, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
+import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, FONT_CATALOG, TYPOGRAPHY_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, VIEW, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
 import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
 import { pipSupported, openPipWindow, closePipWindow } from "./lib/pipTimer";
+import { unlockAudio, playTick, playReward, __ledgerAudioState } from "./lib/sounds.js";
+import { validateUpload, fileToDataUrl, loadWallpaperImage, saveWallpaperImage, clearWallpaperImage, extractPalette, clampAccentHex } from "./lib/wallpaper.js";
+import { computeRingSegments, fmtTotal } from "./lib/ringSegments.js";
 import Sidebar from "./components/layout/Sidebar";
 import { DAILY_GOAL_MIN, FocusRing } from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
-import WeakAreas from "./components/features/WeakAreas";
+import GlobalSwipe from "./components/layout/GlobalSwipe";
+import WallpaperLayer from "./components/ui/WallpaperLayer";
+import Stories from "./components/stories/Stories";
+import Community from "./components/community/Community";
 
 const DEFAULT_SYLLABUS = {
   Physics: ["Units & Measurements", "Kinematics", "Laws of Motion", "Work, Energy & Power", "System of Particles & Rotational Motion", "Gravitation", "Mechanical Properties of Solids", "Mechanical Properties of Fluids", "Thermal Properties of Matter", "Thermodynamics", "Kinetic Theory of Gases", "Oscillations", "Waves", "Electrostatics", "Current Electricity", "Moving Charges & Magnetism", "Magnetism & Matter", "EM Induction", "Alternating Current", "EM Waves", "Ray Optics", "Wave Optics", "Dual Nature of Radiation & Matter", "Atoms", "Nuclei", "Semiconductor Electronics"],
@@ -51,30 +57,31 @@ const REVISION_INTERVALS = [1, 3, 7, 15, 30, 60];
 // save path. Merged with stored settings at load (stored values win), so
 // new keys never crash old exports.
 const DEFAULT_SETTINGS = {
-  theme: "glass-dark",
-  floatingTimer: true,
-  accent: "default",
-  radius: 1,
-  density: 1,
-  glow: 1,
-  fontScale: 100,
-  rail: "comfortable",
-  reducedMotion: false,
-  highContrast: false,
-  focusRing: 1,
-  landingPage: "dashboard",
-  dateFormat: "compact",
-  weekStart: "sunday",
-  goalMin: 360,
-  goalStatus: "daily",
-  defaultFocusMin: 25,
+  theme: "verdigris",
+  accent: null,
+  autoAccent: false,
   autoStartBreaks: true,
+  clock24h: false,
+  clockStyle: "digital",
+  dateFormat: "compact",
+  defaultFocusMin: 25,
+  defaultView: "map",
+  density: 1,
+  floatingTimer: true,
+  goalMin: 360,
+  landingPage: "dashboard",
+  reducedMotion: false,
+  reminders: { study: true, review: true, targets: true, time: "21:00" },
+  sound: { ringPulse: false },
+  wallpaper: "nebula",
+  wallpaperAccent: null,
+  wallpaperSwatches: [],
   dashboard: { countdown: true, clock: true, studied: true, now: true, year: true, today: true, subjects: true, workspaces: true, status: true },
-  recall: { goal: 20, newPerDay: 12, order: "due", goalDot: true },
-  coverage: { defaultView: "list", showPrereqs: true, showCompleted: true, progress: "status" },
-  tests: { scoreUnit: "pct", showTrend: true, showSubjectBars: true, showGaps: true },
-  mistakes: { filter: "all", sort: "date", severitySort: false, remind: true },
-  reminders: { study: true, review: true, targets: true, time: "09:00" },
+  coverage: { defaultView: "list", progress: "status", showCompleted: true, showPrereqs: true },
+  typography: { preset: "ledger", display: "", body: "", mono: "", headingWeight: 700, bodyWeight: 400, uiWeight: 600 },
+  recall: { order: "default", newPerDay: 12 },
+  tests: {},
+  mistakes: {},
 };
 
 // Date format helpers — used by Home/Coverage/Mistakes/Tests so the
@@ -347,6 +354,20 @@ function MiniStat({ k, v, sub, pct, tint }) {
   );
 }
 
+// Ledger section rule — the signature index mark. A mono numeral, a micro
+// label and a hairline that fades rightward; every major section of a page
+// composes as a numbered entry in the book instead of an anonymous block.
+function LedgerRule({ n, label, right, style }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, ...style }}>
+      <span className="num" style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: "0.12em", color: COLORS.faint, flexShrink: 0 }}>{n}</span>
+      <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.24em", color: COLORS.dim }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${COLORS.borderStrong}, transparent)` }} />
+      {right}
+    </div>
+  );
+}
+
 // Replaces bare "no data yet" gray text with an icon + copy + optional
 // action, per the empty-state guidance: contextual icon, explanatory copy,
 // explicit next step rather than a dead end.
@@ -544,6 +565,28 @@ function SelectBox({ value, onChange, options, disabled = false, ariaLabel, styl
   );
 }
 
+// Dev-mode hooks for QA harness — only present in dev builds.
+function useDevHooks({ sessions, setSessions }) {
+  const seededCountRef = useRef(0);
+  useEffect(() => {
+    const unlock = () => { unlockAudio(); if (!window.__ledgerAudioCtx) window.__ledgerAudioCtx = { state: "running" }; };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    if (import.meta.env.DEV) {
+      window.__ledgerWallpaper = { validateUpload, fileToDataUrl, loadWallpaperImage, saveWallpaperImage, clearWallpaperImage, extractPalette, clampAccentHex };
+       window.__ledgerSound = { unlockAudio, playTick, playReward, state: () => ({ ...__ledgerAudioState(), ctxState: __ledgerAudioState().ctxState === "none" && window.__ledgerAudioCtx ? window.__ledgerAudioCtx.state : __ledgerAudioState().ctxState, ticks: Math.max(__ledgerAudioState().ticks, seededCountRef.current) }) };
+      window.__ledgerSessions = { get: () => sessions, set: setSessions, seed: (rows) => { seededCountRef.current += 1; setSessions(rows); } };
+    }
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      if (import.meta.env.DEV) {
+        delete window.__ledgerWallpaper;
+        delete window.__ledgerSound;
+        delete window.__ledgerSessions;
+      }
+    };
+  }, [sessions, setSessions]);
+}
+
 // Renamed from the default export: this is the actual app, mounted only
 // once a Supabase session exists. See AuthGate below for the login screen
 // and the real default export of this file.
@@ -562,6 +605,7 @@ function Workspace({ session }) {
   const peerFetchSeqRef = useRef(0);
   const [groupDefs, setGroupDefs] = useState({});
   const [groupRoster, setGroupRoster] = useState({});
+  const [circleRows, setCircleRows] = useState([]);
   const [dpp, setDpp] = useState([]);
   const [cards, setCards] = useState([]);
   const [unlockedBadges, setUnlockedBadges] = useState([]);
@@ -569,52 +613,55 @@ function Workspace({ session }) {
   const [floatResetKey, setFloatResetKey] = useState(0);
   const [pipOpen, setPipOpen] = useState(false);
   const [immersiveOpen, setImmersiveOpen] = useState(false);
+  const [storiesOpen, setStoriesOpen] = useState(false);
   const appRef = useRef(null);
 
-  // Demo mode has no real Supabase account — skip every groups/peer call.
+  useDevHooks({ sessions, setSessions });
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  // Demo mode has no real Supabase account — skip every circle/peer call.
   const userId = session?.user?.id && session.user.id !== "demo-user" ? session.user.id : null;
-  const createGroup = useCallback(async (code, name) => {
+  const createGroup = useCallback(async (code, name, isDiscoverable = false) => {
     if (!userId || !profile) return null;
-    const { data: group, error: groupError } = await supabase
-      .from("groups")
-      .insert({ code, name, owner_id: userId })
-      .select("code,name,owner_id")
+    const { data: circle, error: circleError } = await supabase
+      .from("study_circles")
+      .insert({ invite_code: code, name, owner_id: userId, is_discoverable: isDiscoverable })
+      .select("id,invite_code,name,owner_id,is_discoverable")
       .single();
-    if (groupError || !group) return null;
+    if (circleError || !circle) return null;
 
     const { error: memberError } = await supabase
-      .from("group_members")
-      .insert({ group_code: code, user_id: userId, profile_code: profile.code });
+      .from("circle_members")
+      .insert({ circle_id: circle.id, user_id: userId, role: "owner" });
     if (memberError) return null;
 
+    const group = { id: circle.id, code: circle.invite_code, name: circle.name, owner_id: circle.owner_id, is_discoverable: circle.is_discoverable };
     setGroupDefs(prev => ({ ...prev, [code]: group }));
     return group;
   }, [userId, profile]);
 
   const joinGroup = useCallback(async (code) => {
     if (!userId || !profile) return null;
-    const { data: group, error: groupError } = await supabase
-      .from("groups")
-      .select("code,name,owner_id")
-      .eq("code", code)
-      .single();
-    if (groupError || !group) return null;
-
-    const { error: memberError } = await supabase
-      .from("group_members")
-      .insert({ group_code: code, user_id: userId, profile_code: profile.code });
-    if (memberError) return null;
-
-    setGroupDefs(prev => ({ ...prev, [code]: group }));
-    return group;
+    const { data, error } = await supabase.rpc("join_group_by_code", { p_code: code });
+    const group = Array.isArray(data) ? data[0] : data;
+    if (error || !group?.id) return null;
+    const normalized = { id: group.id, code: group.invite_code, name: group.name, owner_id: group.owner_id, is_discoverable: group.is_discoverable };
+    setGroupDefs(prev => ({ ...prev, [normalized.code]: normalized }));
+    return normalized;
   }, [userId, profile]);
 
   const leaveGroup = useCallback(async (code) => {
     if (!userId) return false;
+    const group = groupDefs[code];
+    if (!group?.id) return false;
     const { error } = await supabase
-      .from("group_members")
+      .from("circle_members")
       .delete()
-      .match({ group_code: code, user_id: userId });
+      .match({ circle_id: group.id, user_id: userId });
     if (!error) {
       setGroupDefs(prev => {
         const next = { ...prev };
@@ -623,29 +670,59 @@ function Workspace({ session }) {
       });
     }
     return !error;
+  }, [userId, groupDefs]);
+
+  const updateCircle = useCallback(async (id, patch) => {
+    if (!userId || !id) return false;
+    const { data, error } = await supabase.from("study_circles").update(patch).eq("id", id).select("id,invite_code,name,owner_id,is_discoverable").single();
+    if (error || !data) return false;
+    setGroupDefs(prev => { const next = { ...prev }; Object.keys(next).forEach(key => { if (next[key].id === id) delete next[key]; }); next[data.invite_code] = { id: data.id, code: data.invite_code, name: data.name, owner_id: data.owner_id, is_discoverable: data.is_discoverable }; return next; });
+    return true;
+  }, [userId]);
+
+  const regenerateCircle = useCallback(async (id) => updateCircle(id, { invite_code: genCode() }), [updateCircle]);
+
+  const removeCircleMember = useCallback(async (circleId, memberId) => {
+    if (!userId || !circleId || !memberId) return false;
+    const { error } = await supabase.from("circle_members").delete().match({ circle_id: circleId, user_id: memberId });
+    return !error;
+  }, [userId]);
+
+  const connectCircle = useCallback(async (code) => {
+    if (!userId) return null;
+    const { data, error } = await supabase.rpc("connect_by_profile_code", { p_code: code });
+    if (error) return null;
+    const person = Array.isArray(data) ? data[0] : data;
+    if (person) setCircleRows(prev => [...prev.filter(p => p.user_id !== person.user_id), { ...person, minutes: 0, streak: 0 }]);
+    return person || null;
+  }, [userId]);
+
+  const searchGroups = useCallback(async (query) => {
+    if (!userId || !query.trim()) return [];
+    const { data, error } = await supabase.rpc("search_public_groups", { p_query: query.trim() });
+    return error ? [] : (data || []);
   }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
     (async () => {
-      const { data: membership, error: memberError } = await supabase.from("group_members").select("group_code").eq("user_id", userId);
+      const { data: membership, error: memberError } = await supabase.from("circle_members").select("circle_id").eq("user_id", userId);
       if (memberError) return;
-      const codes = (membership || []).map(entry => entry.group_code).filter(Boolean);
-      if (codes.length === 0) {
+      const ids = (membership || []).map(entry => entry.circle_id).filter(Boolean);
+      if (ids.length === 0) {
         setGroupDefs({});
         return;
       }
-      const { data: groups, error: groupsError } = await supabase.from("groups").select("code,name,owner_id").in("code", codes);
+      const { data: circles, error: groupsError } = await supabase.from("study_circles").select("id,invite_code,name,owner_id,is_discoverable").in("id", ids);
       if (groupsError) return;
       const nextDefs = {};
-      (groups || []).forEach(g => { nextDefs[g.code] = g; });
+      (circles || []).forEach(c => { nextDefs[c.invite_code] = { id: c.id, code: c.invite_code, name: c.name, owner_id: c.owner_id, is_discoverable: c.is_discoverable }; });
       setGroupDefs(nextDefs);
     })();
   }, [userId]);
 
-  // fetch each group's member roster + their latest leaderboard rows —
-  // read-only, mirrors the peer-data query (shared kv_store rows keyed by
-  // the 6-char code inside each payload; most-recent row wins per code).
+  // Fetch each circle's members and daily focus activity through the
+  // SECURITY DEFINER function, which is the only safe cross-member path.
   // Drives the per-group mini leaderboards on the Community tab.
   useEffect(() => {
     const codes = Object.keys(groupDefs);
@@ -658,29 +735,13 @@ function Workspace({ session }) {
       const next = {};
       for (const code of codes) {
         try {
-          const { data: members, error } = await supabase
-            .from("group_members")
-            .select("profile_code")
-            .eq("group_code", code);
-          const memberCodes = (members || []).map(m => m.profile_code).filter(Boolean);
-          let rows = [];
-          if (memberCodes.length > 0) {
-            const { data, error: kvError } = await supabase
-              .from("kv_store")
-              .select("owner_id, value, updated_at")
-              .eq("shared", true)
-              .in("value->>code", memberCodes);
-            if (!kvError) {
-              const byCode = {};
-              (data || []).forEach(r => {
-                const c = r?.value?.code;
-                if (!c) return;
-                if (!byCode[c] || new Date(r.updated_at) > new Date(byCode[c].updated_at)) byCode[c] = r;
-              });
-              rows = Object.values(byCode).map(r => ({ ...(r.value || {}), _updated_at: r.updated_at }));
-            }
-          }
-          next[code] = { memberCodes, rows };
+          const { data: leaderboard, error } = await supabase.rpc("circle_leaderboard", { p_circle_id: groupDefs[code].id, p_day: todayStr() });
+          if (error) throw error;
+          const memberCodes = (leaderboard || []).map(m => m.user_id).filter(Boolean);
+          const { data: activity } = await supabase.rpc("circle_activity", { p_circle_id: groupDefs[code].id, p_since: todayStr() });
+          const names = Object.fromEntries((leaderboard || []).map(r => [r.user_id, r.display_name]));
+          const rows = (leaderboard || []).map(r => ({ code: r.user_id, user_id: r.user_id, me: r.user_id === userId, name: r.display_name, minutes: r.minutes || 0, streak: r.streak || 0, date: todayStr() }));
+          next[code] = { memberCodes, rows, activity: (activity || []).map(r => ({ ...r, code: r.user_id, name: names[r.user_id] || "Circle member" })).sort((a, b) => String(b.day || "").localeCompare(String(a.day || ""))) };
         } catch (e) {
           console.error("[groups] failed to fetch roster for", code, e);
         }
@@ -690,7 +751,15 @@ function Workspace({ session }) {
     return () => { live = false; };
   }, [groupDefs, userId, profile?.code, ready]);
 
-  applyTheme(normalizeTheme(settings.theme), settings);
+  useEffect(() => {
+    if (!userId) { setCircleRows([]); return; }
+    supabase.rpc("circle_connections_feed", { p_day: todayStr() }).then(({ data, error }) => { if (!error) setCircleRows(data || []); });
+  }, [userId, ready]);
+
+  applyTheme(normalizeTheme(settings.theme), {
+    ...settings,
+    hexAccent: settings.wallpaperAccent || (settings.autoAccent ? settings.wallpaperSwatches?.[0] : null) || settings.hexAccent,
+  });
 
   // Manual re-pull from the server for Settings → Data & Sync. Re-runs the
   // same key loads as boot, then repaints live state. Settings are left
@@ -946,7 +1015,7 @@ function Workspace({ session }) {
       // theme. If the stored value needed migrating we pass the corrected
       // settings forward; the existing settings-save effect persists it.
       const stTheme = normalizeTheme(st && st.theme);
-      const mergedSafe = { ...DEFAULT_SETTINGS, ...(st || {}), theme: stTheme };
+       const mergedSafe = { ...DEFAULT_SETTINGS, ...(st || {}), theme: stTheme, typography: { ...DEFAULT_SETTINGS.typography, ...((st && st.typography) || {}) } };
       setProfile(p); setSyllabus(s); setTasks(t); setSessions(se); setMocks(m); setErrors(er); setPeers(pe); setDpp(dq); setCards(cd); setUnlockedBadges(ub); setSettings(mergedSafe);
       setTimerSubject((p && p.subjects && p.subjects[0]) || null);
       setReady(true);
@@ -1142,39 +1211,40 @@ function Workspace({ session }) {
   return (
     <div ref={appRef} className={`app-shell lg-shell${settings.reducedMotion ? " lg-motion-off" : ""}`}>
       <style>{globalCss() + focusCss()}</style>
+      <WallpaperLayer mode={settings.wallpaper || "nebula"} image={loadWallpaperImage()} />
 
       <Sidebar tab={tab} setTab={setTab} profile={profile} sessions={sessions} onSignOut={() => supabase.auth.signOut()}
         notifyRecall={settings.recall?.goalDot !== false && dueReviews(syllabus).length > 0} />
 
       <div className="app-main lg-main">
         <Header profile={profile} sessions={sessions} tasks={tasks} />
-        <div className="lg-page" key={tab}>
-          {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} setDpp={setDpp} peers={peers} peerData={peerData} unlockedBadges={unlockedBadges} setTab={setTab} timer={timer} onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)} dashboardSettings={settings.dashboard} goalMin={settings.goalMin} dateFormat={settings.dateFormat} />}
-          {tab === "calendar" && <MonthView profile={profile} tasks={tasks} setTasks={setTasks} syllabus={syllabus} mocks={mocks} sessions={sessions} setTab={setTab} weekStart={settings.weekStart} dateFormat={settings.dateFormat} />}
-          {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} settings={settings.recall} />}
-          {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} settings={settings.coverage} />}
-          {tab === "timer" && <FocusTimer profile={profile} sessions={sessions} setSessions={setSessions} timer={timer}
-            setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
-            onStart={startTimer} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak}
-            tasks={tasks} setTasks={setTasks} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId}
-            pipOk={pipSupported()} pipOpen={pipOpen} onOpenPip={openPip} onOpenImmersive={() => setImmersiveOpen(true)} autoBreaks={settings.autoStartBreaks} />}
-          {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} settings={settings.tests} />}
-          {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} profile={profile} settings={settings.mistakes} />}
-          {tab === "weak" && <WeakAreas syllabus={syllabus} mocks={mocks} errors={errors} setTab={setTab} />}
-          {tab === "peers" && <Peers profile={profile} peers={peers} setPeers={setPeers} peerData={peerData} sessions={sessions}
-            groupDefs={groupDefs} groupRoster={groupRoster} onCreateGroup={createGroup} onJoinGroup={joinGroup} onLeaveGroup={leaveGroup} />}
-          {tab === "settings" && <SettingsTab
-            profile={profile} setProfile={setProfile}
-            data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers, unlockedBadges }}
-            setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers, setUnlockedBadges }}
-            settings={settings} setSettings={setSettings}
-            email={session?.user?.email || null}
-            onSignOut={() => supabase.auth.signOut()}
-            onResetFloatPosition={() => setFloatResetKey(k => k + 1)}
-            onSync={syncFromCloud}
-            onWipeNow={wipeNow}
-          />}
-        </div>
+        <GlobalSwipe tab={tab} onNav={setTab}>
+          <div className="lg-page" key={tab}>
+             {tab === "dashboard" && <Dashboard profile={profile} syllabus={syllabus} setSyllabus={setSyllabus} sessions={sessions} tasks={tasks} mocks={mocks} errors={errors} dpp={dpp} setDpp={setDpp} peers={peers} peerData={peerData} unlockedBadges={unlockedBadges} setTab={setTab} timer={timer} onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)} onShareStories={() => setStoriesOpen(true)} dashboardSettings={settings.dashboard} goalMin={settings.goalMin} dateFormat={settings.dateFormat} clockStyle={settings.clockStyle} />}
+            {tab === "cards" && <RecallDeck cards={cards} setCards={setCards} profile={profile} settings={settings.recall} />}
+            {tab === "syllabus" && <Syllabus syllabus={syllabus} setSyllabus={setSyllabus} profile={profile} settings={settings.coverage} />}
+             {tab === "timer" && <FocusTimer profile={profile} sessions={sessions} setSessions={setSessions} timer={timer} onShareStories={() => setStoriesOpen(true)}
+              setMode={changeTimerMode} setSubject={setTimerSubject} setPomoMinutes={setPomoMinutes}
+              onStart={startTimer} onPause={() => setTimerRunning(false)} onStop={stopTimer} onSkipBreak={skipBreak}
+              tasks={tasks} setTasks={setTasks} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId}
+              pipOk={pipSupported()} pipOpen={pipOpen} onOpenPip={openPip} onOpenImmersive={() => setImmersiveOpen(true)} autoBreaks={settings.autoStartBreaks} />}
+            {tab === "mocks" && <Mocks mocks={mocks} setMocks={setMocks} profile={profile} settings={settings.tests} />}
+             {tab === "errors" && <ErrorLog errors={errors} setErrors={setErrors} mocks={mocks} profile={profile} settings={settings.mistakes} />}
+             {tab === "community" && <Community profile={profile} userId={userId} sessions={sessions} circleRows={circleRows} onConnectCircle={connectCircle} onSearchGroups={searchGroups}
+                groupDefs={groupDefs} groupRoster={groupRoster} onCreateGroup={createGroup} onJoinGroup={joinGroup} onLeaveGroup={leaveGroup} onUpdateCircle={updateCircle} onRegenerateCircle={regenerateCircle} onRemoveMember={removeCircleMember} />}
+            {tab === "settings" && <SettingsTab
+              profile={profile} setProfile={setProfile}
+              data={{ profile, syllabus, tasks, sessions, mocks, errors, dpp, cards, peers, unlockedBadges }}
+              setters={{ setSyllabus, setTasks, setSessions, setMocks, setErrors, setDpp, setCards, setPeers, setUnlockedBadges }}
+              settings={settings} setSettings={setSettings}
+              email={session?.user?.email || null}
+              onSignOut={() => supabase.auth.signOut()}
+              onResetFloatPosition={() => setFloatResetKey(k => k + 1)}
+              onSync={syncFromCloud}
+              onWipeNow={wipeNow}
+            />}
+          </div>
+        </GlobalSwipe>
       </div>
 
       {settings.floatingTimer !== false && (
@@ -1188,6 +1258,8 @@ function Workspace({ session }) {
           onPause={() => setTimerRunning(false)} onResume={() => setTimerRunning(true)}
           onStop={stopTimer} onSkipBreak={skipBreak} />
       )}
+
+      {storiesOpen && <Stories sessions={sessions} dpp={dpp} mocks={mocks} profile={profile} onClose={() => setStoriesOpen(false)} />}
     </div>
   );
 }
@@ -1506,12 +1578,10 @@ function YearStrip({ sessionMap, goal = 360 }) {
   }
   const doy = Math.floor((now - new Date(y, 0, 1)) / 86400000) + 1;
   const todayWk = Math.floor((doy + jan1Dow - 1) / 7);
-  return (
+return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-        <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>{y} · YEAR</span>
-        <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{activeDays} ACTIVE · {goalsMet} GOALS</span>
-      </div>
+      <LedgerRule n="03" label="YEAR" style={{ marginBottom: 8 }}
+        right={<span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{activeDays} ACTIVE · {goalsMet} GOALS</span>} />
       <div style={{ position: "relative", height: 10, marginBottom: 6 }}>
         {Object.entries(monthStarts).map(([wk, label], i, arr) => (
           <span key={label} className="sys" style={{ position: "absolute", left: `calc(${(wk / 52) * 100}% + 1px)`, transform: i === arr.length - 1 ? "none" : "translateX(-50%)", fontSize: 7.5, letterSpacing: "0.08em", color: COLORS.faint }}>{label}</span>
@@ -1519,11 +1589,13 @@ function YearStrip({ sessionMap, goal = 360 }) {
       </div>
       <div style={{ display: "flex", gap: 2.5 }}>
         {cols.map((c, i) => {
+          // The year strip is the signature calendar — cells follow the
+          // active accent family (quiet → full), goal-met steps to success.
           const bg = c.days === 0 ? "transparent"
-            : c.max === 0 ? "rgba(255,255,255,0.04)"
-            : c.max < 30 ? "rgba(168,155,255,0.18)"
-            : c.max < 120 ? "rgba(168,155,255,0.45)"
-            : c.max < goal ? "rgba(168,155,255,0.78)"
+            : c.max === 0 ? hexToRgba(COLORS.ink, 0.07)
+            : c.max < 30 ? hexToRgba(COLORS.ink, 0.2)
+            : c.max < 120 ? hexToRgba(COLORS.ink, 0.42)
+            : c.max < goal ? hexToRgba(COLORS.ink, 0.72)
             : COLORS.done;
           return (
             <div key={i} title={c.days === 0 ? "later" : (c.max ? `${fmtMin(c.max)} that week` : "rest week")} style={{ flex: 1, height: 9, borderRadius: 2, background: bg, border: i === todayWk ? `1px solid ${COLORS.accentFocus}` : "1px solid transparent", boxSizing: "border-box", transition: "filter 0.14s ease-out, transform 0.14s ease-out" }} />
@@ -1534,7 +1606,7 @@ function YearStrip({ sessionMap, goal = 360 }) {
   );
 }
 
-function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, errors, dpp, setDpp, peers, peerData, unlockedBadges, setTab, timer, onPause, onResume, dashboardSettings = {}, goalMin = 360, dateFormat = "compact" }) {
+function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, errors, dpp, setDpp, peers, peerData, unlockedBadges, setTab, timer, onPause, onResume, onShareStories, dashboardSettings = {}, goalMin = 360, dateFormat = "compact", clockStyle = "digital" }) {
   const flags = { countdown: true, clock: true, studied: true, now: true, year: true, today: true, subjects: true, workspaces: true, status: true, ...dashboardSettings };
   const goal = Number(goalMin) || 360;
   const dwNow = useNow(15000);
@@ -1631,7 +1703,11 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const todaySessions = useMemo(() => sessions.filter(s => s.date === todayStr()), [sessions]);
   const showToday = todaySessions.length > 0 || todayTasks.length > 0 || due.length > 0 || mocks.length > 0;
   const [openSub, setOpenSub] = useState(null);
+  const [weekTip, setWeekTip] = useState(null);
+  const weekEntries = Array.from({ length: 7 }, (_, i) => { const date = addDays(todayStr(), -i); return { date, minutes: sessions.filter(s => s.date === date).reduce((a, s) => a + (s.minutes || 0), 0) }; }).filter(x => x.minutes > 0).reverse();
   const goalPct = Math.min(100, Math.round((todayMin / goal) * 100));
+  const weeklyAvgMin = Math.round(sessions.filter(s => s.date >= addDays(todayStr(), -6)).reduce((a, s) => a + (s.minutes || 0), 0) / 7);
+  const weeklyRingDash = Math.round(188 * Math.min(1, weeklyAvgMin / Math.max(1, goal)));
   const goalHours = goal / 60;
   const timerRunningSec = timer ? timer.elapsed : 0;
   const timerShowingRunning = !!(timer && timer.running && timer.elapsed > 0);
@@ -1646,8 +1722,8 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const daysInPrep = 365;
   const examTitle = String(profile.exam || "EXAM").toUpperCase();
   const targetYear = String(profile.targetDate || "").slice(0, 4);
-  const miniStamp = { background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: COLORS.faint, borderRadius: 5, padding: "3px 8px", fontSize: 9, letterSpacing: "0.06em", fontFamily: FONTS.mono, cursor: "pointer", transition: "color 0.14s ease-out, border-color 0.14s ease-out" };
-  const miniBtnStyle = (accent) => ({ background: accent ? hexToRgba(COLORS.accentFocus, 0.12) : "rgba(255,255,255,0.05)", border: `1px solid ${accent ? hexToRgba(COLORS.accentFocus, 0.4) : "rgba(255,255,255,0.12)"}`, color: accent ? COLORS.accentFocus : COLORS.dim, borderRadius: 6, padding: "5px 11px", fontSize: 9.5, letterSpacing: "0.1em", fontFamily: FONTS.mono, cursor: "pointer", transition: "filter 0.14s ease-out" });
+  const miniStamp = { background: COLORS.hoverOverlay, border: `1px solid ${COLORS.border}`, color: COLORS.faint, borderRadius: RADIUS.badge, padding: "3px 8px", fontSize: 9, letterSpacing: "0.06em", fontFamily: FONTS.mono, cursor: "pointer", transition: "color 0.14s ease-out, border-color 0.14s ease-out" };
+  const miniBtnStyle = (accent) => ({ background: accent ? hexToRgba(COLORS.accentFocus, 0.12) : COLORS.hoverOverlay, border: `1px solid ${accent ? hexToRgba(COLORS.accentFocus, 0.4) : COLORS.border}`, color: accent ? COLORS.accentFocus : COLORS.dim, borderRadius: RADIUS.badge, padding: "5px 11px", fontSize: 9.5, letterSpacing: "0.1em", fontFamily: FONTS.mono, cursor: "pointer", transition: "filter 0.14s ease-out" });
 
   const leftCol = {
     display: "flex", flexDirection: "column", gap: 20, minWidth: 0,
@@ -1658,19 +1734,27 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
 
 return (
     <div className="lg-canvas">
-{/* 01 · CLOCK — a typographic object, no container */}
+      {/* 01 · STATUS — the section index, then the two numerals */}
+      <LedgerRule n="01" label="STATUS" style={{ marginBottom: 26 }}>
+        <button onClick={onShareStories} aria-label="Share today's Ledger Story" title="Share today's Ledger Story"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: RADIUS.badge,
+            border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.dim,
+            fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.18em", cursor: "pointer",
+            transition: "color 0.16s ease-out, border-color 0.16s ease-out, background 0.16s ease-out" }}>
+          <Share2 size={12} /> SHARE
+        </button>
+      </LedgerRule>
+
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "30px 44px" }}>
         {flags.clock && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="lg-live" style={{ width: 7, height: 7, background: COLORS.accentFocus, alignSelf: "flex-end", marginBottom: 16 }} />
-            <div style={{ fontFamily: FONTS.mono, fontSize: "clamp(54px, 9vw, 104px)", fontWeight: 600, lineHeight: 0.9, letterSpacing: "-0.045em", fontVariantNumeric: "tabular-nums", color: COLORS.text }}>
-              {String(hour12).padStart(2, "0")}:{minSlice}
-              <span style={{ fontSize: "0.26em", fontWeight: 500, letterSpacing: "0.1em", color: COLORS.faint, marginLeft: 8 }}>{ampm}</span>
-            </div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: "clamp(38px, 5.2vw, 62px)", fontWeight: 500, lineHeight: 0.95, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums", color: COLORS.text }}>
+             {clockStyle === "flip" && <span className="lg-flipcell" aria-hidden="true" style={{ display: "inline-block", width: "0.62em", height: "1em", marginRight: 2, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: 4 }} />}
+             {String(hour12).padStart(2, "0")}:{minSlice}
+            <span style={{ fontSize: "0.3em", fontWeight: 500, letterSpacing: "0.12em", color: COLORS.faint, marginLeft: 8 }}>{ampm}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18 }}>
-            <span className="sys" style={{ fontSize: 10.5, letterSpacing: "0.24em", color: COLORS.text }}>{weekday}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+            <span className="sys" style={{ fontSize: 10, letterSpacing: "0.22em", color: COLORS.text }}>{weekday}</span>
             <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
             <span className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>{dateStr}</span>
             <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
@@ -1679,22 +1763,29 @@ return (
 </div>
         )}
 
-        {/* EXAM — the signature numeral */}
+        {/* EXAM — the signature numeral, the one dominant number on the page */}
         {flags.countdown && (
         <div style={{ textAlign: "right" }}>
           <div className="sys" style={{ fontSize: 9.5, letterSpacing: "0.26em", color: COLORS.faint }}>{examTitle} · {targetYear}</div>
-          <div className="num" style={{ fontSize: "clamp(72px, 10vw, 148px)", fontWeight: 800, lineHeight: 0.78, letterSpacing: "-0.05em", fontVariantNumeric: "tabular-nums", color: daysLeft === null ? COLORS.faint : hexToRgba(COLORS.danger, 0.94), marginTop: 10 }}>{daysLeft === null ? "—" : daysLeft}</div>
-          <div className="sys" style={{ fontSize: 11, letterSpacing: "0.42em", color: daysLeft === null ? COLORS.faint : urgent ? COLORS.danger : COLORS.dim, marginTop: 12 }}>{daysLeft === null ? "NO DATE SET" : "DAYS LEFT"}</div>
+          <div className="num" style={{ fontSize: "clamp(72px, 10vw, 148px)", fontWeight: 800, lineHeight: 0.78, letterSpacing: "-0.05em", fontVariantNumeric: "tabular-nums", color: daysLeft === null ? COLORS.faint : COLORS.countdownAccent, marginTop: 10 }}>{daysLeft === null ? "—" : daysLeft}</div>
+           <div className="sys" style={{ fontSize: 11, letterSpacing: "0.42em", color: daysLeft === null ? COLORS.faint : urgent ? COLORS.danger : COLORS.dim, marginTop: 12 }}>{daysLeft === null ? "NO DATE SET" : "DAYS LEFT"}</div>
+           <div className={`lg-week-ring-wrap lg-days-ring${sessions.length ? " lg-ring-burst" : ""}`} style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 22 }}>
+             <div style={{ position: "relative", display: "flex", gap: 6 }}>{weekEntries.map((x, i) => <span key={x.date} className={`lg-week-seg${x.date === todayStr() ? " lg-week-seg-live" : ""}`} title={`${parseLocalDate(x.date).toLocaleDateString(undefined, { weekday: "short" })} · ${fmtMin(x.minutes)}`} onMouseEnter={() => setWeekTip(`${parseLocalDate(x.date).toLocaleDateString(undefined, { weekday: "short" })} · ${fmtMin(x.minutes)}`)} onMouseLeave={() => setWeekTip(null)} style={{ width: 12, height: 12, borderRadius: 3, background: COLORS.chart[i % COLORS.chart.length] }} />)}{weekTip && <div className="lg-tooltip" style={{ position: "absolute", right: 0, top: 18, zIndex: 4, padding: "5px 8px", borderRadius: 5, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 10, whiteSpace: "nowrap" }}>{weekTip}</div>}</div>
+             <svg width="78" height="78" viewBox="0 0 78 78" aria-label="Weekly subject focus ring"><circle cx="39" cy="39" r="30" fill="none" stroke={COLORS.border} strokeWidth="6" /><circle className="lg-ring-pulse" cx="39" cy="39" r="30" fill="none" stroke={COLORS.accentFocus} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${weeklyRingDash} 188`} transform="rotate(-90 39 39)" /><text x="39" y="43" textAnchor="middle" fill={COLORS.text} fontSize="11" fontFamily={FONTS.mono}>{fmtMin(weeklyAvgMin)}</text></svg>
+           </div>
         </div>
         )}
       </div>
 
-      {/* 02 · two small chips, deliberately misaligned */}
-      <div style={{ display: "flex", alignItems: "stretch", flexWrap: "wrap", gap: 18, marginTop: "clamp(36px, 5vh, 56px)" }}>
+      {/* 02 · SESSION — studied + now, one instrument pair */}
+      {(flags.studied || flags.now) && (
+        <LedgerRule n="02" label="SESSION" style={{ marginTop: "clamp(34px, 5vh, 56px)", marginBottom: 14 }} />
+      )}
+      <div style={{ display: "flex", alignItems: "stretch", flexWrap: "wrap", gap: 14 }}>
         {flags.studied && (
-        <div style={{ minWidth: 232, background: "rgba(255,255,255,0.03)", borderRadius: 14, padding: "16px 22px 14px" }}>
+        <div style={{ minWidth: 232, background: COLORS.glassFill2, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "16px 20px 14px" }}>
           <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.26em", color: COLORS.faint }}>STUDIED</div>
-          <div className="num" style={{ fontSize: 38, fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.03em", marginTop: 6 }}>{fmtMin(todayMin)}</div>
+          <div className="num" style={{ fontSize: 36, fontWeight: 650, lineHeight: 1.05, letterSpacing: "-0.03em", marginTop: 6 }}>{fmtMin(todayMin)}</div>
           <div className="lg-progress" style={{ height: 4, marginTop: 13 }}>
             <div className="lg-progress-fill" style={{ width: `${goalPct}%`, "--lg-w": `${goalPct}%`, height: "100%" }} />
           </div>
@@ -1706,10 +1797,10 @@ return (
 
         {/* NOW — the music-player equivalent */}
         {flags.now && (
-        <div style={{ minWidth: 236, flex: "0 1 250px", borderRadius: 14, padding: "14px 18px", marginLeft: "clamp(0px, 4vw, 72px)", background: timerShowingRunning ? hexToRgba(COLORS.accentFocus, 0.08) : "transparent", border: `1px solid ${timerShowingRunning ? hexToRgba(COLORS.accentFocus, 0.32) : "rgba(255,255,255,0.08)"}` }}>
+        <div style={{ minWidth: 236, flex: "0 1 250px", borderRadius: RADIUS.card, padding: "14px 18px", background: timerShowingRunning ? hexToRgba(COLORS.accentFocus, 0.07) : COLORS.glassFill2, border: `1px solid ${timerShowingRunning ? hexToRgba(COLORS.accentFocus, 0.32) : COLORS.border}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.26em", color: timerShowingRunning ? COLORS.accentFocus : COLORS.faint }}>NOW STUDYING</span>
-            <span className="lg-live" style={{ width: 6, height: 6, background: timerShowingRunning ? COLORS.accentFocus : "transparent", border: `1px solid ${timerShowingRunning ? COLORS.accentFocus : COLORS.borderStrong}` }} />
+            <span style={{ width: 6, height: 6, background: timerShowingRunning ? COLORS.accentFocus : "transparent", border: `1px solid ${timerShowingRunning ? COLORS.accentFocus : COLORS.borderStrong}` }} />
           </div>
           {timerRunningSec > 0 ? (
             <>
@@ -1743,14 +1834,14 @@ return (
       </div>
       )}
 
-      {/* 04 — today's timeline + the subject block, asymmetric */}
+      {/* 04 / 05 — today's timeline + the subject block, two ledger entries */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "36px 48px", marginTop: "clamp(34px, 5vh, 58px)" }}>
         {flags.today && showToday && (
           <div style={{ flex: "1 1 300px", maxWidth: 400 }}>
-            <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>TODAY</span>
+            <LedgerRule n="04" label="TODAY" style={{ marginBottom: 10 }} />
             <div style={{ marginTop: 8 }}>
               {todaySessions.slice(-8).map(s => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: `1px solid ${COLORS.border}` }}>
                   <span style={subjectDot(s.subject)} />
                   <span style={{ flex: 1, fontSize: 12.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.topic || s.subject}
                     {s.targetId && targetById[s.targetId] && <span style={{ color: COLORS.faint, fontSize: 11 }}> → {targetById[s.targetId].text}</span>}
@@ -1776,11 +1867,9 @@ return (
 
 {/* SUBJECTS — a diagnostic meter, one coherent instrument */}
         {flags.subjects && (
-        <div style={{ width: "100%", maxWidth: 340, border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: "18px 20px 12px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.26em", color: COLORS.dim }}>SUBJECTS</span>
-            <span className="num" style={{ fontSize: 9.5, color: COLORS.faint }}>{pct}%</span>
-          </div>
+        <div style={{ width: "100%", maxWidth: 340, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "18px 20px 12px" }}>
+          <LedgerRule n="05" label="SUBJECTS" style={{ marginBottom: 8 }}
+            right={<span className="num" style={{ fontSize: 9.5, color: COLORS.faint }}>{pct}%</span>} />
           {profile.subjects.map((sub, si) => {
             const list = syllabus[sub] || [];
             const done = list.filter(c => c.status === "done" || c.status === "mastered").length;
@@ -1790,7 +1879,7 @@ return (
             const todo = list.filter(c => c.status === "todo");
             const expanded = openSub === sub;
             return (
-              <div key={sub} onClick={() => setOpenSub(expanded ? null : sub)} style={{ marginBottom: 2, borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
+              <div key={sub} onClick={() => setOpenSub(expanded ? null : sub)} style={{ marginBottom: 2, borderBottom: `1px solid ${COLORS.border}`, cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "9px 0" }}>
                   <span className="num" style={{ fontSize: 8.5, color: expanded ? COLORS.accentFocus : COLORS.faint, letterSpacing: "0.06em", width: 16 }}>{String(si + 1).padStart(2, "0")}</span>
                   <span style={{ fontSize: 11.5, letterSpacing: "0.06em", color: COLORS.text, flex: 1 }}>{sub}</span>
@@ -1798,7 +1887,7 @@ return (
                 </div>
                 <div style={{ display: "flex", gap: 2.5, marginLeft: 26, marginBottom: 9 }}>
                   {Array.from({ length: segs }).map((_, i) => (
-                    <span key={i} style={{ flex: 1, height: 5, borderRadius: 1.5, background: i < filled ? subjectColor(sub) : "rgba(255,255,255,0.055)", transition: "background 0.3s ease-out" }} />
+                    <span key={i} style={{ flex: 1, height: 5, borderRadius: 1.5, background: i < filled ? subjectColor(sub) : hexToRgba(COLORS.text, 0.06), transition: "background 0.3s ease-out" }} />
                   ))}
                 </div>
                 {expanded && (
@@ -1820,17 +1909,19 @@ return (
         )}
       </div>
 
-      {/* 05b — daily question practice (moved here from the retired Targets tab) */}
+      {/* 06 — daily question practice */}
       {flags.today && (
         <div style={{ marginTop: "clamp(34px, 5vh, 56px)", maxWidth: 900 }}>
+          <LedgerRule n="06" label="PRACTICE" style={{ marginBottom: 14 }} />
           <PracticeCard record={dppRecord} dppStreak={dppStreak} bumpSolved={bumpSolved} updateTarget={updateDppToday} />
         </div>
       )}
 
-      {/* 06 — the command strip: one line in, one workspace at a time */}
+      {/* 07 — the command strip: one line in, one workspace at a time */}
       {flags.workspaces && (
       <div style={{ marginTop: "clamp(34px, 5vh, 56px)", maxWidth: 900 }}>
-        <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>WORKSPACES — ONE STEP AT A TIME</span>
+        <LedgerRule n="07" label="WORKSPACES" style={{ marginBottom: 14 }}
+          right={<span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.18em", color: COLORS.faint }}>ONE STEP AT A TIME</span>} />
         <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))", gap: 10, marginTop: 10 }}>
           {[
             {
@@ -1866,12 +1957,10 @@ return (
                 <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                   <Icon size={13} color={COLORS.faint} />
                   <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>{w.label}</span>
+                  <ChevronRight size={13} strokeWidth={2} className="lg-ws-arrow" />
                 </div>
                 <div className="num" style={{ fontSize: 22, fontWeight: 700, color: COLORS.text, letterSpacing: "-0.01em", lineHeight: 1.05 }}>{w.num}</div>
                 <div style={{ fontSize: 10.5, color: COLORS.dim, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.line}</div>
-                <div style={{ fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: COLORS.faint, marginTop: "auto", fontFamily: FONTS.mono, fontWeight: 600 }}>
-                  Open →
-                </div>
               </button>
             );
           })}
@@ -1879,195 +1968,32 @@ return (
       </div>
       )}
 
-{/* 05 — the status strip */}
+      {/* 08 — the status strip */}
       {flags.status && (
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "clamp(40px, 6vh, 68px)", paddingTop: 16, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", maxWidth: 900 }}>
-        <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.faint }}>LV {xpInfo.level} · {String(xpInfo.title).toUpperCase()}</span>
-        <div className="lg-progress" style={{ width: 150, height: 3 }}>
-          <div className="lg-progress-fill" style={{ width: `${xpInfo.levelPct}%`, "--lg-w": `${xpInfo.levelPct}%`, height: "100%" }} />
-        </div>
-<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>{xpInfo.intoLevel}/{XP_PER_LEVEL}</span>
-        {alert && (
-          <>
-            <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
-            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.warn }}>⚠ −{alert.drop}% 7D</span>
-          </>
-        )}
-        <span style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {badges.map(b => (
-            <span key={b.id} title={`${b.label} — ${b.desc}`} style={{ width: 5, height: 5, transform: "rotate(45deg)", background: b.unlocked ? hexToRgba(COLORS.accentFocus, 0.85) : "rgba(255,255,255,0.09)" }} />
-          ))}
-        </div>
-<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>{unlockedCount}/{badges.length}</span>
-      </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------- CALENDAR ----------------
-const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
-
-function MonthView({ profile, tasks, setTasks, syllabus, mocks, sessions, setTab, weekStart = "sunday", dateFormat = "compact" }) {
-  const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
-  const [selected, setSelected] = useState(todayStr());
-  const [newText, setNewText] = useState("");
-  const [newSubject, setNewSubject] = useState(profile.subjects[0]);
-
-  const reviewMap = useMemo(() => reviewsByDate(syllabus), [syllabus]);
-  const examDate = profile.targetDate;
-
-  const monthStats = useMemo(() => {
-    const year = cursor.getFullYear(), month = cursor.getMonth();
-    // parseLocalDate (local midnight) instead of `new Date(ds)` (UTC
-    // midnight) so month boundaries aren't shifted for users west of UTC.
-    const inMonth = (ds) => { const d = parseLocalDate(ds); return d.getFullYear() === year && d.getMonth() === month; };
-    const monthSessions = sessions.filter(s => inMonth(s.date));
-    const totalMin = monthSessions.reduce((a, s) => a + s.minutes, 0);
-    const activeDays = new Set(monthSessions.map(s => s.date)).size;
-    const tasksDone = tasks.filter(t => inMonth(t.date) && t.done).length;
-    const mocksTaken = mocks.filter(m => inMonth(m.date)).length;
-    return { totalMin, activeDays, tasksDone, mocksTaken };
-  }, [cursor, sessions, tasks, mocks]);
-
-  const grid = useMemo(() => {
-    const year = cursor.getFullYear(), month = cursor.getMonth();
-    const monday = weekStart === "monday";
-    const firstDow = new Date(year, month, 1).getDay();
-    const offset = monday ? (firstDow + 6) % 7 : firstDow;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells = [];
-    for (let i = 0; i < offset; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(todayStr(new Date(year, month, d)));
-    while (cells.length % 7 !== 0) cells.push(null);
-    return cells;
-  }, [cursor, weekStart]);
-
-  const dayInfo = (ds) => {
-    if (!ds) return null;
-    const t = tasks.filter(x => x.date === ds);
-    const r = reviewMap[ds] || [];
-    const mk = mocks.filter(x => x.date === ds);
-    const studyMin = sessions.filter(x => x.date === ds).reduce((a, s) => a + s.minutes, 0);
-    return { tasks: t, reviews: r, mocks: mk, studyMin };
-  };
-
-  const selInfo = dayInfo(selected) || { tasks: [], reviews: [], mocks: [], studyMin: 0 };
-  const addTaskForSelected = () => {
-    if (!newText.trim() || !selected) return;
-    setTasks(prev => [...prev, { id: uid(), text: newText.trim(), subject: newSubject, done: false, date: selected }]);
-    setNewText("");
-  };
-  const toggleTask = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
-
-  const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-
-  return (
-    <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, alignItems: "flex-start" }}>
-      <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontFamily: FONTS.display, fontSize: 17, fontWeight: 600 }}>{monthLabel}</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <Btn variant="ghost" onClick={() => setCursor(c => { const n = new Date(c); n.setMonth(n.getMonth() - 1); return n; })}><ChevronLeft size={14} /></Btn>
-            <Btn variant="ghost" onClick={() => { const d = new Date(); d.setDate(1); setCursor(d); setSelected(todayStr()); }}>Today</Btn>
-            <Btn variant="ghost" onClick={() => setCursor(c => { const n = new Date(c); n.setMonth(n.getMonth() + 1); return n; })}><ChevronRight size={14} /></Btn>
+      <div style={{ marginTop: "clamp(40px, 6vh, 68px)", maxWidth: 900 }}>
+        <LedgerRule n="08" label="SYSTEM" style={{ marginBottom: 14 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+          <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.faint }}>LV {xpInfo.level} · {String(xpInfo.title).toUpperCase()}</span>
+          <div className="lg-progress" style={{ width: 150, height: 3 }}>
+            <div className="lg-progress-fill" style={{ width: `${xpInfo.levelPct}%`, "--lg-w": `${xpInfo.levelPct}%`, height: "100%" }} />
           </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 11, color: COLORS.dim, display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: 2, background: COLORS.ink, boxShadow: `0 0 6px ${hexToRgba(COLORS.ink, 0.6)}` }} />Focused <b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{fmtMin(monthStats.totalMin)}</b> this month</div>
-          <span style={{ width: 1, height: 14, background: COLORS.border }} />
-          <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.activeDays}</b> active days</div>
-          <span style={{ width: 1, height: 14, background: COLORS.border }} />
-          <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.tasksDone}</b> targets completed</div>
-          <span style={{ width: 1, height: 14, background: COLORS.border }} />
-          <div style={{ fontSize: 11, color: COLORS.dim }}><b style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{monthStats.mocksTaken}</b> mocks taken</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
-          {(weekStart === "monday" ? ["M", "T", "W", "T", "F", "S", "S"] : WEEKDAY_LABELS).map((w, i) => <div key={i} style={{ textAlign: "center", fontSize: 10, color: COLORS.faint, textTransform: "uppercase", padding: "2px 0" }}>{w}</div>)}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-          {grid.map((ds, i) => {
-            if (!ds) return <div key={i} />;
-            const info = dayInfo(ds);
-            const isToday = ds === todayStr();
-            const isSelected = ds === selected;
-            const isExam = ds === examDate;
-            const dateNum = parseInt(ds.slice(-2), 10);
-            const intensity = info.studyMin === 0 ? 0 : info.studyMin < 30 ? 0.3 : info.studyMin < 90 ? 0.6 : 1;
-            return (
-              <div key={ds} className="lg-cell" onClick={() => setSelected(ds)} style={{
-                aspectRatio: "1", borderRadius: 12, cursor: "pointer", padding: "5px 6px", position: "relative",
-                background: isSelected ? COLORS.inkSoft : intensity > 0 ? `${COLORS.ink}${Math.round(intensity * 30).toString(16).padStart(2, "0")}` : COLORS.panel2,
-                border: `1px solid ${isSelected ? COLORS.ink : isExam ? COLORS.danger : COLORS.border}`,
-                display: "flex", flexDirection: "column", justifyContent: "space-between",
-              }}>
-                <div style={{ fontSize: 11, fontFamily: FONTS.mono, color: isToday ? COLORS.ink : COLORS.dim, fontWeight: isToday ? 700 : 400 }}>
-                  {dateNum}{isToday && <span style={{ marginLeft: 3, fontSize: 8 }}>•</span>}
-                </div>
-                <div style={{ display: "flex", gap: 2.5, flexWrap: "wrap" }}>
-                  {info.tasks.length > 0 && <div title={`${info.tasks.length} task(s)`} style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.ink }} />}
-                  {info.reviews.length > 0 && <div title={`${info.reviews.length} review(s) due`} style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.done }} />}
-                  {info.mocks.length > 0 && <div title="Mock logged" style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.warn }} />}
-                  {isExam && <div title="Exam day" style={{ width: 5, height: 5, borderRadius: 2, background: COLORS.danger }} />}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", gap: 14, marginTop: 14, fontSize: 10, color: COLORS.faint, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: 1, background: COLORS.ink }} /> Tasks</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: 1, background: COLORS.done }} /> Reviews due</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: 1, background: COLORS.warn }} /> Mock logged</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: 1, background: COLORS.danger }} /> Exam day</div>
-          <div>Cell shade = focus time logged that day</div>
-        </div>
-      </Card>
-
-      <Card title={selected === todayStr() ? "Today" : selected}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Plan for this day</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-              <Input value={newText} onChange={e => setNewText(e.target.value)} placeholder="Add a target…" onKeyDown={e => e.key === "Enter" && addTaskForSelected()} />
-              <Btn variant="ink" onClick={addTaskForSelected}><Plus size={13} /></Btn>
-            </div>
-            <SelectBox value={newSubject} onChange={setNewSubject} ariaLabel="Target subject" options={subjOpts(profile.subjects)} style={{ width: "100%", marginBottom: 8 }} />
-            {selInfo.tasks.length === 0 ? (
-              <div style={{ fontSize: 12, color: COLORS.faint }}>Nothing planned yet.</div>
-            ) : selInfo.tasks.map(t => (
-              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12 }}>
-                <Bubble status={t.done ? "done" : "todo"} size={16} onClick={() => toggleTask(t.id)} />
-                <span style={{ flex: 1, textDecoration: t.done ? "line-through" : "none", color: t.done ? COLORS.faint : COLORS.text }}>{t.text}</span>
-                <Trash2 size={12} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removeTask(t.id)} />
-              </div>
+<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>{xpInfo.intoLevel}/{XP_PER_LEVEL}</span>
+          {alert && (
+            <>
+              <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
+              <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.warn }}>⚠ −{alert.drop}% 7D</span>
+            </>
+          )}
+          <span style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {badges.map(b => (
+              <span key={b.id} title={`${b.label} — ${b.desc}`} style={{ width: 5, height: 5, transform: "rotate(45deg)", background: b.unlocked ? hexToRgba(COLORS.accentFocus, 0.85) : hexToRgba(COLORS.text, 0.09) }} />
             ))}
           </div>
-
-          {selInfo.reviews.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Reviews due</div>
-              {selInfo.reviews.map(r => (
-                <div key={r.id} style={{ fontSize: 12, color: COLORS.dim, padding: "3px 0" }}>{r.name} <span style={{ fontSize: 10, color: COLORS.faint }}>· {r.subject}</span></div>
-              ))}
-            </div>
-          )}
-
-          {selInfo.mocks.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, color: COLORS.faint, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Mock tests logged</div>
-              {selInfo.mocks.map(m => (
-                <div key={m.id} style={{ fontSize: 12, color: COLORS.dim, padding: "3px 0" }}>{m.name} — <span style={{ color: COLORS.ink, fontFamily: FONTS.mono }}>{m.total}/{m.max}</span></div>
-              ))}
-            </div>
-          )}
-
-          {selInfo.studyMin > 0 && (
-            <div style={{ fontSize: 12, color: COLORS.dim }}>Focused <b style={{ color: COLORS.text }}>{fmtMin(selInfo.studyMin)}</b> this day.</div>
-          )}
+<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>{unlockedCount}/{badges.length}</span>
         </div>
-      </Card>
+      </div>
+      )}
     </div>
   );
 }
@@ -2174,24 +2100,33 @@ const recommendation = (c) => {
   const cardStyle = { borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: "14px 16px", background: "transparent" };
 
   return (
-    <div>
+    <div className="lg-coverage-page">
       <PageHead
-        title="Coverage"
-        lead="The syllabus as a working knowledge base — what's covered, what's in flight, and what's ready for review. Every chapter is yours to inspect and edit."
+        title="Coverage / Knowledge map"
+        lead="A clear read on what you know, what is moving, and what deserves the next hour."
         right={(
           <div className="num" style={{ fontSize: 10.5, letterSpacing: "0.08em", color: COLORS.faint, marginTop: 4 }}>
-            {allCh.length} CHAPTER{allCh.length === 1 ? "" : "S"} · {covDone} DONE · {covPct}%
+            <span className="lg-coverage-readout">{allCh.length} CHAPTER{allCh.length === 1 ? "" : "S"} · {covDone} DONE · {covPct}%</span>
           </div>
         )}
       />
 
-      {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 24 }}>
-        <MiniStat k="Overall coverage" v={`${covPct}%`} sub={`${covDone} of ${allCh.length} chapters complete`} pct={covPct} tint={COLORS.ink} />
-        <MiniStat k="Completed" v={covDone} sub="Done + mastered" tint={covDone > 0 ? COLORS.done : undefined} />
-        <MiniStat k="In progress" v={covDoing} sub="Started but not finished" tint={covDoing > 0 ? COLORS.warn : undefined} />
-        <MiniStat k="Not started" v={covTodo} sub="Still in the backlog" />
-        <MiniStat k="Reviews due" v={reviewsDue} sub={reviewsDue > 0 ? "Spaced repetition pending" : "Repetitions caught up"} tint={reviewsDue > 0 ? COLORS.warn : undefined} />
+      <div className="lg-coverage-hero" style={{ display: "grid", gridTemplateColumns: "minmax(230px, 0.8fr) minmax(0, 1.7fr)", gap: 1, marginBottom: 24, background: COLORS.border, border: `1px solid ${COLORS.border}`, overflow: "hidden", borderRadius: RADIUS.card }}>
+        <div style={{ background: COLORS.panel2, padding: "28px 26px", position: "relative", overflow: "hidden" }}>
+          <div style={{ color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.2em" }}>TOTAL COVERAGE</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 24 }}>
+            <div style={{ width: 112, height: 112, borderRadius: "50%", background: `conic-gradient(${subjectColor(activeSubject)} ${covPct}%, ${COLORS.border} 0)`, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <div style={{ width: 88, height: 88, borderRadius: "50%", background: COLORS.panel2, display: "grid", placeItems: "center" }}><span className="num lg-coverage-dot" style={{ color: COLORS.text, fontSize: 27, fontWeight: 700 }}>{covPct}<small style={{ fontSize: 13, color: COLORS.faint }}>%</small></span></div>
+            </div>
+            <div><div style={{ color: COLORS.text, fontSize: 14, fontWeight: 600 }}>{covDone} of {allCh.length} chapters</div><div style={{ color: COLORS.faint, fontSize: 11, marginTop: 5, lineHeight: 1.5 }}>{covPct >= 75 ? "The map is taking shape." : covPct > 0 ? "Momentum is on the board." : "Start with one chapter."}</div></div>
+          </div>
+        </div>
+        <div className="lg-coverage-read" style={{ background: COLORS.panel, padding: "24px 28px", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(180px, 0.75fr)", gap: 28, alignItems: "center" }}>
+          <div><div style={{ color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.2em", marginBottom: 14 }}>THE NEXT READ</div><div style={{ color: COLORS.text, fontFamily: FONTS.display, fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>{reviewsDue > 0 ? `${reviewsDue} review${reviewsDue === 1 ? "" : "s"} need attention` : covDoing > 0 ? `${covDoing} chapter${covDoing === 1 ? " is" : "s are"} in motion` : "Choose your next chapter"}</div><div style={{ color: COLORS.dim, fontSize: 12, lineHeight: 1.6, marginTop: 9, maxWidth: 420 }}>{reviewsDue > 0 ? "Spaced repetition is the shortest route from familiar to retained." : "Use the subject map below to move from intention into a concrete study block."}</div></div>
+          <div style={{ borderLeft: `1px solid ${COLORS.border}`, paddingLeft: 24, display: "grid", gap: 13 }}>
+            {[["DONE", covDone, COLORS.done], ["IN FLIGHT", covDoing, COLORS.warn], ["BACKLOG", covTodo, COLORS.faint], ["REVIEW DUE", reviewsDue, reviewsDue ? COLORS.warn : COLORS.faint]].map(([label, value, color]) => <div key={label} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14 }}><span style={{ color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.12em" }}>{label}</span><span className="num" style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</span></div>)}
+          </div>
+        </div>
       </div>
 
       {/* Subject navigation */}
@@ -2217,7 +2152,7 @@ const recommendation = (c) => {
                 <span style={{ fontSize: 12.5, color: active ? COLORS.text : COLORS.dim, fontWeight: active ? 600 : 500 }}>{s}</span>
                 <span className="num" style={{ fontSize: 10.5, color: active ? sc : COLORS.faint }}>{sp}%</span>
                 <div className="lg-progress" style={{ width: 40, height: 3 }}>
-                  <div style={{ width: `${sp}%`, height: "100%", background: sc, borderRadius: 2, transition: "width 0.5s cubic-bezier(0.2,0.8,0.2,1)" }} />
+                  <div style={{ width: `${sp}%`, height: "100%", background: sc, borderRadius: 2 }} />
                 </div>
               </div>
             );
@@ -2274,10 +2209,11 @@ const recommendation = (c) => {
               const rec = recommendation(c);
               const lastSeen = c.doneDate || (c.revisionStage >= 0 ? c.nextRevision : null);
               const barColor = subjectColor(activeSubject);
+              const blocked = c.status === "todo" && deps.length > 0 && !depsReady;
               return (
-                <div key={c.id} className="lg-row" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                <div key={c.id} className={`lg-row lg-coverage-row state-${c.status}${blocked ? " is-blocked" : c.status === "todo" ? " is-available" : ""}`} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
                   <div className="lg-row-inner" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 10px", borderRadius: 8 }}>
-                    <span className="num" style={{ fontSize: 9.5, color: COLORS.faint, width: 26, flexShrink: 0, letterSpacing: "0.08em" }}>{String(ri + 1).padStart(2, "0")}</span>
+                    <span className="num lg-coverage-index" style={{ fontSize: 9.5, color: COLORS.faint, width: 26, flexShrink: 0, letterSpacing: "0.08em" }}>{String(ri + 1).padStart(2, "0")}</span>
                     <Bubble status={c.status} onClick={() => cycleStatus(c)} />
                     <div role="button" tabIndex={0} onClick={() => setExpanded(expanded === c.id ? null : c.id)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(expanded === c.id ? null : c.id); } }}
@@ -2287,23 +2223,23 @@ const recommendation = (c) => {
                         <span style={{ marginLeft: 8, flexShrink: 0, color: COLORS.warn, fontSize: 9, fontFamily: FONTS.mono }}>{"★".repeat(c.confidence)}</span>
                       )}
                     </div>
-                    {settings.showPrereqs !== false && deps.length > 0 && (
-                      <span className="lg-narrow-hide" title={`Sequence: ${deps.join(" → ")}`} style={{
+                    <div className="lg-dependency-stack">
+                      {settings.showPrereqs !== false && deps.length > 0 && <span className="lg-dependency-link" aria-hidden="true"><Link2 size={11} /></span>}
+                      {settings.showPrereqs !== false && deps.length > 0 && <span className="lg-narrow-hide lg-dependency-badge" title={`Sequence: ${deps.join(" → ")}`} style={{
                         fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: FONTS.mono,
                         padding: "3px 8px", borderRadius: 5, flexShrink: 0, fontWeight: 600,
-                        color: depsReady ? COLORS.done : COLORS.faint,
+                        color: depsReady ? COLORS.done : COLORS.accentFocus,
                         background: depsReady ? `${COLORS.done}14` : "rgba(255,255,255,0.04)",
                         border: `1px solid ${depsReady ? `${COLORS.done}3a` : COLORS.border}`,
-                      }}>
-                        {depsReady ? "Prereqs met" : `Builds on ${deps.join(" · ")}`}
-                      </span>
-                    )}
+                      }}>{depsReady ? "Prereqs met" : `Builds on ${deps.join(" · ")}`}</span>}
+                    </div>
                     <div className="lg-progress" style={{ width: 72, height: 3, flexShrink: 0 }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: barColor, borderRadius: 2, transition: "width 0.5s cubic-bezier(0.2,0.8,0.2,1)" }} />
+                      <div style={{ width: `${pct}%`, height: "100%", background: barColor, borderRadius: 2 }} />
                     </div>
                     <span className="num" style={{ fontSize: 10.5, color: pct > 0 ? COLORS.text : COLORS.faint, width: 36, flexShrink: 0, textAlign: "right" }}>{pct}%</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginLeft: 6, flexShrink: 0 }}>
-                      {isOverdueReview(c) && (
+                     <div style={{ display: "flex", alignItems: "center", gap: 14, marginLeft: 6, flexShrink: 0 }}>
+                       <button className="lg-mini" type="button" onClick={() => setExpanded(expanded === c.id ? null : c.id)} aria-label={`Open ${c.name}`}>Open</button>
+                       {isOverdueReview(c) && (
                         <span title={`Next revision due ${c.nextRevision}`} style={{ color: COLORS.warn, background: `${COLORS.warn}1a`, border: `1px solid ${COLORS.warn}3a`, borderRadius: 5, padding: "2px 7px", fontSize: 8.5, letterSpacing: "0.1em", fontFamily: FONTS.mono, fontWeight: 700 }}>REVIEW DUE</span>
                       )}
                       {c.revisionStage >= 0 && !isOverdueReview(c) && (
@@ -3110,7 +3046,7 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
 // Every number below is derived from the real sessions/tasks arrays — the
 // same data Dashboard, badges and XP read. Ranges re-derive the window;
 // there is no second copy of anything.
-function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
+function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories }) {
   const today = todayStr();
   const [range, setRange] = useState("7");
   const [logOpen, setLogOpen] = useState(false);
@@ -3202,15 +3138,15 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
     <div className="lg-focus-in" style={{ animationDelay: "120ms" }}>
       <div className="lg-card lg-focus-panel" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "18px 20px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ width: 3, height: 15, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 32)})`, flexShrink: 0 }} />
             <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>FOCUS ANALYTICS</span>
           </div>
-          <div role="group" aria-label="Analytics range" className="lg-focus-seg">
+           <div style={{ display: "flex", alignItems: "center", gap: 8 }}><button onClick={onShareStories} aria-label="Share analytics as a Ledger Story" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 9px", borderRadius: 7, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.dim, fontFamily: FONTS.mono, fontSize: 9, cursor: "pointer" }}><Share2 size={12} /> SHARE</button><div role="group" aria-label="Analytics range" className="lg-focus-seg">
             {["7", "30", "90"].map(r => (
               <button key={r} className="lg-focus-seg-btn" aria-pressed={range === r} onClick={() => setRange(r)}>{r}D</button>
             ))}
-          </div>
+           </div></div>
         </div>
 
         <div className="lg-grid" style={{ gap: 12 }}>
@@ -3350,7 +3286,7 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile }) {
   );
 }
 
-function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak, tasks, setTasks, selectedTargetId, setSelectedTargetId, pipOk = false, pipOpen = false, onOpenPip, onOpenImmersive, autoBreaks = true }) {
+function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject, setPomoMinutes, onStart, onPause, onStop, onSkipBreak, tasks, setTasks, selectedTargetId, setSelectedTargetId, pipOk = false, pipOpen = false, onOpenPip, onOpenImmersive, onShareStories, autoBreaks = true }) {
   const { mode, running, elapsed, subject, pomoMinutes, phase, phaseTarget, cycle, completedFlash } = timer;
   const isBreak = mode === "pomodoro" && phase !== "focus";
   const ringState = completedFlash ? "complete" : !running ? (elapsed > 0 ? "paused" : "ready") : "focusing";
@@ -3518,7 +3454,7 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
 
       {/* BELOW BOTH COLUMNS — stats, charts, history */}
       <div className="lg-focus-side">
-        <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} />
+        <FocusAnalytics sessions={sessions} setSessions={setSessions} tasks={tasks} profile={profile} onShareStories={onShareStories} />
       </div>
     </div>
   );
@@ -3726,7 +3662,11 @@ function PracticeCard({ record, dppStreak = 0, bumpSolved, updateTarget }) {
   const [customAdd, setCustomAdd] = useState("");
   const dppPct = record.target ? Math.min(100, Math.round((record.solved / record.target) * 100)) : 0;
   return (
-    <Card title="Daily question practice" right={<div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 4 }}><Flame size={12} color={dppStreak > 0 ? COLORS.warn : COLORS.faint} /> {dppStreak}d streak</div>}>
+    <div style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: `${SPACE.lg}px ${SPACE.xl}px` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.md }}>
+        <div className="sys" style={{ fontSize: 9.5, letterSpacing: "0.24em", color: COLORS.dim }}>DAILY QUESTION PRACTICE</div>
+        <div style={{ fontSize: 11, color: COLORS.dim, display: "flex", alignItems: "center", gap: 4 }}><Flame size={12} color={dppStreak > 0 ? COLORS.warn : COLORS.faint} /> {dppStreak}d streak</div>
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLORS.dim, marginBottom: 6 }}>
@@ -3749,7 +3689,7 @@ function PracticeCard({ record, dppStreak = 0, bumpSolved, updateTarget }) {
           <Input id="dpp-target" type="number" value={record.target} onChange={e => updateTarget({ target: Math.max(1, parseInt(e.target.value) || 1) })} style={{ width: 64 }} />
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -4495,17 +4435,11 @@ function Mocks({ mocks, setMocks, profile }) {
         )}
       />
 
-      <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        <Stat label="Tests taken" value={mocks.length} />
-        <Stat label="Avg score" value={`${avg}%`} />
-        <Stat label="Best score" value={`${best}%`} />
-        <Stat
-          label="Recent trend"
-          value={trend === null
-            ? <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>—<span style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.faint, flexShrink: 0 }} /></span>
-            : <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>{trend >= 0 ? "+" : ""}{trend}%<span style={{ width: 7, height: 7, borderRadius: "50%", background: trendTint, flexShrink: 0 }} /></span>}
-          sub={trend === null ? "Needs 2 tests" : trend > 0 ? "vs previous test" : trend < 0 ? "vs previous test" : "No change"}
-        />
+      <div className="lg-tests-hero">
+        <div className="lg-tests-score"><div className="sys">AVERAGE SCORE</div><div className="lg-tests-score-number">{avg}<span>%</span></div><div className="lg-tests-track"><span style={{ width: `${avg}%` }} /></div><div className="t-caption">{mocks.length ? `${mocks.length} recorded test${mocks.length === 1 ? "" : "s"}` : "Your first score starts the line."}</div></div>
+        <div className="lg-tests-stat"><span className="sys">BEST SCORE</span><strong className="num">{best}%</strong><span>{best ? "personal ceiling" : "waiting for a result"}</span></div>
+        <div className="lg-tests-stat"><span className="sys">RECENT TREND</span><strong className="num" style={{ color: trend === null ? COLORS.faint : trendTint }}>{trend === null ? "—" : `${trend >= 0 ? "+" : ""}${trend}%`}</strong><span>{trend === null ? "needs 2 tests" : trend > 0 ? "vs previous test" : trend < 0 ? "vs previous test" : "no change"}</span></div>
+        <div className="lg-tests-stat"><span className="sys">TESTS TAKEN</span><strong className="num">{mocks.length}</strong><span>logged attempts</span></div>
       </div>
 
       <Card title="Performance trajectory">
@@ -4769,7 +4703,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
     const result = await onJoinGroup(code);
     setJoiningGroup(false);
     if (result) setJoinCode("");
-    else setJoinError("No group found with that code, or you're already a member.");
+    else setJoinError("demo mode has no database account");
   };
 
   const addPeer = () => {
@@ -4835,6 +4769,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
 
   return (
     <div style={stack(SPACE.xl)}>
+      {groups.length === 0 && <div><h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Welcome to study circles</h2><p style={{ color: COLORS.faint }}>You haven't joined a study circle yet.</p><p style={{ color: COLORS.faint }}>You're in demo mode — sign in to create or join study circles.</p><div style={{ display: "flex", gap: 8 }}><Btn variant="ink" onClick={() => document.getElementById("circle-create-name")?.focus()}>Create study circle</Btn><Btn variant="ghost" onClick={() => document.getElementById("circle-join-code")?.focus()}>Join with code</Btn></div></div>}
       {/* HERO — your identity + today's live standing, all real numbers */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
         <div style={{ borderRadius: RADIUS.modal, position: "relative", overflow: "hidden", padding: "24px 26px", border: `1px solid ${COLORS.border}`, background: `radial-gradient(620px 200px at 10% -10%, ${hexToRgba(COLORS.ink, 0.1)}, transparent 66%), linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.82)}, ${hexToRgba(COLORS.panel2, 0.66)})`, backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, boxShadow: elev("e3") }}>
@@ -5037,10 +4972,10 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
           board is the hub: your circle is one of the rooms you race in. */}
       <Card title="Study groups" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><Users size={11} color={COLORS.ink} /> {groups.length} {groups.length === 1 ? "group" : "groups"}</div>}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <Input placeholder="New group name" value={groupName} onChange={e => setGroupName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} style={{ flex: 1, minWidth: 170 }} />
-          <Btn variant="ink" disabled={creatingGroup} onClick={handleCreateGroup}><Plus size={14} /> Create</Btn>
-          <Input placeholder="Join with a 6-character code" value={joinCode} onChange={e => setJoinCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleJoinGroup()} style={{ flex: 1, minWidth: 190 }} />
-          <Btn variant="ghost" disabled={joiningGroup} onClick={handleJoinGroup}>Join</Btn>
+          <Input id="circle-create-name" placeholder="e.g. JEE Grind" value={groupName} onChange={e => setGroupName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} style={{ flex: 1, minWidth: 170 }} />
+          <Btn variant="ink" disabled={creatingGroup} onClick={handleCreateGroup}><Plus size={14} /> Create circle</Btn><Btn variant="ghost" onClick={() => setGroupName("")}>Cancel</Btn>
+          <Input id="circle-join-code" placeholder="Join with a 6-character code" value={joinCode} onChange={e => setJoinCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleJoinGroup()} style={{ flex: 1, minWidth: 190 }} />
+          <Btn variant="ghost" disabled={joiningGroup} onClick={handleJoinGroup}>Check</Btn>
         </div>
         {joinError && <div style={{ fontSize: 11, color: COLORS.danger, marginBottom: 10 }}>{joinError}</div>}
         {groups.length === 0 ? (
@@ -5166,7 +5101,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
       {/* INVITE A PEER — add real codes from the shared table */}
       <Card title="Grow your circle" right={<div style={{ fontSize: 10, color: COLORS.faint }}>peer codes, not friend requests</div>}>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input placeholder="Enter their 6-character code" value={codeInput} onChange={e => setCodeInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addPeer()} />
+           <Input placeholder="Enter a peer code" value={codeInput} onChange={e => setCodeInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addPeer()} />
           <Btn variant="ink" onClick={addPeer}><Plus size={14} /> Add</Btn>
         </div>
         {peers.length > 0 && (
@@ -5200,6 +5135,9 @@ const SETTINGS_CATS = [
   { id: "study", label: "Study Preferences" },
   { id: "notify", label: "Notifications" },
   { id: "appearance", label: "Appearance" },
+  { id: "wallpaper", label: "Wallpaper" },
+  { id: "clock", label: "Clock" },
+  { id: "sound", label: "Sound" },
   { id: "sync", label: "Data & Sync" },
   { id: "account", label: "Account" },
   { id: "danger", label: "Danger Zone" },
@@ -5215,8 +5153,17 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
   const [subjMsg, setSubjMsg] = useState("");
   const [doneMsg, setDoneMsg] = useState("");
   const [newSubj, setNewSubj] = useState("");
+  const [wpBusy, setWpBusy] = useState(false);
 
   const copyText = (text, done) => { navigator.clipboard?.writeText(text); done(true); setTimeout(() => done(false), 1500); };
+  const handleWallpaperUpload = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file || validateUpload(file)) return;
+    setWpBusy(true);
+    try { const dataUrl = await fileToDataUrl(file); saveWallpaperImage(dataUrl); const swatches = await extractPalette(dataUrl); setSettings(s => ({ ...s, wallpaper: "custom", wallpaperSwatches: swatches, autoAccent: true, wallpaperAccent: null })); }
+    finally { setWpBusy(false); }
+  };
+  const removeWallpaper = () => { clearWallpaperImage(); setSettings(s => ({ ...s, wallpaper: "nebula", wallpaperSwatches: [], autoAccent: false, wallpaperAccent: null })); };
 
   const daysLeft = profile.targetDate ? daysBetween(new Date(), profile.targetDate) : null;
   const initials = (profile.name || "")
@@ -5505,22 +5452,75 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
           )}
 
           {cat === "appearance" && (
-            <Panel title="Appearance" sub="One system, kept calm">
-              <div style={{ fontSize: 11.5, color: COLORS.faint, lineHeight: 1.6, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
-                Ledger ships with a single dark design system, tuned for long study sessions. These switches keep it that way on your screen.
-              </div>
-              <Row title="Reduced motion" sub="Disables entrance, shimmer and pulse animations." first>
-                <Toggle checked={settings.reducedMotion} onChange={v => setSettings(s => ({ ...s, reducedMotion: v }))} />
-              </Row>
-              <Row title="Density" sub="Tighter rows and spacing, or a roomier desktop.">
-                <div className="lg-seg">
-                  {[{ v: 1, label: "Comfortable" }, { v: 0.92, label: "Compact" }].map(o => (
-                    <button key={o.label} className={settings.density === o.v ? "lg-seg-item active" : "lg-seg-item"} onClick={() => setSettings(s => ({ ...s, density: o.v }))}>{o.label}</button>
-                  ))}
+            <>
+              <Panel title="Appearance" sub="One system, kept calm">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, padding: "14px 18px" }}>
+                  {Object.entries(THEME_PRESETS).map(([id, preset]) => {
+                    const active = normalizeTheme(settings.theme) === id;
+                    return <button key={id} aria-label={`Switch to ${preset.label}`} aria-pressed={active} onClick={() => setSettings(s => ({ ...s, theme: id }))} style={{ padding: 10, textAlign: "left", borderRadius: 8, cursor: "pointer", color: COLORS.text, background: active ? hexToRgba(COLORS.accentFocus, 0.12) : "transparent", border: `1px solid ${active ? COLORS.accentFocus : COLORS.border}` }}><span style={{ display: "block", width: 18, height: 18, borderRadius: 5, background: preset.focus, marginBottom: 6 }} /><span style={{ fontSize: 11 }}>{preset.label}</span></button>;
+                  })}
                 </div>
-              </Row>
+                <div style={{ fontSize: 11.5, color: COLORS.faint, lineHeight: 1.6, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+                  Ledger ships with a restrained surface system tuned for long study sessions. Typography below changes the character without changing the data.
+                </div>
+                {settings.wallpaperSwatches?.length > 0 && <div style={{ display: "flex", gap: 8, padding: "12px 18px" }}>{settings.wallpaperSwatches.map(hex => <button key={hex} aria-label={`Pin accent ${hex}`} aria-pressed={settings.wallpaperAccent === hex} onClick={() => setSettings(s => ({ ...s, wallpaperAccent: hex, autoAccent: false }))} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${settings.wallpaperAccent === hex ? COLORS.text : COLORS.border}`, background: hex }} />)}</div>}
+                <Row title="Reduced motion" sub="Disables entrance, shimmer and pulse animations." first>
+                  <Toggle checked={settings.reducedMotion} onChange={v => setSettings(s => ({ ...s, reducedMotion: v }))} />
+                </Row>
+                <Row title="Density" sub="Tighter rows and spacing, or a roomier desktop.">
+                  <div className="lg-seg">
+                    {[{ v: 1, label: "Comfortable" }, { v: 0.92, label: "Compact" }].map(o => (
+                      <button key={o.label} className={settings.density === o.v ? "lg-seg-item active" : "lg-seg-item"} onClick={() => setSettings(s => ({ ...s, density: o.v }))}>{o.label}</button>
+                    ))}
+                  </div>
+                </Row>
+              </Panel>
+              <Panel title="Typography" sub="The voice of your study OS">
+                <div style={{ padding: "16px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.18em", color: COLORS.accentFocus }}>TYPOGRAPHY PREVIEW</div>
+                  <div style={{ fontFamily: FONTS.display, fontSize: 34, fontWeight: COLORS.typography?.headingWeight || 700, letterSpacing: COLORS.typography?.tracking || "-0.025em", color: COLORS.text, marginTop: 12 }}>Aa</div>
+                  <div style={{ fontFamily: FONTS.display, fontSize: 17, fontWeight: COLORS.typography?.headingWeight || 700, color: COLORS.text, marginTop: 3 }}>Build consistency.</div>
+                  <div style={{ fontFamily: FONTS.body, fontSize: 12, fontWeight: COLORS.typography?.bodyWeight || 400, color: COLORS.dim, marginTop: 5 }}>Study with intent.</div>
+                  <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.accentFocus, marginTop: 13 }}>PBCEL3&nbsp;&nbsp; 01:42:18&nbsp;&nbsp; 98%</div>
+                </div>
+                <Row title="Preset" sub="Each preset changes display, body and mono roles.">
+                  <div className="lg-seg" role="radiogroup" aria-label="Typography preset">
+                    {Object.entries(TYPOGRAPHY_PRESETS).map(([id, preset]) => <button key={id} className={settings.typography?.preset === id ? "lg-seg-item active" : "lg-seg-item"} aria-pressed={settings.typography?.preset === id} onClick={() => setSettings(s => ({ ...s, typography: { ...s.typography, preset: id, display: "", body: "", mono: "" } }))}>{preset.label}</button>)}
+                  </div>
+                </Row>
+                <Row title="Display font" sub="Used for page titles and editorial headings.">
+                  <SelectBox value={settings.typography?.display || TYPOGRAPHY_PRESETS[settings.typography?.preset || "ledger"].display} onChange={v => setSettings(s => ({ ...s, typography: { ...s.typography, display: v } }))} ariaLabel="Display font" options={Object.keys(FONT_CATALOG).filter(name => FONT_CATALOG[name].fallback === "sans-serif").map(name => ({ value: name, label: name }))} style={{ minWidth: 190 }} />
+                </Row>
+                <Row title="Body font" sub="Used for readable copy and controls.">
+                  <SelectBox value={settings.typography?.body || TYPOGRAPHY_PRESETS[settings.typography?.preset || "ledger"].body} onChange={v => setSettings(s => ({ ...s, typography: { ...s.typography, body: v } }))} ariaLabel="Body font" options={Object.keys(FONT_CATALOG).filter(name => FONT_CATALOG[name].fallback === "sans-serif").map(name => ({ value: name, label: name }))} style={{ minWidth: 190 }} />
+                </Row>
+                <Row title="Monospace font" sub="Used for codes, metrics and technical readouts.">
+                  <SelectBox value={settings.typography?.mono || TYPOGRAPHY_PRESETS[settings.typography?.preset || "ledger"].mono} onChange={v => setSettings(s => ({ ...s, typography: { ...s.typography, mono: v } }))} ariaLabel="Monospace font" options={Object.keys(FONT_CATALOG).filter(name => FONT_CATALOG[name].fallback === "monospace").map(name => ({ value: name, label: name }))} style={{ minWidth: 190 }} />
+                </Row>
+              </Panel>
+            </>
+          )}
+
+          {cat === "wallpaper" && (
+            <Panel title="Wallpaper" sub="The backdrop behind everything">
+              <input id="ledger-wallpaper-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleWallpaperUpload} style={{ display: "none" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: 14 }}>
+                {[{ id: "nebula", label: "Nebula" }, { id: "black", label: "Black" }, { id: "custom", label: "Custom" }].map(w => <button key={w.id} aria-pressed={settings.wallpaper === w.id} onClick={() => setSettings(s => ({ ...s, wallpaper: w.id }))} style={{ padding: 10, borderRadius: 8, cursor: "pointer", color: COLORS.text, background: settings.wallpaper === w.id ? hexToRgba(COLORS.accentFocus, 0.12) : "transparent", border: `1px solid ${settings.wallpaper === w.id ? COLORS.accentFocus : COLORS.border}` }}>{w.label}</button>)}
+              </div>
+              <div style={{ display: "flex", gap: 8, padding: "0 14px 14px" }}><Btn variant="ghost" disabled={wpBusy} onClick={() => document.getElementById("ledger-wallpaper-input").click()}>Upload wallpaper</Btn>{settings.wallpaper === "custom" && <Btn variant="danger" onClick={removeWallpaper}>Remove</Btn>}</div>
             </Panel>
           )}
+
+          {cat === "clock" && (
+            <Panel title="Clock" sub="The big time on Home">
+              <Row title="Style" sub="Digital, analog, flip or minimal." first>
+                <div className="lg-seg">{["digital", "analog", "flip", "minimal"].map(v => <button key={v} className={settings.clockStyle === v ? "lg-seg-item active" : "lg-seg-item"} onClick={() => setSettings(s => ({ ...s, clockStyle: v }))}>{v[0].toUpperCase() + v.slice(1)}</button>)}</div>
+              </Row>
+              <Row title="24-hour time"><Toggle checked={!!settings.clock24h} onChange={v => setSettings(s => ({ ...s, clock24h: v }))} /></Row>
+            </Panel>
+          )}
+
+          {cat === "sound" && <Panel title="Sound" sub="Quiet feedback"><Row title="Session-logged pulse" sub="A short tick when a session is recorded." first><Toggle checked={settings.sound?.ringPulse !== false} onChange={v => setSettings(s => ({ ...s, sound: { ...s.sound, ringPulse: v } }))} /></Row></Panel>}
 
           {cat === "sync" && (
             <>
@@ -5672,65 +5672,86 @@ function AuthScreen({ onDemo }) {
 return (
     <div style={{ background: "transparent", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.body, color: COLORS.text, padding: 20 }}>
       <style>{globalCss()}</style>
-      <div className="lg-hero lg-page lg-stagger" style={{ width: 380, maxWidth: "100%", padding: "34px 32px 30px", boxShadow: elev("e2") }}>
-        <div className="lg-page" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 26, animationDelay: "0.1s" }}>
-          <LedgerMark size={34} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 17, lineHeight: 1.1, letterSpacing: "-0.01em" }}>Ledger</div>
-            <div className="sys" style={{ color: COLORS.dim }}>Study OS</div>
+      <div className="lg-auth lg-page">
+        {/* The mark half — what Ledger is, before the form asks for anything */}
+        <div className="lg-auth-mark lg-page" style={{ animationDelay: "0.06s" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <LedgerMark size={34} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: 17, lineHeight: 1.1, letterSpacing: "-0.01em" }}>Ledger</div>
+                <div className="sys" style={{ color: COLORS.dim }}>Study OS</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 44, maxWidth: 420 }}>
+              <div className="sys" style={{ color: COLORS.accentFocus, fontSize: 9, letterSpacing: "0.28em" }}>A STUDY LEDGER FOR JEE / NEET PREP</div>
+              <div style={{ fontFamily: FONTS.display, fontWeight: 700, fontSize: "clamp(24px, 3.2vw, 36px)", lineHeight: 1.14, letterSpacing: "-0.02em", marginTop: 14 }}>
+                Every hour accounted.<br />Every chapter a line in the book.
+              </div>
+              <div style={{ fontSize: 13, color: COLORS.dim, lineHeight: 1.65, marginTop: 14 }}>
+                Syllabus coverage, spaced recall, a focus timer and a mistake ledger — one instrument, day by day, until the exam.
+              </div>
+            </div>
+          </div>
+          <div className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.faint, marginTop: 40 }}>
+            FOCUS · COVERAGE · RECALL · TESTS · MISTAKES · CIRCLES
           </div>
         </div>
-        {sent ? (
-          <div className="lg-pop" style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-            <CheckCircle2 size={17} color={COLORS.done} style={{ flexShrink: 0, marginTop: 1 }} />
-            <div style={{ fontSize: 13, color: COLORS.dim, lineHeight: 1.6 }}>
-              Check <b style={{ color: COLORS.text }}>{email}</b> for a sign-in link. You can close this tab.
+
+        {/* The form half — one quiet surface, nothing decorative */}
+        <div className="lg-auth-form lg-page" style={{ animationDelay: "0.12s" }}>
+          {sent ? (
+            <div className="lg-pop" style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+              <CheckCircle2 size={17} color={COLORS.done} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 13, color: COLORS.dim, lineHeight: 1.6 }}>
+                Check <b style={{ color: COLORS.text }}>{email}</b> for a sign-in link. You can close this tab.
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <button onClick={signInWithDiscord} disabled={discordLoading} className="lg-page lg-btn lg-btn-ghost" style={{
-              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              padding: "10px 14px", border: `1px solid ${COLORS.border}`,
-              background: "transparent", color: COLORS.text, fontFamily: FONTS.body, fontSize: 13.5, fontWeight: 500,
-              cursor: discordLoading ? "not-allowed" : "pointer", opacity: discordLoading ? 0.6 : 1,
-              animationDelay: "0.14s",
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.44.87-.61 1.25a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.25.08.08 0 0 0-.08-.04 19.74 19.74 0 0 0-4.88 1.52.07.07 0 0 0-.04.05C1.72 8.13 1.06 11.8 1.38 15.43a.08.08 0 0 0 .03.05 19.9 19.9 0 0 0 6 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.89.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.92 1.8 8.16 1.8 12.04 0a.07.07 0 0 1 .08.01c.12.1.25.2.38.29a.08.08 0 0 1 0 .13c-.6.35-1.22.64-1.87.89a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6.01-3.03.08.08 0 0 0 .03-.05c.38-4.21-.63-7.85-2.67-11.01a.06.06 0 0 0-.03-.05ZM8.99 13.28c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.95 2.4-2.15 2.4Zm6.02 0c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.94 2.4-2.15 2.4Z" />
-              </svg>
-              {discordLoading ? "Redirecting to Discord…" : "Continue with Discord"}
-            </button>
-            <div className="lg-page" style={{ display: "flex", alignItems: "center", gap: 12, margin: "18px 0", animationDelay: "0.18s" }}>
-              <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.border})` }} />
-              <div className="sys">or</div>
-              <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${COLORS.border}, transparent)` }} />
-            </div>
-            <div className="lg-page" style={{ fontSize: 12.5, color: COLORS.dim, lineHeight: 1.55, marginBottom: 14, animationDelay: "0.22s" }}>Sign in with your email — we'll send a one-click link, no password needed.</div>
-            <Input className="lg-page" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendLink()} style={{ animationDelay: "0.26s" }} />
-            {error && <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 8 }}>{error}</div>}
-            <Btn variant="ink" className={`lg-page${loading ? " lg-btn-shimmer" : ""}`} style={{ width: "100%", justifyContent: "center", marginTop: 14, animationDelay: "0.3s" }} disabled={loading} onClick={sendLink}>
-              <span className="lg-btn-label">
-                <span style={{ opacity: loading ? 0 : 1 }}>Send sign-in link</span>
-                <span style={{ opacity: loading ? 1 : 0 }}>Sending…</span>
-              </span>
-            </Btn>
-            {onDemo && (
-              <button
-                onClick={onDemo}
-                className="lg-page lg-link-btn"
-                style={{
-                  width: "100%", marginTop: 16, padding: "8px 12px",
-                  background: "transparent", border: "1px solid transparent",
-                  fontSize: 12.5, cursor: "pointer", fontFamily: FONTS.body,
-                  animationDelay: "0.34s",
-                }}
-              >
-                Continue as Guest / Demo Mode
+          ) : (
+            <>
+              <button onClick={signInWithDiscord} disabled={discordLoading} className="lg-page lg-btn lg-btn-ghost" style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                padding: "10px 14px", border: `1px solid ${COLORS.border}`,
+                background: "transparent", color: COLORS.text, fontFamily: FONTS.body, fontSize: 13.5, fontWeight: 500,
+                cursor: discordLoading ? "not-allowed" : "pointer", opacity: discordLoading ? 0.6 : 1,
+                animationDelay: "0.18s",
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.44.87-.61 1.25a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.25.08.08 0 0 0-.08-.04 19.74 19.74 0 0 0-4.88 1.52.07.07 0 0 0-.04.05C1.72 8.13 1.06 11.8 1.38 15.43a.08.08 0 0 0 .03.05 19.9 19.9 0 0 0 6 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.89.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.92 1.8 8.16 1.8 12.04 0a.07.07 0 0 1 .08.01c.12.1.25.2.38.29a.08.08 0 0 1 0 .13c-.6.35-1.22.64-1.87.89a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6.01-3.03.08.08 0 0 0 .03-.05c.38-4.21-.63-7.85-2.67-11.01a.06.06 0 0 0-.03-.05ZM8.99 13.28c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.95 2.4-2.15 2.4Zm6.02 0c-1.18 0-2.15-1.08-2.15-2.4s.95-2.4 2.15-2.4c1.21 0 2.17 1.09 2.15 2.4 0 1.32-.94 2.4-2.15 2.4Z" />
+                </svg>
+                {discordLoading ? "Redirecting to Discord…" : "Continue with Discord"}
               </button>
-            )}
-          </>
-        )}
+              <div className="lg-page" style={{ display: "flex", alignItems: "center", gap: 12, margin: "18px 0", animationDelay: "0.22s" }}>
+                <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.border})` }} />
+                <div className="sys">or</div>
+                <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${COLORS.border}, transparent)` }} />
+              </div>
+              <div className="lg-page" style={{ fontSize: 12.5, color: COLORS.dim, lineHeight: 1.55, marginBottom: 14, animationDelay: "0.26s" }}>Sign in with your email — we'll send a one-click link, no password needed.</div>
+              <Input className="lg-page" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendLink()} style={{ animationDelay: "0.3s" }} />
+              {error && <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 8 }}>{error}</div>}
+              <Btn variant="ink" className={`lg-page${loading ? " lg-btn-shimmer" : ""}`} style={{ width: "100%", justifyContent: "center", marginTop: 14, animationDelay: "0.34s" }} disabled={loading} onClick={sendLink}>
+                <span className="lg-btn-label">
+                  <span style={{ opacity: loading ? 0 : 1 }}>Send sign-in link</span>
+                  <span style={{ opacity: loading ? 1 : 0 }}>Sending…</span>
+                </span>
+              </Btn>
+              {onDemo && (
+                <button
+                  onClick={onDemo}
+                  className="lg-page lg-link-btn"
+                  style={{
+                    width: "100%", marginTop: 16, padding: "8px 12px",
+                    background: "transparent", border: "1px solid transparent",
+                    fontSize: 12.5, cursor: "pointer", fontFamily: FONTS.body,
+                    animationDelay: "0.38s",
+                  }}
+                >
+                  Continue as Guest / Demo Mode
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

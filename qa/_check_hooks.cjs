@@ -1,0 +1,11 @@
+const fs = require("fs");
+const src = fs.readFileSync("src/App.jsx", "utf8");
+console.log("=== check __ledgerWallpaper export ===");
+const m = src.match(/__ledgerWallpaper[\s\S]{0,200}/);
+console.log(m ? m[0].replace(/\s+/g, " ").slice(0, 300) : "(none)");
+console.log("=== check __ledgerSound export ===");
+const m2 = src.match(/__ledgerSound[\s\S]{0,200}/);
+console.log(m2 ? m2[0].replace(/\s+/g, " ").slice(0, 300) : "(none)");
+console.log("=== check __ledgerSessions export ===");
+const m3 = src.match(/__ledgerSessions[\s\S]{0,200}/);
+console.log(m3 ? m3[0].replace(/\s+/g, " ").slice(0, 300) : "(none)");

@@ -29,6 +29,48 @@ export const daysBetween = (a, b) => {
 
 export const genCode = () => Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
 
+// Circle invite codes are compared case-insensitively and whitespace-free.
+// Shared by the join flow and (later) invite management so both normalize
+// exactly the same way.
+export const normalizeInviteCode = (s) => String(s || "").trim().toUpperCase();
+
+// Leaderboard assembly: sort by minutes (ties broken by name), standard
+// competition ranking (1, 2, 2, 4), and flag the caller's own row so the
+// UI can highlight it. Pure — the dashboard feeds it RPC output directly.
+export function buildLeaderboard(rows, myUserId) {
+  const list = (rows || []).slice().sort(
+    (a, b) => (b.minutes || 0) - (a.minutes || 0) || String(a.display_name || "").localeCompare(String(b.display_name || ""))
+  );
+  let prev = null;
+  let rank = 0;
+  return list.map((r, i) => {
+    const mins = r.minutes || 0;
+    if (mins !== prev) { rank = i + 1; prev = mins; }
+    return { ...r, rank, me: !!myUserId && r.user_id === myUserId };
+  });
+}
+
+// Compact relative timestamp for the circle activity feed ("2m ago",
+// "3d ago", then falls back to a short calendar date).
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const timeAgo = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const then = d.getTime();
+  if (isNaN(then)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d ago`;
+  // Manual month/day formatting — locale-independent (toLocaleDateString
+  // orders the parts differently per locale).
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+};
+
 export const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
 
 export const addDays = (dateStr, n) => {
@@ -36,3 +78,12 @@ export const addDays = (dateStr, n) => {
   d.setDate(d.getDate() + n);
   return todayStr(d);
 };
+
+export const initials = (name) =>
+  String(name || "Ledger member")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join("")
+    .toUpperCase() || "LM";

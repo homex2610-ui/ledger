@@ -1,0 +1,21 @@
+const fs = require("fs");
+const src = fs.readFileSync("src/App.jsx", "utf8");
+
+console.log("=== WALLPAPER_MODES def ===");
+console.log((src.match(/WALLPAPER_MODES = \[[\s\S]{0,800}?\]/) || ["(none)"])[0].replace(/\s+/g, " ").slice(0, 800));
+console.log("=== chipLabel fragment location ===");
+for (const m of src.matchAll(/.{0,80}"In progress", done: "Done", mastered: "Mastered"\}[\s\S]{0,40}/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 200));
+console.log("=== STATUS_ORDER usages ===");
+for (const m of src.matchAll(/STATUS_ORDER[\s\S]{0,120}/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 160));
+console.log("=== STATUS_LABEL usages ===");
+for (const m of src.matchAll(/STATUS_LABEL[\s\S]{0,120}/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 160));
+console.log("=== TimerIcon usages ===");
+for (const m of src.matchAll(/TimerIcon[\s\S]{0,80}/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 120));
+console.log("=== Bubble usages ===");
+for (const m of src.matchAll(/<Bubble[\s\S]{0,120}/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 160));
+console.log("=== colorMap usages ===");
+for (const m of src.matchAll(/colorMap[\s\S]{0,100}/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 140));
+console.log("=== REVISION_INTERVALS usages (unique) ===");
+const rv = new Set();
+for (const m of src.matchAll(/REVISION_INTERVALS[\s\S]{0,90}/g)) rv.add(m[0].replace(/\s+/g, " ").slice(0, 130));
+rv.forEach(x => console.log("  " + x));

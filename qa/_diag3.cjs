@@ -1,0 +1,12 @@
+const fs = require("fs");
+const l = fs.readFileSync("src/App.jsx", "utf8");
+console.log("export default:", l.includes("export default"));
+console.log("render(:", /render\(/.test(l));
+console.log("getElementById:", l.includes("getElementById"));
+console.log("--- src dir:");
+console.log(fs.readdirSync("src").join(", "));
+console.log("--- index.html script refs:");
+console.log(fs.readFileSync("index.html", "utf8").match(/src="[^"]*"/g).join(" "));
+console.log("--- package.json type/main:");
+const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+console.log("type:", p.type, "| scripts:", JSON.stringify(p.scripts));

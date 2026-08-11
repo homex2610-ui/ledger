@@ -1,0 +1,23 @@
+const fs = require("fs");
+const src = fs.readFileSync("src/App.jsx", "utf8");
+
+console.log("=== SettingsTab toggles (dashboard section) ===");
+const st = src.indexOf("function SettingsTab");
+const seg = src.slice(st, st + 60000);
+for (const m of seg.matchAll(/(<Row[^>]*>|<Toggle[^>]*checked=\{settings\.dashboard[^>]*>)/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 140));
+console.log("=== settings.dashboard key writes ===");
+for (const m of seg.matchAll(/dashboard:\s*\{[^}]*\}|\.\.\.s\.dashboard,\s*\w+:\s*\w+/g)) console.log("  " + m[0].replace(/\s+/g, " ").slice(0, 160));
+console.log("=== 'dashboard' in Settings tab strings ===");
+for (const m of seg.matchAll(/["']([^"']*[Dd]ashboard[^"']*)["']/g)) console.log("  " + m[1]);
+console.log("=== flags.X reads in Dashboard ===");
+const dash = src.indexOf("function Dashboard");
+const dseg = src.slice(dash, dash + 40000);
+const fs2 = new Set();
+for (const m of dseg.matchAll(/flags\.(\w+)/g)) fs2.add(m[1]);
+console.log([...fs2].sort().join(", "));
+console.log("=== clockStyle values ===");
+for (const m of seg.matchAll(/clockStyle ===\s*["']?(\w+)/g)) console.log("  " + m[1]);
+console.log("=== settings.sound reads ===");
+for (const m of src.matchAll(/settings\.sound[^;]{0,60}/g)) console.log("  " + m[0].replace(/\s+/g, " "));
+console.log("=== settings.wallpaper reads ===");
+for (const m of src.matchAll(/settings\.wallpaper[^;]{0,50}/g)) console.log("  " + m[0].replace(/\s+/g, " "));

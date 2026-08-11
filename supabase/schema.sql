@@ -7,10 +7,11 @@
 -- didn't need to be rewritten table-by-table — only the storage hook did.
 --
 -- Private rows (shared = false): profile, syllabus, tasks, sessions, mocks,
---   errors, peers, dpp, cards, settings — one row per (owner, key).
--- Shared rows (shared = true): the peer leaderboard entries, keyed as
---   `lb:<their 6-char code>` — readable by anyone signed in, writable only
---   by the row's own owner.
+--   errors, dpp, cards, settings — one row per (owner, key).
+-- Shared rows (shared = true): unused by the app since the study-circles
+--   rebuild retired the peer leaderboard (`lb:<code>` + `peers` keys — see
+--   migrations/003_circles.sql for the cleanup). The RLS below still honors
+--   the flag; keep it for compatibility.
 
 create table if not exists public.kv_store (
   id          uuid primary key default gen_random_uuid(),

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Target, Timer as TimerIcon, BookOpen, Layers, TrendingUp, AlertTriangle,
-  CalendarDays, Users, Settings as SettingsIcon, LogOut, Flame, MoreHorizontal
+  Users, Settings as SettingsIcon, LogOut, Flame, Pin, PinOff
 } from "lucide-react";
 import { COLORS, FONTS, hexToRgba } from "../../lib/theme";
 import { todayStr, fmtMin } from "../../lib/utils";
@@ -19,12 +19,9 @@ const DOCK = [
   { id: "errors", label: "Mistakes", icon: AlertTriangle },
 ];
 
-// Secondary workspaces — kept behind the overflow, not on the dock.
-const MORE_ITEMS = [
-  { id: "calendar", label: "Month View", icon: CalendarDays },
-  { id: "weak", label: "Weak Zones", icon: AlertTriangle },
-  { id: "peers", label: "Community", icon: Users },
-];
+// Community sits below a divider; the account popover carries Settings,
+// Sign out and overflow actions only.
+const COMMUNITY = { id: "community", label: "Community", icon: Users };
 
 function streakOf(sessions = []) {
   const days = new Set(sessions.map(s => s.date));
@@ -70,7 +67,7 @@ function DockItem({ n, active, onClick, dot }) {
   const Icon = n.icon;
   return (
     <button
-      onClick={onClick}
+      onClick={(e) => { onClick(); if (e.detail > 0) e.currentTarget.blur(); }}
       aria-current={active ? "page" : undefined}
       className={`lg-nav-item${active ? " active" : ""}`}
       title={n.label}
@@ -85,24 +82,36 @@ function DockItem({ n, active, onClick, dot }) {
         <Icon size={20} strokeWidth={1.7} />
       </span>
       {dot && (
-        <span style={{ position: "absolute", top: 5, right: 2, width: 7, height: 7, borderRadius: "50%", background: COLORS.accentFocus, boxShadow: `0 0 0 2px ${COLORS.bg}` }} />
+        <span className="lg-notice-dot" style={{ position: "absolute", top: 5, right: 2, width: 7, height: 7, borderRadius: "50%", background: COLORS.accentFocus }} />
       )}
       <span className="dock-label" style={{
-        fontSize: 10, letterSpacing: "0.14em", fontWeight: 600, textTransform: "uppercase",
-        color: active ? COLORS.accentFocus : COLORS.dim, whiteSpace: "nowrap",
+        fontSize: 12.5, letterSpacing: "0.01em", fontWeight: 500, fontFamily: FONTS.body,
+        textTransform: "none", color: active ? COLORS.accentFocus : COLORS.dim, whiteSpace: "nowrap",
       }}>{n.label}</span>
     </button>
   );
 }
 
-function ProfileBadge({ initials, streakOn, onClick, expanded }) {
+// The account avatar — a hue derived from the user's name, so every account
+// gets its own stable color patch (never clashes, never changes between runs).
+function nameHue(name) {
+  const n = String(name || "Ledger");
+  return (n.split("").reduce((a, c) => a + c.charCodeAt(0), 0) * 7) % 360;
+}
+
+function ProfileBadge({ initials, streakOn, onClick, expanded, hue = 260 }) {
   return (
     <button onClick={onClick} aria-label="Account" aria-expanded={expanded} aria-haspopup="menu" title="Account"
-      style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: expanded ? hexToRgba(COLORS.accentFocus, 0.14) : "rgba(255,255,255,0.06)", border: `1px solid ${expanded ? hexToRgba(COLORS.accentFocus, 0.55) : (streakOn ? "rgba(255,164,96,0.55)" : COLORS.border)}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, transition: "background 0.18s ease-out, border-color 0.18s ease-out" }}>
-      <span className="num" style={{ fontSize: 11, fontWeight: 800, color: streakOn ? COLORS.accentWarm : COLORS.faint, letterSpacing: "-0.01em" }}>{initials}</span>
+      style={{ position: "relative", width: 36, height: 36, borderRadius: "50%",
+        background: `linear-gradient(155deg, hsl(${hue}, 52%, 44%), hsl(${(hue + 40) % 360}, 55%, 30%))`,
+        border: `1px solid ${expanded ? hexToRgba(COLORS.accentFocus, 0.6) : (streakOn ? "rgba(255,164,96,0.6)" : "rgba(255,255,255,0.14)")}`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), 0 0 0 1px ${hexToRgba(COLORS.bg, 0.55)}`,
+        display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0,
+        transition: "border-color 0.18s ease-out, transform 0.16s cubic-bezier(0.2,0.8,0.2,1)" }}>
+      <span className="num" style={{ fontSize: 12, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em", textShadow: "0 1px 2px rgba(0,0,0,0.35)" }}>{initials}</span>
       {streakOn && (
-        <span style={{ position: "absolute", right: -2, bottom: -2, width: 12, height: 12, borderRadius: "50%", background: COLORS.accentWarm, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 0 2px ${COLORS.bg}` }}>
-          <Flame size={8} color="#1a160f" />
+        <span style={{ position: "absolute", right: -2, bottom: -2, width: 13, height: 13, borderRadius: "50%", background: COLORS.accentWarm, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 0 2px ${COLORS.bg}` }}>
+          <Flame size={9} color="#1a160f" strokeWidth={2.5} />
         </span>
       )}
     </button>
@@ -113,14 +122,31 @@ function ProfileBadge({ initials, streakOn, onClick, expanded }) {
 // tab gets a tiny left tick. Overflow + account live in quiet popovers.
 export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSignOut, notifyRecall = false }) {
   const [open, setOpen] = useState(null); // null | "more" | "account"
+  const [pinned, setPinned] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const rootRef = useRef(null);
 
   useEffect(() => {
     const onDoc = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(null); };
     const onEsc = (e) => { if (e.key === "Escape") setOpen(null); };
+    // Safety net: pressing anywhere outside the rail clears focus from
+    // anything inside it, so :focus-within-style expansion can never get
+    // stuck (touch taps, pen, or clicking a non-focusable page area).
+    const onDocDown = (e) => {
+      const root = rootRef.current;
+      if (!root || root.contains(e.target)) return;
+      const ae = document.activeElement;
+      if (ae && root.contains(ae) && ae !== document.body) ae.blur();
+    };
     document.addEventListener("pointerdown", onDoc);
+    document.addEventListener("pointerdown", onDocDown);
     document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("pointerdown", onDoc); document.removeEventListener("keydown", onEsc); };
+    return () => {
+      document.removeEventListener("pointerdown", onDoc);
+      document.removeEventListener("pointerdown", onDocDown);
+      document.removeEventListener("keydown", onEsc);
+    };
   }, []);
 
   const streak = streakOf(sessions);
@@ -128,9 +154,9 @@ export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSi
   const initials = (profile?.name || "?")
     .replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2)
     .map(w => w[0]).join("").toUpperCase() || "?";
+  const hue = nameHue(profile?.name);
 
   // normalize icon components for the popover list
-  const moreItems = MORE_ITEMS;
   const accountItems = [
     { id: "settings", label: "Settings", icon: SettingsIcon },
     { type: "divider" },
@@ -138,50 +164,56 @@ export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSi
   ];
 
   return (
-    <div className="lg-side-wrap">
-      <nav className="sidebar lg-sidebar lg-side" aria-label="Primary" ref={rootRef}>
+    <div
+      className={`lg-side-wrap${pinned || hovered || focused ? " lg-side-wrap-open" : ""}`}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}
+    >
+      <nav className={`sidebar lg-sidebar lg-side${pinned ? " lg-side-pinned" : ""}`} aria-label="Primary" ref={rootRef}>
 
-        <div className="lg-brand-cell" style={{ width: 44, height: 44, flexShrink: 0, alignSelf: "flex-start", display: "flex", alignItems: "center", justifyContent: "center" }} title="Ledger">
+        <div className="lg-brand-cell" style={{ width: 44, height: 44, flexShrink: 0, alignSelf: "flex-start", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }} title="Ledger">
           <div className="lg-brand-plate" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span className="num" style={{ fontSize: 12.5, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>L</span>
           </div>
+          <span className="lg-brand-name">
+            <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, letterSpacing: "-0.01em" }}>Ledger</span>
+            <span className="sys" style={{ fontSize: 11, letterSpacing: "0.18em", fontWeight: 500 }}>Study OS</span>
+          </span>
         </div>
 
-        <div className="lg-sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, marginTop: 12 }}>
+        <div className="lg-sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, marginTop: 8 }}>
           {DOCK.map(n => (
             <DockItem key={n.id} n={n} active={tab === n.id} dot={n.id === "cards" && notifyRecall && tab !== "cards"} onClick={() => { setTab(n.id); setOpen(null); }} />
           ))}
-          <div className="lg-dock-divider" style={{ width: "72%", height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.border} 30%, ${COLORS.border} 70%, transparent)`, margin: "12px 0 8px" }} />
-          <div style={{ position: "relative" }}>
-            <button
-              onClick={() => setOpen(open === "more" ? null : "more")}
-              className={`lg-nav-item${open === "more" ? " active" : ""}`}
-              aria-label="More"
-              aria-haspopup="menu"
-              aria-expanded={open === "more"}
-              title="More workspaces"
-              style={{
-                flexShrink: 0,
-                background: "transparent", border: "1px solid transparent",
-                color: open === "more" ? COLORS.accentFocus : COLORS.faint,
-                transition: "color 0.16s ease-out, background 0.16s ease-out",
-              }}
-            >
-              <span className="lg-ic-anchor" style={{ flexShrink: 0 }}>
-                <MoreHorizontal size={20} strokeWidth={1.7} />
-              </span>
-              <span className="dock-label" style={{ fontSize: 10, letterSpacing: "0.14em", fontWeight: 600, textTransform: "uppercase", color: open === "more" ? COLORS.accentFocus : COLORS.dim, whiteSpace: "nowrap" }}>More</span>
-            </button>
-            {open === "more" && (
-              <div className="lg-pop" role="menu" onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: "calc(100% + 12px)", top: "50%", transform: "translateY(-50%)", zIndex: 80, minWidth: 168, maxHeight: "min(60vh, 420px)", overflowY: "auto", borderRadius: 12, padding: 6, background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, boxShadow: `0 18px 44px -18px ${COLORS.shadowStrong}` }}>
-                <div className="sys" style={{ fontSize: 8, letterSpacing: "0.2em", color: COLORS.faint, padding: "6px 10px 4px" }}>MORE</div>
-                {moreItems.map(it => {
-                  const Icon = it.icon;
-                  const isActive = tab === it.id;
-                  return (
-                    <button key={it.id} role="menuitem" className={isActive ? "lg-pop-item active" : "lg-pop-item"} onClick={() => { setTab(it.id); setOpen(null); }}
-                      style={{ color: isActive ? COLORS.accentFocus : undefined }}>
-                      <Icon size={13} color={isActive ? COLORS.accentFocus : COLORS.faint} />
+          <div className="lg-dock-divider" style={{ width: "72%", height: 1, background: `linear-gradient(90deg, transparent, ${hexToRgba(COLORS.borderStrong, 0.45)} 30%, ${hexToRgba(COLORS.borderStrong, 0.45)} 70%, transparent)`, margin: "8px 0 6px", alignSelf: "center" }} />
+          <DockItem n={COMMUNITY} active={tab === COMMUNITY.id} onClick={() => { setTab(COMMUNITY.id); setOpen(null); }} />
+
+          <div title={streak > 0 ? `${streak}-day streak` : "No streak yet"} className="lg-account-cell" style={{ height: 44, flexShrink: 0, display: "flex", alignItems: "center", cursor: "pointer", borderRadius: 10 }} onClick={() => { setOpen(open === "account" ? null : "account"); }}>
+            <ProfileBadge initials={initials} streakOn={streak > 0} expanded={open === "account"} hue={hue} onClick={(e) => { e.stopPropagation(); setOpen(open === "account" ? null : "account"); if (e.detail > 0) e.currentTarget.blur(); }} />
+            <span className="dock-label num" style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONTS.mono, fontSize: 9.5, letterSpacing: "0.08em", textTransform: "none", color: streak > 0 ? COLORS.accentWarm : COLORS.dim, whiteSpace: "nowrap" }}>
+              {streak > 0 && <Flame size={9} strokeWidth={2.5} />}
+              {fmtMin(todayMin)}
+              <span style={{ color: COLORS.faint, marginLeft: 1 }}>today</span>
+            </span>
+            {open === "account" && (
+              <div className="lg-pop" role="menu" onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: "calc(100% + 12px)", bottom: 0, zIndex: 80, minWidth: 196, maxHeight: "min(60vh, 420px)", overflowY: "auto", borderRadius: 12, padding: 6, background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, boxShadow: `0 18px 44px -18px ${COLORS.shadowStrong}` }}>
+                <div style={{ padding: "8px 10px 7px", borderBottom: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: 11.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.name || "Student"}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                    <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{fmtMin(todayMin)} today · {streak}d streak</span>
+                  </div>
+                </div>
+                {accountItems.map((it, idx) => {
+                  const isActive = !it.type && it.id !== "signout" && tab === it.id;
+                  return it.type === "divider" ? (
+                    <div key={"d" + idx} style={{ height: 1, background: COLORS.border, margin: "6px 8px" }} />
+                  ) : (
+                    <button key={it.id} role="menuitem" aria-current={isActive ? "page" : undefined} className={isActive ? "lg-pop-item active" : "lg-pop-item"}
+                      onClick={(e) => { if (it.id === "signout") onSignOut(); else { setTab(it.id); setOpen(null); } if (e.detail > 0) e.currentTarget.blur(); }}
+                      style={{ color: it.id === "signout" ? COLORS.danger : undefined }}>
+                      <it.icon size={13} color={isActive ? COLORS.accentFocus : (it.id === "signout" ? COLORS.danger : COLORS.faint)} />
                       <span style={{ letterSpacing: "0.06em" }}>{it.label}</span>
                       {isActive && <span style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: COLORS.accentFocus }} />}
                     </button>
@@ -192,36 +224,15 @@ export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSi
           </div>
         </div>
 
-        <div title={streak > 0 ? `${streak}-day streak` : "No streak yet"} className="lg-account-cell" style={{ position: "relative", width: 44, height: 44, flexShrink: 0, alignSelf: "flex-start", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <ProfileBadge initials={initials} streakOn={streak > 0} expanded={open === "account"} onClick={() => setOpen(open === "account" ? null : "account")} />
-          <span className="dock-label" style={{ fontSize: 10, letterSpacing: "0.14em", fontWeight: 600, textTransform: "uppercase", color: COLORS.dim, whiteSpace: "nowrap" }}>Account</span>
-          {open === "account" && (
-            <div className="lg-pop" role="menu" onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: "calc(100% + 12px)", bottom: 0, zIndex: 80, minWidth: 196, maxHeight: "min(60vh, 420px)", overflowY: "auto", borderRadius: 12, padding: 6, background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, boxShadow: `0 18px 44px -18px ${COLORS.shadowStrong}` }}>
-              <div style={{ padding: "8px 10px 7px", borderBottom: `1px solid ${COLORS.border}` }}>
-                <div style={{ fontSize: 11.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.name || "Student"}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-                  <span style={{ fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.12em", color: COLORS.ink }}>{profile?.code || "————"}</span>
-                  <span style={{ height: 10, width: 1, background: COLORS.border }} />
-                  <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{fmtMin(todayMin)} today · {streak}d streak</span>
-                </div>
-              </div>
-              {accountItems.map(it => {
-                const isActive = !it.type && it.id !== "signout" && tab === it.id;
-                return it.type === "divider" ? (
-                  <div key="d" style={{ height: 1, background: COLORS.border, margin: "6px 8px" }} />
-                ) : (
-                  <button key={it.id} role="menuitem" className={isActive ? "lg-pop-item active" : "lg-pop-item"}
-                    onClick={() => { if (it.id === "signout") onSignOut(); else { setTab(it.id); setOpen(null); } }}
-                    style={{ color: it.id === "signout" ? COLORS.danger : undefined }}>
-                    <it.icon size={13} color={isActive ? COLORS.accentFocus : (it.id === "signout" ? COLORS.danger : COLORS.faint)} />
-                    <span style={{ letterSpacing: "0.06em" }}>{it.label}</span>
-                    {isActive && <span style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: COLORS.accentFocus }} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <button
+          className="lg-pin-btn"
+          onClick={(e) => { setPinned(p => !p); if (e.detail > 0) e.currentTarget.blur(); }}
+          aria-pressed={pinned}
+          aria-label={pinned ? "Unpin sidebar" : "Pin sidebar open"}
+          title={pinned ? "Unpin sidebar" : "Pin sidebar open"}
+        >
+          {pinned ? <PinOff size={11} strokeWidth={2} /> : <Pin size={11} strokeWidth={2} />}
+        </button>
       </nav>
     </div>
   );
