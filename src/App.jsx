@@ -1566,7 +1566,6 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const days = profile.targetDate ? daysBetween(new Date(), profile.targetDate) : null;
   const due = dueReviews(syllabus);
   const alert = consistencyAlert(sessions);
-  const dayOfPrep = Math.max(1, Math.min(365, daysBetween(profile.createdAt ? parseLocalDate(profile.createdAt) : new Date(), new Date()) + 1));
   const scorableMocks = mocks.filter(m => Number(m.max) > 0 && isFinite(Number(m.total)));
   const mockAvg = scorableMocks.length ? Math.round(scorableMocks.reduce((a, m) => a + Math.min(100, (Number(m.total) / Number(m.max)) * 100), 0) / scorableMocks.length) : 0;
   const daysLeft = days === null ? null : Math.max(0, days);
@@ -1667,7 +1666,6 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
   const ampm = dwNow.getHours() >= 12 ? "PM" : "AM";
   const weekday = dwNow.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
   const dateStr = fmtDateStr(todayStr(), dateFormat, 1).toUpperCase();
-  const daysInPrep = 365;
   const examTitle = String(profile.exam || "EXAM").toUpperCase();
   const targetYear = String(profile.targetDate || "").slice(0, 4);
   const miniStamp = { background: COLORS.hoverOverlay, border: `1px solid ${COLORS.border}`, color: COLORS.faint, borderRadius: RADIUS.badge, padding: "3px 8px", fontSize: 9, letterSpacing: "0.06em", fontFamily: FONTS.mono, cursor: "pointer", transition: "color 0.14s ease-out, border-color 0.14s ease-out" };
@@ -1705,8 +1703,6 @@ return (
             <span className="sys" style={{ fontSize: 10, letterSpacing: "0.22em", color: COLORS.text }}>{weekday}</span>
             <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
             <span className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>{dateStr}</span>
-            <span style={{ width: 3, height: 3, background: COLORS.borderStrong }} />
-            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.16em", color: COLORS.faint }}>DAY {dayOfPrep}/{daysInPrep}</span>
           </div>
 </div>
         )}
