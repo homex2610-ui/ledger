@@ -10,10 +10,10 @@ Vite + React (JSX, not TS) single-page study tracker backed by Supabase. No lint
 ## QA harness (`qa/`)
 - `npm run qa` = `npm run test:unit` (node:test on `qa/*.test.mjs`, pure functions only — no browser) + `npm run test:e2e` (Playwright, `playwright.config.mjs`).
 - The e2e suite boots the dev server (or reuses one on :5173) and drives the app in **Demo Mode** — fabricated local session, no Supabase writes. Needs `.env.local` present (the app won't boot without it) and network reachability to Supabase for the initial `getSession()`.
-- Tests assert on **rendered output** (computed styles, attributes, `data-wallpaper` layers) plus the dev-only `window.__ledgerWallpaper` / `window.__ledgerSound` / `window.__ledgerSessions` / `window.__ledgerAuth` hooks exposed by App.jsx. Those hooks are `if (!import.meta.env.DEV)` gated and must stay absent from the production bundle — after any `npm run build`, grep `dist/assets/*.js` for `__ledgerWallpaper` / `__ledgerSound` / `__ledgerAudioState` / `__ledgerWallpaperHooks` / `__ledgerSessions` / `__ledgerAuth` (all must be `False`; `__ledgerAudioCtx` must be `True` — the chime reads it). `__ledgerAuth` drives session switches through AuthGate's real `setSession` terminal — never shortcut `userId` directly in tests.
+- Tests assert on **rendered output** (computed styles, attributes, `data-wallpaper` layers) plus the dev-only `window.__ledgerWallpaper` / `window.__ledgerSound` / `window.__ledgerSessions` / `window.__ledgerAuth` hooks exposed by App.jsx. Those hooks are `if (!import.meta.env.DEV)` gated and must stay absent from the production bundle — after any `npm run build`, grep `dist/assets/*.js` for `__ledgerWallpaper` / `__ledgerSound` / `__ledgerAudioState` / `__ledgerWallpaperHooks` / `__ledgerSessions` / `__ledgerAuth` / `__ledgerSave` / `__ledgerFailSave` (all must be `False`; `__ledgerAudioCtx` must be `True` — the chime reads it). `__ledgerAuth` drives session switches through AuthGate's real `setSession` terminal — never shortcut `userId` directly in tests. `__ledgerSave.failNext()` arms a one-shot write failure inside `useStorage.save()` — the save-failure toast e2e relies on it.
 - `qa/ledger.spec.js` pins the current default appearance (`THEME_PRESETS.verdigris.focus` = `#6CCBC0`) plus the countdown coral numeral (`#F0645A` → `rgb(240, 100, 90)`). If the default theme/accent changes, update the constants at the top of the spec too.
 - `qa/contrast-check.mjs` is a standalone accessibility audit (WCAG ratios for every palette's text/button/status pairs) — run it with `node qa/contrast-check.mjs` after touching palette tokens.
-- New e2e tests: sidebar rail opacity + wordmark no-overlap bounding rects; weekly subject ring segments/center/legend + trigger; session-logged trigger fires tick on Focus tab.
+- New e2e tests: sidebar rail opacity + wordmark no-overlap bounding rects; weekly subject ring segments/center/legend + trigger; session-logged trigger fires tick on Focus tab; save-failure toast via `__ledgerSave.failNext()` (auto-dismiss + recovery).
 - Run e2e with `npx playwright test` (workers=1; browser installed via `npx playwright install chromium`).
 
 ## Architecture
@@ -29,7 +29,7 @@ Vite + React (JSX, not TS) single-page study tracker backed by Supabase. No lint
 
 ## Gotchas
 - `src/lib/utils.js` date helpers deliberately avoid UTC-parsed dates (blend of UTC + local `.setDate()` shifts results by a day across DST). Use `parseLocalDate`/`todayStr`/`addDays`/`daysBetween` for all date math; don't hand-roll `new Date(str)` arithmetic.
-- `useStorage.save()` **silently skips writing** a key if its last `load()` failed (to avoid clobbering real data) — don't treat missing writes as a query bug.
+- `useStorage.save()` **silently skips writing** a key if its last `load()` failed (to avoid clobbering real data) — don't treat missing writes as a query bug. Those guard skips do NOT fire the save-failure toast (they're internal sequencing, not user-facing failures); only actual write failures do (thrown errors and non-2xx `upsert` responses — `onSaveError` → toast in Workspace).
 - Sign-in is email magic-link + optional Discord OAuth; there's no password flow.
 
 ## Resuming work across sessions

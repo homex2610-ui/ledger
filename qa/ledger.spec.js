@@ -656,3 +656,18 @@ test("stories: opens a real 9:16 preview and switches recap/template", async ({ 
   expect(png.readUInt32BE(20)).toBe(1920);
   await page.getByRole("button", { name: "Close Ledger Stories" }).click();
 });
+
+test("save failure: a failed storage write surfaces a toast, then auto-dismisses and recovers", async ({ page }) => {
+  await enterDemo(page);
+  // Arm the one-shot write-failure seam, then trigger a save through the
+  // sessions autosave effect (seed re-fires save("sessions")).
+  await page.evaluate(() => window.__ledgerSave.failNext());
+  await page.evaluate(() => window.__ledgerSessions.seed([]));
+  const toast = page.getByRole("status").filter({ hasText: "Couldn't save your changes" });
+  await expect(toast).toBeVisible();
+  // Auto-dismisses after the 4.5s display window + 180ms exit animation.
+  await expect(toast).toBeHidden({ timeout: 8000 });
+  // No seam armed: the next save succeeds silently — no toast returns.
+  await page.evaluate(() => window.__ledgerSessions.seed([]));
+  await expect(toast).toHaveCount(0);
+});

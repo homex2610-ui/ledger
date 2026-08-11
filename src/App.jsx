@@ -233,7 +233,7 @@ function chapterLevel(subject, name, cache = {}) {
 // to owner_id via RLS; shared rows (used for the peer leaderboard) are
 // readable by any signed-in user but only writable by their owner. See
 // supabase/schema.sql for the table + policies.
-function useStorage(session) {
+function useStorage(session, onSaveError) {
   // Demo mode fabricates a session without a real Supabase account — its
   // "demo-user" id is not a UUID, so every cloud call would 400. Treat it
   // like being signed out: local-only storage.
@@ -276,6 +276,14 @@ function useStorage(session) {
   const markLoaded = useCallback((uid) => { loadedRef.current = uid; }, []);
 
   const save = useCallback(async (key, value, shared = false) => {
+    // DEV-only e2e seam: simulates a storage write failure so the
+    // save-failure toast can be exercised in Demo Mode, where userId is
+    // null and the real cloud path never runs. Absent from prod builds.
+    if (import.meta.env.DEV && window.__ledgerFailSave) {
+      window.__ledgerFailSave = false;
+      onSaveError?.();
+      return;
+    }
     if (!userId) return;
     if (loadedRef.current !== userId) {
       console.warn(`[storage] skipping save for "${key}" (shared=${shared}) — load for ${userId} not completed yet`);
@@ -289,14 +297,23 @@ function useStorage(session) {
       return;
     }
     try {
-      await supabase.from("kv_store").upsert(
+      const { error } = await supabase.from("kv_store").upsert(
         { owner_id: userId, key, shared, value, updated_at: new Date().toISOString() },
         { onConflict: "owner_id,key,shared" }
       );
+      if (error) {
+        // upsert resolves with { error } on non-2xx (RLS block, network
+        // hiccup) instead of throwing — a failure either way surfaces
+        // through onSaveError so the user isn't left thinking the change
+        // persisted when it didn't.
+        console.error(`[storage] save failed for "${key}" (shared=${shared})`, error);
+        onSaveError?.();
+      }
     } catch (e) {
       console.error(`[storage] save failed for "${key}" (shared=${shared})`, e);
+      onSaveError?.();
     }
-  }, [userId]);
+  }, [userId, onSaveError]);
   return { load, save, markLoaded };
 }
 function Bubble({ status, size = 20, onClick, disabled }) {
@@ -348,7 +365,24 @@ function useDevHooks({ sessions, setSessions }) {
 // once a Supabase session exists. See AuthGate below for the login screen
 // and the real default export of this file.
 function Workspace({ session }) {
-  const { load, save, markLoaded } = useStorage(session);
+  // Save-failure toast: a single fixed slot surfaced by useStorage whenever
+  // a write fails. Repeated failures just re-arm the auto-dismiss timer.
+  const [saveToast, setSaveToast] = useState(false);
+  const [saveToastLeaving, setSaveToastLeaving] = useState(false);
+  const saveToastTimerRef = useRef(null);
+  const saveToastExitRef = useRef(null);
+  const onSaveError = useCallback(() => {
+    setSaveToastLeaving(false);
+    setSaveToast(true);
+    clearTimeout(saveToastTimerRef.current);
+    clearTimeout(saveToastExitRef.current);
+    saveToastTimerRef.current = setTimeout(() => {
+      setSaveToastLeaving(true);
+      saveToastExitRef.current = setTimeout(() => { setSaveToast(false); setSaveToastLeaving(false); }, 180);
+    }, 4500);
+  }, []);
+  useEffect(() => () => { clearTimeout(saveToastTimerRef.current); clearTimeout(saveToastExitRef.current); }, []);
+  const { load, save, markLoaded } = useStorage(session, onSaveError);
   const [ready, setReady] = useState(false);
   // Dev-only crash seam for the error-boundary e2e: throws during render so
   // the boundary fallback can be exercised. DEV-gated — absent from prod.
@@ -356,7 +390,10 @@ function Workspace({ session }) {
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     window.__ledgerBoundary = { crash: () => setQaCrash(true) };
-    return () => { delete window.__ledgerBoundary; };
+    // Dev-only seam for the save-failure e2e: failNext() arms a one-shot
+    // storage write failure (see useStorage.save).
+    window.__ledgerSave = { failNext: () => { window.__ledgerFailSave = true; } };
+    return () => { delete window.__ledgerBoundary; delete window.__ledgerSave; };
   }, []);
   const [tab, setTab] = useState("dashboard");
   const [profile, setProfile] = useState(null);
@@ -1064,6 +1101,19 @@ function Workspace({ session }) {
       )}
 
       {storiesOpen && <Stories sessions={sessions} dpp={dpp} mocks={mocks} profile={profile} onClose={() => setStoriesOpen(false)} />}
+
+      {saveToast && (
+        <div role="status"
+          className={saveToastLeaving ? "lg-toast-exit" : "lg-toast-enter"}
+          style={{ position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 400,
+            display: "flex", alignItems: "center", gap: 10, maxWidth: "min(92vw, 480px)",
+            padding: "10px 16px", borderRadius: 12,
+            background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`,
+            boxShadow: elev("e2"), color: COLORS.text, fontSize: 12.5, lineHeight: 1.5 }}>
+          <AlertTriangle size={14} color={COLORS.warn} />
+          <span>Couldn't save your changes — you may be offline. They're safe on this device and we'll retry on your next change.</span>
+        </div>
+      )}
     </div>
   );
 }
