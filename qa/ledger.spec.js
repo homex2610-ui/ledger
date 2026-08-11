@@ -191,11 +191,16 @@ test("error boundary: forced render crash shows the friendly fallback with reloa
   // the same boundary that ships in production must replace the whole app
   // with the friendly fallback + Reload action. The stack pane is dev-only:
   // the AGENTS.md build-time grep pins that `data-dev-only` never ships.
+  const fatalLogs = [];
+  page.on("console", (msg) => { if (msg.text().includes("fatal render error")) fatalLogs.push(msg.text()); });
   await page.evaluate(() => window.__ledgerBoundary.crash());
   await expect(page.getByText("Ledger hit an unexpected error")).toBeVisible();
   await expect(page.getByRole("button", { name: "Reload Ledger" })).toBeVisible();
   await expect(page.locator('pre[data-dev-only="stack"]')).toContainText("ledger-qa-crash");
   await expect(sideNav(page)).toHaveCount(0);
+  // componentDidCatch runs and routes the full detail to the dev console —
+  // the build-time grep pins that production only logs the sanitized marker.
+  await expect.poll(() => fatalLogs.length, { timeout: 5000 }).toBeGreaterThan(0);
   // The Reload action must recover the app. The demo session is memory-only
   // (never persisted), so the reload boots to the auth screen — re-entering
   // demo proves the app works again instead of a dead fallback.

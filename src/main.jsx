@@ -7,9 +7,14 @@ class Boundary extends React.Component {
   state = { err: null };
   static getDerivedStateFromError(err) { return { err }; }
   componentDidCatch(err) {
-    // Full detail stays in the console for diagnostics — never on screen
-    // in production. Stacks expose internal file paths and line numbers.
-    console.error("[ledger] fatal render error:", err);
+    // Raw detail (stack, file paths, component internals) is a dev-only
+    // diagnostic. Production logs a sanitized marker so a fatal render
+    // error stays observable without leaking internals into the console.
+    if (import.meta.env.DEV) {
+      console.error("[ledger] fatal render error:", err);
+    } else {
+      console.error("[ledger] fatal render error (details suppressed in production)");
+    }
   }
   render() {
     const { err } = this.state;
