@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Plus, Search, Users } from "lucide-react";
 import { genCode } from "../../lib/utils";
+import { Card } from "../ui/Panels";
 import { CommunityEmptyState } from "./CommunityEmptyState";
 import { GroupRow } from "./GroupRow";
 import { GroupDetail } from "./GroupDetail";
@@ -42,19 +43,19 @@ export function GroupWorkspace({ circles, groupRoster, currentCode, userId, onSe
   
   return (
     <section className="lg-community-workspace" aria-label="Groups workspace">
-      <div className="lg-workspace-heading">
-        <div>
-          <div className="lg-community-label">GROUPS</div>
-          <h2>{mode === "mine" ? "Your study rooms" : "Find your room"}</h2>
-        </div>
-        <button
-          className="lg-community-button is-primary"
-          onClick={() => document.querySelector('[aria-label="New group name"]')?.focus()}
-        >
-          <Plus size={14} /> Create group
-        </button>
-      </div>
-      <div className="lg-group-toolbar">
+      <Card
+        n="01"
+        title="Groups"
+        right={
+          <button
+            className="lg-community-button is-primary"
+            onClick={() => document.querySelector('[aria-label="New group name"]')?.focus()}
+          >
+            <Plus size={14} /> Create group
+          </button>
+        }
+      >
+        <div className="lg-group-toolbar">
         <div className="lg-community-segmented">
           <button className={mode === "mine" ? "is-active" : ""} onClick={() => setMode("mine")}>MY GROUPS</button>
           <button className={mode === "discover" ? "is-active" : ""} onClick={() => setMode("discover")}>DISCOVER</button>
@@ -180,6 +181,7 @@ export function GroupWorkspace({ circles, groupRoster, currentCode, userId, onSe
           onRemoveMember={onRemoveMember}
         />
       )}
+      </Card>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { initials, todayStr, fmtMin } from "../../lib/utils";
+import { Card } from "../ui/Panels";
 import { CommunityHeader } from "./CommunityHeader";
 import { CommunityOverview } from "./CommunityOverview";
 import { CircleWorkspace } from "./CircleWorkspace";
@@ -69,6 +70,7 @@ export default function Community({
         onSectionChange={chooseSection}
         profile={profile}
         onCopy={copy}
+        focusMinutes={focusMinutes}
       />
       <CommunityOverview
         circleCount={circleRows.length}
@@ -104,12 +106,12 @@ export default function Community({
           />
         )}
         <aside className="lg-community-aside">
-          <div className="lg-community-aside-rule" />
-          <div className="lg-community-label">TODAY'S ACTIVITY</div>
-          <div className="lg-community-aside-number">{activePeople}</div>
-          <p>people with published focus</p>
-          <div className="lg-community-aside-total">{fmtMin(activeMinutes)} logged today</div>
-          <ActivityTimeline activity={activity} />
+          <Card n="02" title="Today's activity">
+            <div className="lg-community-aside-number">{activePeople}</div>
+            <p>people with published focus</p>
+            <div className="lg-community-aside-total">{fmtMin(activeMinutes)} logged today</div>
+            <ActivityTimeline activity={activity} />
+          </Card>
         </aside>
       </div>
     </main>

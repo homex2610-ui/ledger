@@ -518,6 +518,108 @@ test("profile: account command center shows real identity, metrics and actions; 
   await expect(panel).toHaveCount(0);
 });
 
+test("dashboard: section headers render 01..08 sequential in DOM order (04 appears once data exists)", async ({ page }) => {
+  // Section headers are identified structurally — a div whose direct children
+  // are a 2-digit span.num (the numeral) followed by a span.sys (the label).
+  // Deliberately not a component-name selector: it must survive the
+  // LedgerRule -> SectionHeader rename and keep catching render-order bugs.
+  const seq = () => page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll("div").forEach(e => {
+      const n = e.querySelector(":scope > span.num");
+      if (n && /^0[0-9]$/.test((n.textContent || "").trim())) {
+        const l = e.querySelector(":scope > span.sys");
+        if (l) out.push({ n: Number(n.textContent.trim()), label: l.textContent.trim() });
+      }
+    });
+    return out;
+  });
+
+  // Fresh demo profile: no sessions/tasks/mocks yet, so 04 TODAY is
+  // intentionally hidden — the remaining headers must still be sequential.
+  const empty = await seq();
+  expect(empty.length).toBeGreaterThanOrEqual(7);
+  for (let i = 1; i < empty.length; i++) {
+    expect(empty[i].n).toBeGreaterThan(empty[i - 1].n);
+  }
+  expect(empty.some(x => x.label === "TODAY")).toBe(false);
+
+  // Seed one session dated today via the existing dev hook, on the Focus
+  // tab first (Dashboard doesn't pick up late seeds while mounted).
+  await sideNav(page).getByRole("button", { name: "Focus" }).click();
+  const today = new Date().toISOString().slice(0, 10);
+  await page.evaluate(([t]) => {
+    window.__ledgerSessions.seed([
+      { id: "qa-order-1", date: t, subject: "Physics", minutes: 60, startHour: 9, mode: "manual" },
+    ]);
+  }, [today]);
+  await sideNav(page).getByRole("button", { name: "Home" }).click();
+  await page.waitForTimeout(400);
+
+  // With data, the full book renders 01..08 in DOM order.
+  const full = await seq();
+  expect(full.map(x => x.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  expect(full.map(x => x.label)).toEqual(["STATUS", "SESSION", "YEAR", "TODAY", "SUBJECTS", "PRACTICE", "WORKSPACES", "SYSTEM"]);
+});
+
+test("every route: numbered section headers stay sequential in DOM order", async ({ page }) => {
+  // Same structural selector as the dashboard book test — numeral + label
+  // siblings — so every route keeps the numbered-book contract.
+  const seq = () => page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll("div").forEach(e => {
+      const n = e.querySelector(":scope > span.num");
+      if (n && /^0[0-9]$/.test((n.textContent || "").trim())) {
+        const l = e.querySelector(":scope > span.sys");
+        if (l) out.push({ n: Number(n.textContent.trim()), label: l.textContent.trim() });
+      }
+    });
+    return out;
+  });
+  const nums = async () => (await seq()).map(x => x.n);
+  const labels = async () => (await seq()).map(x => x.label);
+  const go = async (name) => {
+    await sideNav(page).getByRole("button", { name }).click();
+    await page.waitForTimeout(250);
+  };
+
+  await go("Coverage");
+  expect(await nums()).toEqual([1, 2, 3]);
+  expect((await seq()).slice(0, 2).map(x => x.label)).toEqual(["TOTAL COVERAGE", "THE NEXT READ"]);
+
+  await go("Focus");
+  expect(await labels()).toEqual(["WORKING ON", "TODAY'S QUEUE", "FOCUS ANALYTICS"]);
+
+  await go("Tests");
+  expect(await nums()).toEqual([1, 2, 3, 4]);
+  expect(await labels()).toEqual(["PERFORMANCE TRAJECTORY", "SUBJECT-WISE AVERAGE", "LOG A MOCK TEST", "TEST HISTORY"]);
+
+  await go("Mistakes");
+  expect(await nums()).toEqual([1, 2, 3]);
+  expect(await labels()).toEqual(["LOG A MISTAKE", "MISTAKE PROFILE", "MISTAKE LEDGER"]);
+
+  // Recall on a fresh profile: 05 FORGOTTEN — REGRADE SHELF is hidden until
+  // a card is forgotten, so the visible book skips 04 -> 06 but stays
+  // strictly sequential.
+  await go("Recall");
+  expect(await nums()).toEqual([1, 2, 3, 4, 6, 7, 8]);
+  expect((await seq())[0].label).toBe("DECK HEALTH");
+
+  // Community: the hero numeral is a plain div (not span.num + span.sys),
+  // so the numbered book is exactly the workspace + activity aside.
+  await go("Community");
+  expect(await nums()).toEqual([1, 2]);
+  expect(await labels()).toEqual(["YOUR CIRCLE", "TODAY'S ACTIVITY"]);
+
+  // Settings restarts numbering per category.
+  await openSettings(page);
+  expect(await labels()).toEqual(["IDENTITY"]);
+  await page.getByRole("button", { name: "Study Preferences" }).click();
+  await page.waitForTimeout(250);
+  expect(await nums()).toEqual([1, 2, 3]);
+  expect(await labels()).toEqual(["STUDY PLAN", "SUBJECTS", "FOCUS TIMER"]);
+});
+
 test("stories: opens a real 9:16 preview and switches recap/template", async ({ page }) => {
   await page.getByRole("button", { name: "Share today's Ledger Story" }).click();
   await expect(page.getByRole("dialog", { name: "Ledger Stories" })).toBeVisible();

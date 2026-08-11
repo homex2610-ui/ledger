@@ -9,7 +9,7 @@ Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
   Flame, Trophy, Play, Pause, Square, Plus, Trash2,
   ChevronRight, ChevronLeft, Download, X, Copy, Award, Circle, CircleDot,
   CheckCircle2, Star, NotebookPen, Layers, Zap,
-  Crown, TrendingUp, Radio, ShieldCheck, Send, Search, ArrowUp, ArrowDown,
+  TrendingUp, Search, ArrowUp, ArrowDown,
   ChevronUp, ChevronDown, Check, Pencil,
   PictureInPicture2, Maximize2, BookOpen, LogOut, Share2,
   Settings, Palette, SlidersHorizontal, Type, Eye, Monitor, Bell, Link2,
@@ -26,6 +26,7 @@ import { DAILY_GOAL_MIN, FocusRing } from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import GlobalSwipe from "./components/layout/GlobalSwipe";
 import WallpaperLayer from "./components/ui/WallpaperLayer";
+import { Card, Stat, MiniStat, PageHead, SectionHeader, EmptyState, EmptyArt, Btn, Input, SelectBox, Toggle, Row, Panel } from "./components/ui/Panels";
 import Stories from "./components/stories/Stories";
 import Community from "./components/community/Community";
 
@@ -280,290 +281,8 @@ function Bubble({ status, size = 20, onClick, disabled }) {
   );
 }
 
-function Card({ title, right, children, style, id }) {
-  return (
-    <div id={id} className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: `${SPACE.lg}px ${SPACE.xl}px`, ...style }}>
-      {(title || right) && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.md }}>
-          {title && <div className="t-label" style={{ color: COLORS.dim }}>{title}</div>}
-          {right}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function Stat({ label, value, sub, onClick, accent, trend }) {
-  return (
-    <div
-      className={`lg-card ${onClick ? "lg-card-interactive" : ""}`}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
-      style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}
-    >
-      <div className="t-label" style={{ color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-        <div className="num t-data-lg" style={{ color: accent || COLORS.text }}>{value}</div>
-        {trend && (
-          <span title="vs the prior period"
-            style={{ fontFamily: FONTS.mono, fontSize: 10.5, fontWeight: 700, color: trend.color }}>
-            {trend.up ? "↑" : "↓"} {trend.pct}%
-          </span>
-        )}
-      </div>
-      {sub && <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-// Thin page header — compact uppercase title + a one-line lead. Used by the
-// primary workspaces so each page reads like a designed surface rather than
-// a bare tab render. No hero noise: small type, real description.
-function PageHead({ title, lead, right }) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: SPACE.lg }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ width: 3, height: 15, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 32)})`, flexShrink: 0 }} />
-          <span className="sys" style={{ fontSize: 12.5, letterSpacing: "0.28em", color: COLORS.accentFocus, fontWeight: 700, lineHeight: 1 }}>{title}</span>
-        </div>
-        {lead && <div style={{ fontSize: 13, color: COLORS.dim, marginTop: 10, maxWidth: 600, lineHeight: 1.65, fontFamily: FONTS.body }}>{lead}</div>}
-      </div>
-      {right}
-    </div>
-  );
-}
-
-// Compact stat cell for page summary strips — same system language as Stat,
-// smaller footprint so a strip of four reads as one instrument.
-function MiniStat({ k, v, sub, pct, tint }) {
-  return (
-    <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "13px 15px", minWidth: 0, position: "relative", overflow: "hidden" }}>
-      <div className="t-label" style={{ color: COLORS.faint }}>{k}</div>
-      <div className="num t-data-lg" style={{ color: tint || COLORS.text, marginTop: 7 }}>{v}</div>
-      {sub && <div style={{ fontSize: 10.5, color: COLORS.dim, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>}
-      {typeof pct === "number" && (
-        <div className="lg-progress" style={{ height: 3, marginTop: 10, borderRadius: 2 }}>
-          <div className="lg-progress-fill" style={{ width: `${pct}%`, "--lg-w": `${pct}%`, height: "100%", borderRadius: 2 }} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Ledger section rule — the signature index mark. A mono numeral, a micro
-// label and a hairline that fades rightward; every major section of a page
-// composes as a numbered entry in the book instead of an anonymous block.
-function LedgerRule({ n, label, right, style }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, ...style }}>
-      <span className="num" style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: "0.12em", color: COLORS.faint, flexShrink: 0 }}>{n}</span>
-      <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.24em", color: COLORS.dim }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${COLORS.borderStrong}, transparent)` }} />
-      {right}
-    </div>
-  );
-}
-
-// Replaces bare "no data yet" gray text with an icon + copy + optional
-// action, per the empty-state guidance: contextual icon, explanatory copy,
-// explicit next step rather than a dead end.
-function EmptyState({ icon: Icon, message, action, art }) {
-  return (
-    <div style={{ ...center(), flexDirection: "column", gap: SPACE.md, padding: `${SPACE.xl}px ${SPACE.md}px`, textAlign: "center" }}>
-      {art ? <EmptyArt variant={art} /> : Icon ? (
-        <div className="lg-empty-icon">
-          <Icon size={18} color={COLORS.faint} />
-        </div>
-      ) : null}
-      <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 300, lineHeight: 1.6 }}>{message}</div>
-      {action}
-    </div>
-  );
-}
-
-// Hand-drawn SVG empty-state artwork — three motifs (grid = daily board,
-// track = momentum/streak, ring = circle/community) coded in the app's own
-// palette so it follows the theme without new assets. SVGs only: no
-// backdrop-filter surfaces, no lucide icon does this, no deps.
-function EmptyArt({ variant = "grid", width = 128, height = 76 }) {
-  const line = hexToRgba(COLORS.ink, 0.5);
-  const soft = hexToRgba(COLORS.ink, 0.2);
-  const faint = COLORS.faint;
-  const ink = COLORS.ink;
-  const cell = { fill: "none", strokeWidth: 1, vectorEffect: "non-scaling-stroke" };
-  return (
-    <svg width={width} height={height} viewBox="0 0 128 76" style={{ display: "block" }} aria-hidden="true">
-      {variant === "grid" && (
-        <>
-          <ellipse cx="64" cy="62" rx="58" ry="10" fill={hexToRgba(COLORS.ink, 0.07)} />
-          {[10, 28, 46, 64].map((y, row) =>
-            [10, 26, 42, 58, 74, 90, 106].map((x, col) => {
-              const key = row * 7 + col;
-              const lit = key === 3 || key === 10 || key === 17 || key === 24 || key === 25;
-              return <rect key={key} x={x} y={y} width="12" height="9" rx="2"
-                stroke={lit ? line : hexToRgba(COLORS.ink, 0.22)} strokeWidth="1"
-                fill={lit ? (key === 25 ? COLORS.ink : soft) : "none"} vectorEffect="non-scaling-stroke" />;
-            })
-          )}
-          <circle cx="70" cy="14.5" r="10" fill={hexToRgba(COLORS.ink, 0.25)} />
-        </>
-      )}
-      {variant === "track" && (
-        <>
-          <ellipse cx="64" cy="64" rx="54" ry="8" fill={hexToRgba(COLORS.ink, 0.07)} />
-          <polyline points="12,52 32,38 46,44 62,26 80,34 96,16 116,22" fill="none" stroke={soft} strokeWidth="1.5" strokeDasharray="0.1 5" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <polyline points="12,52 32,38 46,44 62,26 80,34 96,16 116,22" fill="none" stroke={line} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-          <line x1="12" y1="52" x2="116" y2="52" stroke={hexToRgba(COLORS.ink, 0.25)} strokeWidth="1" vectorEffect="non-scaling-stroke" />
-          <circle cx="116" cy="22" r="3.5" fill={faint} stroke={ink} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-          <circle cx="96" cy="16" r="2" fill={COLORS.ink} />
-        </>
-      )}
-      {variant === "ring" && (
-        <>
-          <circle cx="64" cy="36" r="19" fill="none" stroke={soft} strokeWidth="1.5" strokeDasharray="3 6" vectorEffect="non-scaling-stroke" />
-          <circle cx="64" cy="36" r="19" fill="none" stroke={line} strokeWidth="1.5" strokeDasharray="86 33.4" transform="rotate(-90 64 36)" vectorEffect="non-scaling-stroke" />
-          <circle cx="64" cy="36" r="4.5" fill="none" stroke={COLORS.ink} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-          <circle cx="74" cy="24" r="2.5" fill={COLORS.ink} />
-          <ellipse cx="64" cy="66" rx="46" ry="6" fill={hexToRgba(COLORS.ink, 0.07)} />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function Btn({ children, onClick, variant = "ghost", style, disabled, title, className, ariaLabel, type }) {
-  const base = { fontFamily: FONTS.body, fontSize: 13, fontWeight: 500, padding: `${SPACE.sm}px ${SPACE.md + 2}px`, borderRadius: RADIUS.control, cursor: disabled ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid transparent", opacity: disabled ? 0.5 : 1 };
-  const variants = {
-    // Match the gradient used on the primary actions elsewhere (timer start,
-    // import, etc.) instead of a flat fill — same visual language.
-    ink: { background: `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 26)})`, color: "#fff" },
-    ghost: { background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.text },
-    danger: { background: "transparent", border: `1px solid ${COLORS.danger}55`, color: COLORS.danger },
-    subtle: { background: COLORS.glassFill2, color: COLORS.text },
-  };
-  // lg-btn (base transitions/press) + a per-variant class picks up the real
-  // hover states defined in globalCss() — brightness lift on the filled
-  // "ink" button, a faint accent wash on "ghost". "danger"/"subtle" keep
-  // their existing look; they're low-frequency actions that don't need the
-  // same hover emphasis.
-  const variantClass = variant === "ink" ? "lg-btn-ink" : variant === "ghost" ? "lg-btn-ghost" : "";
-  return <button title={title} aria-label={ariaLabel} type={type} disabled={disabled} onClick={onClick} className={`lg-btn ${variantClass} ${className || ""}`.trim()} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
-}
-
-const Input = React.forwardRef((props, ref) =>
-  <input ref={ref} {...props} className={`lg-input ${props.className || ""}`} style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body, width: "100%", boxSizing: "border-box", ...props.style }} />
-);
-// ---------------- CUSTOM SELECT ----------------
-// Native dropdowns are unstylable and visually break the system chrome, so
-// every <select> in the app renders as a custom listbox instead. The
-// contract mirrors a native select: value + onChange(newValue) + options
-// [{ value, label, color? }] with full keyboard support and ARIA wiring.
 const subjOpts = (subjects) => (subjects || []).map(s => ({ value: s, label: s, color: subjectColor(s) }));
 const PRIO_OPTS = PRIORITY_ORDER.map(p => ({ value: p, label: PRIORITY_LABEL[p] }));
-
-function SelectBox({ value, onChange, options, disabled = false, ariaLabel, style, listWidth }) {
-  const [open, setOpen] = useState(false);
-  const [hi, setHi] = useState(-1);
-  const wrapRef = useRef(null);
-  const listRef = useRef(null);
-  const opts = options || [];
-  const cur = opts.find(o => o.value === value) || opts[0] || null;
-  const idx = opts.findIndex(o => o.value === value);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    const onEsc = (e) => {
-      if (e.key === "Escape") { setOpen(false); wrapRef.current && wrapRef.current.querySelector("button").focus(); }
-    };
-    document.addEventListener("pointerdown", onDoc);
-    document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("pointerdown", onDoc); document.removeEventListener("keydown", onEsc); };
-  }, [open]);
-
-  // Keep the highlighted option in view as arrows move through the list.
-  useEffect(() => {
-    if (!open || !listRef.current) return;
-    const el = listRef.current.querySelector('[data-active="true"]');
-    if (el) el.scrollIntoView({ block: "nearest" });
-  }, [open, hi]);
-
-  const pick = (v) => { onChange(v); setOpen(false); };
-  const move = (dir) => setHi(h => {
-    const base = h >= 0 ? h : (idx >= 0 ? idx : 0);
-    return Math.max(0, Math.min(opts.length - 1, base + dir));
-  });
-  const onTriggerKey = (e) => {
-    if (!open) {
-      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
-        e.preventDefault(); setOpen(true); setHi(idx >= 0 ? idx : 0);
-      }
-      return;
-    }
-    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
-    else if (e.key === "Home") { e.preventDefault(); setHi(0); }
-    else if (e.key === "End") { e.preventDefault(); setHi(opts.length - 1); }
-    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (hi >= 0 && opts[hi]) pick(opts[hi].value); }
-  };
-  const onListKey = (e) => {
-    if (e.key === "Tab") setOpen(false);
-  };
-
-  return (
-    <div ref={wrapRef} style={{ position: "relative", display: "inline-block", verticalAlign: "middle", ...style }}>
-      <button type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel} disabled={disabled}
-        onClick={() => { setOpen(o => !o); if (!open) setHi(idx); }}
-        onKeyDown={onTriggerKey}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 8, width: "100%", height: 34, boxSizing: "border-box",
-          padding: "0 10px", background: disabled ? "rgba(255,255,255,0.025)" : COLORS.glassFill,
-          border: `1px solid ${open ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`,
-          borderRadius: 7, color: disabled ? COLORS.faint : COLORS.text, fontSize: 12.5, fontFamily: FONTS.mono,
-          cursor: disabled ? "not-allowed" : "pointer", textAlign: "left",
-          transition: "border-color 0.14s ease-out, background 0.14s ease-out",
-          outline: open ? `1px solid ${hexToRgba(COLORS.accentFocus, 0.25)}` : "none",
-        }}>
-        {cur && cur.color && <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: cur.color }} />}
-        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
-          {cur ? cur.label : ""}
-        </span>
-        <ChevronDown size={13} color={COLORS.faint} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.18s ease-out" }} />
-      </button>
-      {open && (
-        <div role="listbox" ref={listRef} aria-label={ariaLabel} onKeyDown={onListKey}
-          style={{ position: "absolute", top: "calc(100% + 5px)", left: 0, zIndex: 90,
-            minWidth: "100%", maxWidth: listWidth || 240, maxHeight: 260, overflowY: "auto", padding: 4,
-            borderRadius: 10, background: COLORS.glassFillStrong, border: `1px solid ${COLORS.borderStrong}`,
-            boxShadow: `0 16px 40px -14px ${COLORS.shadowStrong}`, backdropFilter: "blur(14px)" }}>
-          {opts.map((o, i) => {
-            const active = i === hi;
-            const sel = o.value === value;
-            return (
-              <div key={o.value} role="option" aria-selected={sel} data-active={active}
-                onMouseEnter={() => setHi(i)}
-                onClick={() => pick(o.value)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "6px 9px", borderRadius: 7,
-                  cursor: "pointer", background: active ? COLORS.hoverOverlay : "transparent",
-                  color: sel ? COLORS.accentFocus : COLORS.text, whiteSpace: "nowrap",
-                  fontSize: 12.5, fontFamily: FONTS.mono,
-                }}>
-                {o.color && <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: o.color }} />}
-                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</span>
-                {sel && <Check size={13} />}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Dev-mode hooks for QA harness — only present in dev builds.
 function useDevHooks({ sessions, setSessions }) {
@@ -1600,7 +1319,7 @@ function YearStrip({ sessionMap, goal = 360 }) {
   const todayWk = Math.floor((doy + jan1Dow - 1) / 7);
 return (
     <div>
-      <LedgerRule n="03" label="YEAR" style={{ marginBottom: 8 }}
+      <SectionHeader n="03" label="YEAR" style={{ marginBottom: 8 }}
         right={<span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{activeDays} ACTIVE · {goalsMet} GOALS</span>} />
       <div style={{ position: "relative", height: 10, marginBottom: 6 }}>
         {Object.entries(monthStarts).map(([wk, label], i, arr) => (
@@ -1755,7 +1474,7 @@ function Dashboard({ profile, syllabus, setSyllabus, sessions, tasks, mocks, err
 return (
     <div className="lg-canvas">
       {/* 01 · STATUS — the section index, then the two numerals */}
-      <LedgerRule n="01" label="STATUS" style={{ marginBottom: 26 }}>
+      <SectionHeader n="01" label="STATUS" style={{ marginBottom: 26 }}>
         <button onClick={onShareStories} aria-label="Share today's Ledger Story" title="Share today's Ledger Story"
           style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: RADIUS.badge,
             border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.dim,
@@ -1763,7 +1482,7 @@ return (
             transition: "color 0.16s ease-out, border-color 0.16s ease-out, background 0.16s ease-out" }}>
           <Share2 size={12} /> SHARE
         </button>
-      </LedgerRule>
+      </SectionHeader>
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "30px 44px" }}>
         {flags.clock && (
@@ -1799,7 +1518,7 @@ return (
 
       {/* 02 · SESSION — studied + now, one instrument pair */}
       {(flags.studied || flags.now) && (
-        <LedgerRule n="02" label="SESSION" style={{ marginTop: "clamp(34px, 5vh, 56px)", marginBottom: 14 }} />
+        <SectionHeader n="02" label="SESSION" style={{ marginTop: "clamp(34px, 5vh, 56px)", marginBottom: 14 }} />
       )}
       <div style={{ display: "flex", alignItems: "stretch", flexWrap: "wrap", gap: 14 }}>
         {flags.studied && (
@@ -1858,7 +1577,7 @@ return (
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "36px 48px", marginTop: "clamp(34px, 5vh, 58px)" }}>
         {flags.today && showToday && (
           <div style={{ flex: "1 1 300px", maxWidth: 400 }}>
-            <LedgerRule n="04" label="TODAY" style={{ marginBottom: 10 }} />
+            <SectionHeader n="04" label="TODAY" style={{ marginBottom: 10 }} />
             <div style={{ marginTop: 8 }}>
               {todaySessions.slice(-8).map(s => (
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: `1px solid ${COLORS.border}` }}>
@@ -1888,7 +1607,7 @@ return (
 {/* SUBJECTS — a diagnostic meter, one coherent instrument */}
         {flags.subjects && (
         <div style={{ width: "100%", maxWidth: 340, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "18px 20px 12px" }}>
-          <LedgerRule n="05" label="SUBJECTS" style={{ marginBottom: 8 }}
+          <SectionHeader n="05" label="SUBJECTS" style={{ marginBottom: 8 }}
             right={<span className="num" style={{ fontSize: 9.5, color: COLORS.faint }}>{pct}%</span>} />
           {profile.subjects.map((sub, si) => {
             const list = syllabus[sub] || [];
@@ -1932,7 +1651,7 @@ return (
       {/* 06 — daily question practice */}
       {flags.today && (
         <div style={{ marginTop: "clamp(34px, 5vh, 56px)", maxWidth: 900 }}>
-          <LedgerRule n="06" label="PRACTICE" style={{ marginBottom: 14 }} />
+          <SectionHeader n="06" label="PRACTICE" style={{ marginBottom: 14 }} />
           <PracticeCard record={dppRecord} dppStreak={dppStreak} bumpSolved={bumpSolved} updateTarget={updateDppToday} />
         </div>
       )}
@@ -1940,7 +1659,7 @@ return (
       {/* 07 — the command strip: one line in, one workspace at a time */}
       {flags.workspaces && (
       <div style={{ marginTop: "clamp(34px, 5vh, 56px)", maxWidth: 900 }}>
-        <LedgerRule n="07" label="WORKSPACES" style={{ marginBottom: 14 }}
+        <SectionHeader n="07" label="WORKSPACES" style={{ marginBottom: 14 }}
           right={<span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.18em", color: COLORS.faint }}>ONE STEP AT A TIME</span>} />
         <div className="lg-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))", gap: 10, marginTop: 10 }}>
           {[
@@ -1991,7 +1710,7 @@ return (
       {/* 08 — the status strip */}
       {flags.status && (
       <div style={{ marginTop: "clamp(40px, 6vh, 68px)", maxWidth: 900 }}>
-        <LedgerRule n="08" label="SYSTEM" style={{ marginBottom: 14 }} />
+        <SectionHeader n="08" label="SYSTEM" style={{ marginBottom: 14 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
           <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.faint }}>LV {xpInfo.level} · {String(xpInfo.title).toUpperCase()}</span>
           <div className="lg-progress" style={{ width: 150, height: 3 }}>
@@ -2133,7 +1852,7 @@ const recommendation = (c) => {
 
       <div className="lg-coverage-hero" style={{ display: "grid", gridTemplateColumns: "minmax(230px, 0.8fr) minmax(0, 1.7fr)", gap: 1, marginBottom: 24, background: COLORS.border, border: `1px solid ${COLORS.border}`, overflow: "hidden", borderRadius: RADIUS.card }}>
         <div style={{ background: COLORS.panel2, padding: "28px 26px", position: "relative", overflow: "hidden" }}>
-          <div style={{ color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.2em" }}>TOTAL COVERAGE</div>
+          <SectionHeader n="01" label="TOTAL COVERAGE" />
           <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 24 }}>
             <div style={{ width: 112, height: 112, borderRadius: "50%", background: `conic-gradient(${subjectColor(activeSubject)} ${covPct}%, ${COLORS.border} 0)`, display: "grid", placeItems: "center", flexShrink: 0 }}>
               <div style={{ width: 88, height: 88, borderRadius: "50%", background: COLORS.panel2, display: "grid", placeItems: "center" }}><span className="num lg-coverage-dot" style={{ color: COLORS.text, fontSize: 27, fontWeight: 700 }}>{covPct}<small style={{ fontSize: 13, color: COLORS.faint }}>%</small></span></div>
@@ -2142,7 +1861,7 @@ const recommendation = (c) => {
           </div>
         </div>
         <div className="lg-coverage-read" style={{ background: COLORS.panel, padding: "24px 28px", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(180px, 0.75fr)", gap: 28, alignItems: "center" }}>
-<div><div className="sys" style={{ color: COLORS.faint, marginBottom: 14 }}>THE NEXT READ</div><div className="t-heading-lg" style={{ color: COLORS.text }}>{reviewsDue > 0 ? `${reviewsDue} review${reviewsDue === 1 ? "" : "s"} need attention` : covDoing > 0 ? `${covDoing} chapter${covDoing === 1 ? " is" : "s are"} in motion` : "Choose your next chapter"}</div><div className="t-caption" style={{ marginTop: 9, maxWidth: 420 }}>{reviewsDue > 0 ? "Spaced repetition is the shortest route from familiar to retained." : "Use the subject map below to move from intention into a concrete study block."}</div></div>
+<div><SectionHeader n="02" label="THE NEXT READ" style={{ marginBottom: 14 }} /><div className="t-heading-lg" style={{ color: COLORS.text }}>{reviewsDue > 0 ? `${reviewsDue} review${reviewsDue === 1 ? "" : "s"} need attention` : covDoing > 0 ? `${covDoing} chapter${covDoing === 1 ? " is" : "s are"} in motion` : "Choose your next chapter"}</div><div className="t-caption" style={{ marginTop: 9, maxWidth: 420 }}>{reviewsDue > 0 ? "Spaced repetition is the shortest route from familiar to retained." : "Use the subject map below to move from intention into a concrete study block."}</div></div>
           <div style={{ borderLeft: `1px solid ${COLORS.border}`, paddingLeft: 24, display: "grid", gap: 13 }}>
             {[["DONE", covDone, COLORS.done], ["IN FLIGHT", covDoing, COLORS.warn], ["BACKLOG", covTodo, COLORS.faint], ["REVIEW DUE", reviewsDue, reviewsDue ? COLORS.warn : COLORS.faint]].map(([label, value, color]) => <div key={label} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14 }}><span className="t-label" style={{ color: COLORS.faint }}>{label}</span><span className="num t-data-md" style={{ color }}>{value}</span></div>)}
           </div>
@@ -2201,7 +1920,7 @@ const recommendation = (c) => {
       </div>
 
       {view === "list" ? (
-        <Card title={`${activeSubject} — ${doneN}/${chapters.length} covered`} right={
+        <Card n="03" title={`${activeSubject} — ${doneN}/${chapters.length} covered`} right={
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {statusChips.map(s => {
               const active = statusFilter === s;
@@ -2377,7 +2096,7 @@ function ConceptMap({ subject, chapters }) {
   const statusColor = { todo: COLORS.faint, doing: COLORS.warn, done: COLORS.done, mastered: COLORS.ink };
 
   return (
-    <Card title="Prerequisite chain — study left to right">
+    <Card n="03" title="Prerequisite chain — study left to right">
       <div style={{ overflowX: "auto" }}>
         <svg width={Math.max(width, 600)} height={height}>
           {chapters.map(c => (DEPENDENCIES[subject] || {})[c.name]?.map(d => pos[d] && pos[c.name] && (
@@ -2601,7 +2320,6 @@ function TargetPicker({ tasks, setTasks, profile, focusSubject, running, selecte
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>WORKING ON</span>
         <button ref={triggerRef} type="button" disabled={running} onClick={() => setOpen(o => !o)}
           aria-expanded={open} aria-haspopup="listbox" aria-controls="ledger-target-list"
           aria-label="Choose what you're working toward"
@@ -2628,7 +2346,6 @@ function TargetPicker({ tasks, setTasks, profile, focusSubject, running, selecte
             </>
           )}
         </button>
-        {running && <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.faint }}>LOCKED</span>}
       </div>
 
       {open && (
@@ -2957,15 +2674,16 @@ function TaskPanel({ tasks, setTasks, profile, selectedTargetId, setSelectedTarg
 
   return (
     <div className="lg-card lg-focus-taskpanel" style={{ padding: "20px 18px 14px", display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
-        <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>TODAY'S QUEUE</span>
-        <span className="num" style={{ fontSize: 9, letterSpacing: "0.14em", color: COLORS.faint }}>
-          {tasks.length} TASK{tasks.length === 1 ? "" : "S"} · {tasks.filter(t => t.priority === "high" && !t.done).length} HIGH PRIORITY
-        </span>
-        <Btn variant="ghost" style={{ padding: "5px 11px", fontSize: 11 }} onClick={() => { addInputRef.current && addInputRef.current.focus(); }}>
-          <Plus size={13} /> Add task
-        </Btn>
-      </div>
+      <SectionHeader n="02" label="TODAY'S QUEUE" style={{ marginBottom: 14 }} right={
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="num" style={{ fontSize: 9, letterSpacing: "0.14em", color: COLORS.faint }}>
+            {tasks.length} TASK{tasks.length === 1 ? "" : "S"} · {tasks.filter(t => t.priority === "high" && !t.done).length} HIGH PRIORITY
+          </span>
+          <Btn variant="ghost" style={{ padding: "5px 11px", fontSize: 11 }} onClick={() => { addInputRef.current && addInputRef.current.focus(); }}>
+            <Plus size={13} /> Add task
+          </Btn>
+        </div>
+      } />
 
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
         <Input ref={addInputRef} value={newText} onChange={e => setNewText(e.target.value)} aria-label="New task"
@@ -3157,17 +2875,16 @@ function FocusAnalytics({ sessions, setSessions, tasks, profile, onShareStories 
   return (
     <div className="lg-focus-in" style={{ animationDelay: "120ms" }}>
       <div className="lg-card lg-focus-panel" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "18px 20px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ width: 3, height: 15, borderRadius: 2, background: `linear-gradient(180deg, ${COLORS.accentFocus}, ${darken(COLORS.accentFocus, 32)})`, flexShrink: 0 }} />
-            <span className="sys" style={{ fontSize: 11, letterSpacing: "0.24em", color: COLORS.text, fontWeight: 700 }}>FOCUS ANALYTICS</span>
+        <SectionHeader n="03" label="FOCUS ANALYTICS" style={{ marginBottom: 14 }} right={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={onShareStories} aria-label="Share analytics as a Ledger Story" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 9px", borderRadius: 7, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.dim, fontFamily: FONTS.mono, fontSize: 9, cursor: "pointer" }}><Share2 size={12} /> SHARE</button>
+            <div role="group" aria-label="Analytics range" className="lg-focus-seg">
+              {["7", "30", "90"].map(r => (
+                <button key={r} className="lg-focus-seg-btn" aria-pressed={range === r} onClick={() => setRange(r)}>{r}D</button>
+              ))}
+            </div>
           </div>
-           <div style={{ display: "flex", alignItems: "center", gap: 8 }}><button onClick={onShareStories} aria-label="Share analytics as a Ledger Story" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 9px", borderRadius: 7, border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.dim, fontFamily: FONTS.mono, fontSize: 9, cursor: "pointer" }}><Share2 size={12} /> SHARE</button><div role="group" aria-label="Analytics range" className="lg-focus-seg">
-            {["7", "30", "90"].map(r => (
-              <button key={r} className="lg-focus-seg-btn" aria-pressed={range === r} onClick={() => setRange(r)}>{r}D</button>
-            ))}
-           </div></div>
-        </div>
+        } />
 
         <div className="lg-grid" style={{ gap: 12 }}>
           <Stat label="Focus time" value={fmtMin(todayMin)} sub="TODAY" trend={trendToday} />
@@ -3386,12 +3103,10 @@ function FocusTimer({ sessions, setSessions, profile, timer, setMode, setSubject
           </div>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
-          <span className="sys" style={{ fontSize: 9, letterSpacing: "0.2em", color: COLORS.faint }}>WORKING ON</span>
-          <SelectBox value={subject || ""} onChange={setSubject} disabled={running} ariaLabel="Focus subject"
-            options={subjOpts(profile.subjects)} style={{ minWidth: 180 }} />
-          {running && <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.faint }}>LOCKED</span>}
-        </div>
+        <SectionHeader n="01" label="WORKING ON" style={{ width: "100%", marginTop: 6 }}
+          right={running && <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em", color: COLORS.faint }}>LOCKED</span>} />
+        <SelectBox value={subject || ""} onChange={setSubject} disabled={running} ariaLabel="Focus subject"
+          options={subjOpts(profile.subjects)} style={{ width: "100%", marginTop: 10 }} />
 
         <TargetPicker tasks={tasks} setTasks={setTasks} profile={profile} focusSubject={subject || ""} running={running}
           selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />
@@ -4041,9 +3756,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
       {/* Signals strip — retention, streak, subject mix, heat + forecast */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
         <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>DECK HEALTH</span>
-          </div>
+          <SectionHeader n="01" label="DECK HEALTH" style={{ marginBottom: 10 }} />
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
             <FlashSplit k="Retention" v={`${retention}%`} />
             <FlashSplit k="Review streak" v={`${streak}d`} />
@@ -4060,10 +3773,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
           </div>
         </div>
         <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>SUBJECT MIX</span>
-            <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{cards.length} CARDS</span>
-          </div>
+          <SectionHeader n="02" label="SUBJECT MIX" style={{ marginBottom: 10 }} right={<span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{cards.length} CARDS</span>} />
           {bySubject.length === 0 ? (
             <div style={{ fontSize: 11.5, color: COLORS.faint, lineHeight: 1.6 }}>No cards yet — add your first below and the spread will appear here.</div>
           ) : bySubject.map(s => (
@@ -4078,9 +3788,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
           ))}
         </div>
         <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>HEATMAP · LAST 12 WEEKS</span>
-          </div>
+          <SectionHeader n="03" label="HEATMAP · LAST 12 WEEKS" style={{ marginBottom: 10 }} />
           <div style={{ display: "flex", gap: 4 }}>
             {heat.map((wk, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -4088,10 +3796,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 14, marginBottom: 8 }}>
-            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.dim }}>FORECAST · DUE PER WEEK</span>
-            <span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>IF EVERY REVIEW GOES "GOOD"</span>
-          </div>
+          <SectionHeader n="04" label="FORECAST · DUE PER WEEK" style={{ marginTop: 14, marginBottom: 8 }} right={<span className="num" style={{ fontSize: 8.5, color: COLORS.faint }}>IF EVERY REVIEW GOES "GOOD"</span>} />
           <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 42 }}>
             {forecast.map((n, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
@@ -4106,10 +3811,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
       {/* Forgotten cards — the regrade shelf */}
       {missedCards.length > 0 && (
         <div style={{ border: `1px solid ${hexToRgba(COLORS.danger, 0.35)}`, borderRadius: RADIUS.card, padding: "14px 16px", background: "transparent" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.22em", color: COLORS.danger }}>FORGOTTEN — REGRADE SHELF</span>
-            <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{missedCards.length} CARDS</span>
-          </div>
+          <SectionHeader n="05" label="FORGOTTEN — REGRADE SHELF" style={{ marginBottom: 10 }} right={<span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{missedCards.length} CARDS</span>} />
           {missedCards.map(c => (
             <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", borderBottom: `1px solid ${COLORS.border}` }}>
               <span style={subjectDot(c.subject)} />
@@ -4126,15 +3828,16 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
       {/* Review stage */}
       {queue ? (
         <div style={{ border: `1px solid ${hexToRgba(COLORS.accentFocus, 0.35)}`, borderRadius: RADIUS.card, overflow: "hidden", background: `linear-gradient(168deg, ${COLORS.glassFillStrong}, ${COLORS.glassFill})` }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
-            <span className="sys" style={{ fontSize: 9, letterSpacing: "0.24em", color: COLORS.accentFocus }}>REVIEW SESSION</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span className="num" style={{ fontSize: 10.5, color: COLORS.faint }}>{fmtClock(elapsed)}</span>
-              <span className="num" style={{ fontSize: 10.5, color: COLORS.faint }}>{qi + 1} / {queue.length}</span>
-              <button onClick={() => setFocus(!focus)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 6, cursor: "pointer", fontSize: 8.5, letterSpacing: "0.12em", fontFamily: FONTS.mono, background: focus ? hexToRgba(COLORS.accentFocus, 0.16) : "transparent", border: `1px solid ${focus ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`, color: focus ? COLORS.accentFocus : COLORS.faint }}>
-                <Maximize2 size={10} /> FOCUS
-              </button>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+            <SectionHeader n="06" label="REVIEW SESSION" style={{ flex: 1, minWidth: 0 }} right={
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="num" style={{ fontSize: 10.5, color: COLORS.faint }}>{fmtClock(elapsed)}</span>
+                <span className="num" style={{ fontSize: 10.5, color: COLORS.faint }}>{qi + 1} / {queue.length}</span>
+                <button onClick={() => setFocus(!focus)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 6, cursor: "pointer", fontSize: 8.5, letterSpacing: "0.12em", fontFamily: FONTS.mono, background: focus ? hexToRgba(COLORS.accentFocus, 0.16) : "transparent", border: `1px solid ${focus ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`, color: focus ? COLORS.accentFocus : COLORS.faint }}>
+                  <Maximize2 size={10} /> FOCUS
+                </button>
+              </div>
+            } />
           </div>
           {flipCard(currentCard?.subject, currentCard?.reps, currentCard?.front, currentCard?.back)}
           <div style={{ padding: "0 16px 14px" }}>
@@ -4150,14 +3853,13 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.2em", color: COLORS.dim }}>QUEUE</span>
+            <SectionHeader n="06" label="QUEUE" style={{ flex: "1 1 300px", minWidth: 0 }} right={
               <div style={{ display: "flex", gap: 5 }}>
                 {[["all", "All"], ["overdue", "Overdue"], ["today", "Today"], ["next", "Upcoming"]].map(([k, label]) => (
                   <button key={k} onClick={() => setDueFilter(k)} style={{ padding: "3px 9px", borderRadius: 5, cursor: "pointer", fontSize: 9, letterSpacing: "0.08em", fontFamily: FONTS.mono, background: dueFilter === k ? hexToRgba(COLORS.accentFocus, 0.14) : "transparent", border: `1px solid ${dueFilter === k ? hexToRgba(COLORS.accentFocus, 0.5) : COLORS.border}`, color: dueFilter === k ? COLORS.accentFocus : COLORS.faint }}>{label}</button>
                 ))}
               </div>
-            </div>
+            } />
             <SelectBox value={reviewSubject} onChange={setReviewSubject} ariaLabel="Review subject"
               options={[{ value: "all", label: "All subjects" }].concat(subjOpts(extraSubjects))} style={{ width: 150 }} />
           </div>
@@ -4243,7 +3945,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
       )}
 
       {/* Add card */}
-      <Card id="recall-add" title="Add a card">
+      <Card id="recall-add" n="07" title="Add a card">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <input list="recall-subjects" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject — pick one or type a new one…" style={{ background: COLORS.glassFill, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 11px", color: COLORS.text, fontSize: 13, fontFamily: FONTS.body }} />
           <datalist id="recall-subjects">{extraSubjects.map(s => <option key={s} value={s} />)}</datalist>
@@ -4254,7 +3956,7 @@ function RecallDeck({ cards, setCards, profile, settings = {} }) {
       </Card>
 
       {/* Deck */}
-      <Card title={`Deck (${cards.length})`} right={
+      <Card n="08" title={`Deck (${cards.length})`} right={
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <Input value={deckQuery} onChange={e => setDeckQuery(e.target.value)} placeholder="Search deck…" style={{ width: 150 }} />
           <button onClick={() => setImportOpen(true)} title="Import / export" style={{ padding: "5px 8px", borderRadius: 6, cursor: "pointer", background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.faint }}><Download size={13} /></button>
@@ -4462,7 +4164,7 @@ function Mocks({ mocks, setMocks, profile }) {
         <div className="lg-tests-stat"><span className="sys">TESTS TAKEN</span><strong className="num">{mocks.length}</strong><span>logged attempts</span></div>
       </div>
 
-      <Card title="Performance trajectory">
+      <Card n="01" title="Performance trajectory">
         {mocks.length === 0 ? (
           <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 4px 6px", flexWrap: "wrap" }}>
             <EmptyArt variant="track" width={150} height={72} />
@@ -4486,7 +4188,7 @@ function Mocks({ mocks, setMocks, profile }) {
         )}
       </Card>
 
-      <Card title="Subject-wise average">
+      <Card n="02" title="Subject-wise average">
         {mocks.length === 0 ? (
           <div style={{ fontSize: 12, color: COLORS.faint, padding: "10px 4px 14px", lineHeight: 1.6 }}>
             No subject data yet — once tests are logged, each subject's average will show here as its own bar.
@@ -4513,7 +4215,7 @@ function Mocks({ mocks, setMocks, profile }) {
         )}
       </Card>
 
-      <Card id="mock-log" title="Log a mock test">
+      <Card id="mock-log" n="03" title="Log a mock test">
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 4 }}>
           <div>
             <Input id="mock-name" placeholder="Test name (e.g. FT-12)" value={name} onChange={e => setName(e.target.value)} />
@@ -4550,7 +4252,7 @@ function Mocks({ mocks, setMocks, profile }) {
         </div>
       </Card>
 
-      <Card title="Test history">
+      <Card n="04" title="Test history">
         {mocks.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: SPACE.sm, padding: "8px 0 4px" }}>
             <EmptyArt variant="ring" width={116} height={64} />
@@ -4627,7 +4329,7 @@ function ErrorLog({ errors, setErrors, mocks }) {
       </div>
 
       <div className="lg-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Card id="mistake-log" title="Log a mistake">
+        <Card id="mistake-log" n="01" title="Log a mistake">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Input placeholder="Topic / chapter" value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === "Enter" && add()} />
             <SelectBox value={type} onChange={setType} ariaLabel="Mistake type" options={ERROR_TYPES.map(t => ({ value: t, label: t }))} style={{ width: "100%" }} />
@@ -4638,7 +4340,7 @@ function ErrorLog({ errors, setErrors, mocks }) {
           </div>
         </Card>
 
-        <Card title="Mistake profile">
+        <Card n="02" title="Mistake profile">
           {profileData.length === 0 ? (
             <div style={{ fontSize: 12, color: COLORS.faint, lineHeight: 1.6 }}>
               Log your first mistake to see your profile — the chart breaks down which kind of mark drops the most.
@@ -4656,7 +4358,7 @@ function ErrorLog({ errors, setErrors, mocks }) {
         </Card>
       </div>
 
-      <Card title={`Mistake ledger${errors.length ? ` — ${errors.length}` : ""}`} right={<span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em" }}>TOPIC · KIND · DATE · SOURCE</span>}>
+      <Card n="03" title={`Mistake ledger${errors.length ? ` — ${errors.length}` : ""}`} right={<span className="sys" style={{ fontSize: 8.5, letterSpacing: "0.16em" }}>TOPIC · KIND · DATE · SOURCE</span>}>
         {errors.length === 0 ? (
           <EmptyState icon={AlertTriangle} message="No mistakes logged yet. Log mistakes from your tests and study sessions to identify patterns — the ledger stays quiet until you feed it." action={
             <Btn variant="ink" onClick={() => document.getElementById("mistake-log")?.scrollIntoView({ behavior: "smooth", block: "center" })}><Plus size={14} /> Log your first mistake</Btn>
@@ -4689,461 +4391,6 @@ function ErrorLog({ errors, setErrors, mocks }) {
             );
           })
         )}
-      </Card>
-    </div>
-  );
-}
-
-// ---------------- PEERS ----------------
-function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupRoster, onCreateGroup, onJoinGroup, onLeaveGroup }) {
-  const [codeInput, setCodeInput] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [copiedShare, setCopiedShare] = useState(false);
-  const [copiedGroup, setCopiedGroup] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [joinCode, setJoinCode] = useState("");
-  const [joinError, setJoinError] = useState("");
-  const [creatingGroup, setCreatingGroup] = useState(false);
-  const [joiningGroup, setJoiningGroup] = useState(false);
-
-  const handleCreateGroup = async () => {
-    if (!groupName.trim() || creatingGroup) return;
-    setCreatingGroup(true);
-    const code = genCode();
-    const result = await onCreateGroup(code, groupName.trim());
-    setCreatingGroup(false);
-    if (result) setGroupName("");
-  };
-
-  const handleJoinGroup = async () => {
-    const code = joinCode.trim().toUpperCase();
-    if (!code || joiningGroup) return;
-    setJoiningGroup(true);
-    setJoinError("");
-    const result = await onJoinGroup(code);
-    setJoiningGroup(false);
-    if (result) setJoinCode("");
-    else setJoinError("demo mode has no database account");
-  };
-
-  const addPeer = () => {
-    const c = codeInput.trim().toUpperCase();
-    if (!c || c === profile.code || peers.includes(c)) return;
-    setPeers(prev => [...prev, c]);
-    setCodeInput("");
-  };
-  const removePeer = (c) => setPeers(prev => prev.filter(p => p !== c));
-
-  const copyText = (text, done) => { navigator.clipboard?.writeText(text); done(true); setTimeout(() => done(false), 1500); };
-
-  const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
-  const board = [
-    { code: profile.code, name: `${profile.name} (you)`, minutes: Math.round(todayMin), streak: computeStreak(sessions), stale: false },
-    ...peers.map(c => {
-      const d = peerData[c];
-      if (!d) return { code: c, name: "Pending sync…", minutes: 0, streak: 0, stale: false };
-      // Entries are published at most when the peer opens the app; after
-      // midnight their row still holds yesterday's numbers. Report 0 for
-      // a peer who hasn't synced today rather than showing yesterday's
-      // minutes as if they were today's, and flag it so the board reads
-      // honestly.
-      const stale = d.date !== todayStr();
-      return { code: c, name: d.name, minutes: stale ? 0 : (d.minutes || 0), streak: d.streak || 0, stale };
-    }),
-  ].sort((a, b) => b.minutes - a.minutes);
-
-  // Ink-fill bars read relative to today's leader, not a fabricated "goal" —
-  // there's no target-minutes field in the data model, so the honest
-  // denominator is board[0].minutes (0 when nobody's logged anything yet).
-  const leaderMinutes = board[0]?.minutes || 0;
-
-  // Derives a two-letter stamp from a display name for the rank avatar.
-  // Names can carry a "(you)" suffix or be the placeholder "Pending sync…" —
-  // stripped/first-two-words logic keeps both cases readable instead of
-  // producing junk like "A(" from the paren.
-  const initialsOf = (name) => {
-    const clean = name.replace(/\(.*?\)/g, "").trim();
-    const parts = clean.split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return "?";
-    return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
-  };
-
-  const seatName = (name) => name.replace(/\s*\(you\)\s*$/, "");
-  const isSelf = (p) => p.code === profile.code;
-  const myStreak = computeStreak(sessions);
-  const myRank = board.findIndex(p => isSelf(p)) + 1;
-  const syncedPeers = peers.filter(c => peerData[c] && peerData[c].date === todayStr()).length;
-  const combinedToday = board.reduce((a, p) => a + p.minutes, 0);
-  const podium = board.filter(p => p.minutes > 0).slice(0, 3);
-  const streakLeaders = board.filter(p => p.streak > 0).sort((a, b) => b.streak - a.streak).slice(0, 6);
-  const shareLine = `Focused ${fmtMin(todayMin)} today${myStreak > 0 ? ` · ${myStreak}-day streak` : ""} in Ledger${combinedToday > 0 ? ` — our circle logged ${fmtMin(combinedToday)} combined.` : ". Join me."}`;
-  const groups = Object.values(groupDefs);
-
-  const heroLabel = {
-    fontSize: 9,
-    letterSpacing: "0.12em",
-    textTransform: "uppercase",
-    color: COLORS.faint,
-    fontWeight: 600,
-  };
-
-  return (
-    <div style={stack(SPACE.xl)}>
-      {groups.length === 0 && <div><h2 className="t-heading-md" style={{ margin: 0, color: COLORS.text }}>Welcome to study circles</h2><p style={{ color: COLORS.faint }}>You haven't joined a study circle yet.</p><p style={{ color: COLORS.faint }}>You're in demo mode — sign in to create or join study circles.</p><div style={{ display: "flex", gap: 8 }}><Btn variant="ink" onClick={() => document.getElementById("circle-create-name")?.focus()}>Create study circle</Btn><Btn variant="ghost" onClick={() => document.getElementById("circle-join-code")?.focus()}>Join with code</Btn></div></div>}
-      {/* HERO — your identity + today's live standing, all real numbers */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
-        <div style={{ borderRadius: RADIUS.modal, position: "relative", overflow: "hidden", padding: "24px 26px", border: `1px solid ${COLORS.border}`, background: `radial-gradient(620px 200px at 10% -10%, ${hexToRgba(COLORS.ink, 0.1)}, transparent 66%), linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.82)}, ${hexToRgba(COLORS.panel2, 0.66)})`, backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, boxShadow: elev("e3") }}>
-          <div style={{ position: "absolute", right: -42, top: -46, width: 210, height: 210, borderRadius: "50%", background: hexToRgba(COLORS.ink, 0.05) }} />
-          <div style={{ position: "absolute", right: 34, bottom: -64, width: 150, height: 150, borderRadius: "50%", background: hexToRgba(COLORS.ink, 0.04) }} />
-          <div style={{ ...row(6), marginBottom: 14 }}>
-            <Radio size={13} color={COLORS.ink} />
-            <span style={{ ...heroLabel, color: COLORS.ink }}>Your circle · live</span>
-            <span style={{ marginLeft: "auto", ...row(5) }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.done, boxShadow: `0 0 8px ${COLORS.done}` }} />
-              <span style={{ fontSize: 10, color: COLORS.dim }}>{syncedPeers} of {peers.length} peers synced</span>
-            </span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ ...heroLabel, marginBottom: 3 }}>Your identity code</div>
-              <div style={{ ...row(8), marginTop: 2, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONTS.mono, fontSize: 23, letterSpacing: "0.16em", color: COLORS.text, fontWeight: 600 }}>{profile.code}</span>
-                <Btn variant="ghost" style={{ padding: "5px 10px", fontSize: 11 }} onClick={() => copyText(profile.code, setCopied)}><Copy size={11} /> {copied ? "Copied" : "Copy"}</Btn>
-              </div>
-              <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 8, lineHeight: 1.5, maxWidth: 300 }}>
-                Share it with a study partner. Your name, today's focus minutes and streak live in a shared table anyone with the code can read — nothing else.
-              </div>
-            </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={heroLabel}>Focused today</div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: 32, fontWeight: 700, color: COLORS.ink, lineHeight: 1.05, letterSpacing: "-0.02em", textShadow: `0 4px 18px ${hexToRgba(COLORS.ink, 0.35)}` }}>{fmtMin(todayMin)}</div>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 18, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
-            {[
-              { label: "Streak", value: myStreak > 0 ? `${myStreak}d` : "Start today" },
-              { label: "Your rank", value: myRank > 0 ? `#${myRank}` : "—" },
-              { label: "Circle total", value: fmtMin(combinedToday) },
-            ].map(s => (
-              <div key={s.label} style={{ minWidth: 0 }}>
-                <div style={heroLabel}>{s.label}</div>
-                <div style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 600, color: COLORS.text, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="lg-card" style={{ borderRadius: RADIUS.modal, border: `1px solid ${COLORS.border}`, padding: "24px 26px", ...stack(14), justifyContent: "center" }}>
-          <div style={{ ...row(8) }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: COLORS.panel2, border: `1px solid ${COLORS.border}`, ...center() }}>
-              <ShieldCheck size={16} color={COLORS.done} />
-            </div>
-            <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>Your code is your room key</div>
-              <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 1 }}>No friend requests, no strangers — only codes you hand out.</div>
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: COLORS.dim, lineHeight: 1.65 }}>
-            Everything in this section is built from real records: your focus sessions, peers' published leaderboard rows (name, today's minutes, streak), and the study groups you're actually in. If a peer hasn't opened Ledger today, the board says so instead of guessing.
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", ...row(8) }}>
-            <Btn variant="ghost" onClick={() => copyText(shareLine, setCopiedShare)}><Send size={12} /> {copiedShare ? "Copied!" : "Copy a status to share"}</Btn>
-            <div style={{ flex: 1, minWidth: 180, fontSize: 10.5, color: COLORS.faint, fontFamily: FONTS.mono, background: COLORS.panel2, border: `1px dashed ${COLORS.border}`, borderRadius: RADIUS.control, padding: "6px 9px", alignSelf: "stretch", display: "flex", alignItems: "center" }}>{shareLine}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* STAT STRIP — derived only from real sessions + shared rows */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16 }}>
-        <Stat label="Focused today" value={fmtMin(todayMin)} sub="your minutes logged" />
-        <Stat label="Streak" value={myStreak > 0 ? `${myStreak}d` : "0d"} sub={myStreak > 0 ? "consecutive days" : "log today to start one"} />
-        <Stat label="Circle" value={peers.length} sub={syncedPeers > 0 ? `${syncedPeers} synced today` : "no peers added yet"} />
-        <Stat label="Together today" value={fmtMin(combinedToday)} sub={combinedToday > 0 ? "you + peers combined" : "be the first to log"} accent={combinedToday > 0 ? COLORS.ink : undefined} />
-      </div>
-
-      {/* LEADERBOARD — your circle's today's real numbers, podium + full standings */}
-      <Card title="Your circle's today leaderboard" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><TrendingUp size={11} color={COLORS.ink} /> Resets at midnight</div>}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 16 }}>
-          {[0, 1, 2].map(i => {
-            const p = podium[i];
-            if (!p) {
-              return (
-                <div key={i} style={{ borderRadius: RADIUS.card, border: `1.5px dashed ${COLORS.border}`, padding: "14px", ...center(), flexDirection: "column", gap: 6, textAlign: "center", minHeight: 132 }}>
-                  <div style={{ ...center(), width: 30, height: 30, borderRadius: "50%", border: `1.5px dashed ${COLORS.faint}`, color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 11 }}>{i + 1}</div>
-                  <div style={{ fontSize: 11, color: COLORS.faint, maxWidth: 170, lineHeight: 1.5 }}>{i === 0 ? "Nobody has logged focus today — take the crown." : "Open slot — invite a peer to race for it."}</div>
-                </div>
-              );
-            }
-            const isTop = i === 0;
-            const medal = RANK_COLORS[i];
-            return (
-              <div key={p.code} style={{ borderRadius: RADIUS.card, border: `1px solid ${hexToRgba(medal, 0.55)}`, background: `linear-gradient(160deg, ${hexToRgba(medal, 0.14)}, transparent 55%)`, padding: "14px", position: "relative", minHeight: 132 }}>
-                {i === 0 && <div style={{ position: "absolute", top: 10, right: 10 }}><Crown size={15} color={medal} /></div>}
-                <div style={{ ...row(8) }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", ...center(), fontFamily: FONTS.display, fontWeight: 700, fontSize: 13, color: medal, border: `1.5px solid ${medal}`, boxShadow: `0 0 0 3px ${hexToRgba(medal, 0.14)}` }}>{i + 1}</div>
-                  <div style={{ width: 30, height: 30, borderRadius: 8, ...center(), fontFamily: FONTS.display, fontWeight: 600, fontSize: 12, color: COLORS.bg, background: isSelf(p) ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` : `linear-gradient(150deg, ${medal}, ${darken(medal, 22)})` }}>{initialsOf(p.name)}</div>
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {seatName(p.name)}
-                    {isSelf(p) && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: COLORS.ink, marginLeft: 6 }}>YOU</span>}
-                  </div>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.faint, marginTop: 2, ...row(5) }}>
-                    {p.streak > 0 && <><Flame size={10} color={COLORS.warn} /> {p.streak}d streak</>}
-                    {p.stale && <span>{p.streak > 0 ? " · " : ""}not synced today</span>}
-                  </div>
-                </div>
-                <div style={{ position: "absolute", bottom: 12, right: 14, textAlign: "right" }}>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: 17, fontWeight: 700, color: isTop ? medal : COLORS.text }}>{fmtMin(p.minutes)}</div>
-                  <div style={{ fontSize: 8.5, letterSpacing: "0.1em", color: COLORS.faint }}>MIN</div>
-                </div>
-                <div style={{ position: "absolute", left: 14, right: 14, bottom: 18 }}>
-                  <div style={{ height: 4, background: hexToRgba(COLORS.text, 0.1), borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, Math.round((p.minutes / Math.max(1, leaderMinutes)) * 100))}%`, background: `linear-gradient(90deg, ${darken(medal, 25)}, ${medal})`, borderRadius: 3 }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="lg-card" style={{ borderRadius: RADIUS.card, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
-          {board.map((p, i) => {
-            const rank = i + 1;
-            const isTop3 = rank <= 3;
-            const stampColor = isTop3 ? RANK_COLORS[i] : COLORS.faint;
-            const self = isSelf(p);
-            const pct = leaderMinutes > 0 ? Math.min(100, Math.round((p.minutes / leaderMinutes) * 100)) : 0;
-            return (
-              <div
-                key={p.code}
-                className="lg-row"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "34px 1fr auto 70px 24px",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "10px 12px",
-                  borderBottom: i < board.length - 1 ? `1px solid ${COLORS.border}` : "none",
-                  position: "relative",
-                  background: self ? hexToRgba(COLORS.ink, 0.08) : "transparent",
-                }}
-              >
-                {self && (
-                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: COLORS.ink }} />
-                )}
-                <div
-                  style={{
-                    width: 30, height: 30, borderRadius: "50%",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontFamily: isTop3 ? FONTS.display : FONTS.mono,
-                    fontWeight: isTop3 ? 700 : 500,
-                    fontSize: isTop3 ? 13 : 11,
-                    color: stampColor,
-                    border: `1.5px solid ${stampColor}`,
-                    boxShadow: isTop3 ? `0 0 0 3px ${hexToRgba(stampColor, 0.12)}` : "none",
-                  }}
-                >
-                  {isTop3 ? rank : `#${rank}`}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <div
-                    style={{
-                      width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontFamily: FONTS.display, fontWeight: 600, fontSize: 12, color: COLORS.bg,
-                      background: self
-                        ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})`
-                        : `linear-gradient(150deg, ${COLORS.faint}, ${darken(COLORS.faint, 20)})`,
-                    }}
-                  >
-                    {initialsOf(p.name)}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {seatName(p.name)}
-                    </div>
-                    <div style={{ fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.faint, display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
-                      {p.streak > 0 && <><Flame size={10} color={COLORS.warn} /> {p.streak}d</>}
-                      {p.stale && <span style={{ marginLeft: p.streak > 0 ? 6 : 0 }}>not synced today</span>}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ width: 96, display: leaderMinutes > 0 ? "block" : "none" }}>
-                  <div style={{ height: 4, background: COLORS.border, borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg, ${darken(COLORS.ink, 30)}, ${COLORS.ink})`, borderRadius: 3 }} />
-                  </div>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: COLORS.faint, marginTop: 3 }}>{pct}% of leader</div>
-                </div>
-                <div style={{ fontFamily: FONTS.mono, fontSize: 14, fontWeight: 600, color: COLORS.text, textAlign: "right" }}>
-                  {fmtMin(p.minutes)}
-                </div>
-                {!self ? (
-                  <Trash2 size={13} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(p.code)} />
-                ) : <span />}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* STUDY GROUPS — real rooms/group_members tables, each with its own
-          mini leaderboard derived from the members' published rows. The
-          board is the hub: your circle is one of the rooms you race in. */}
-      <Card title="Study groups" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><Users size={11} color={COLORS.ink} /> {groups.length} {groups.length === 1 ? "group" : "groups"}</div>}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <Input id="circle-create-name" placeholder="e.g. JEE Grind" value={groupName} onChange={e => setGroupName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} style={{ flex: 1, minWidth: 170 }} />
-          <Btn variant="ink" disabled={creatingGroup} onClick={handleCreateGroup}><Plus size={14} /> Create circle</Btn><Btn variant="ghost" onClick={() => setGroupName("")}>Cancel</Btn>
-          <Input id="circle-join-code" placeholder="Join with a 6-character code" value={joinCode} onChange={e => setJoinCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleJoinGroup()} style={{ flex: 1, minWidth: 190 }} />
-          <Btn variant="ghost" disabled={joiningGroup} onClick={handleJoinGroup}>Check</Btn>
-        </div>
-        {joinError && <div style={{ fontSize: 11, color: COLORS.danger, marginBottom: 10 }}>{joinError}</div>}
-        {groups.length === 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: `0 0 ${SPACE.xs}px`, textAlign: "center" }}>
-            <EmptyArt variant="grid" width={128} height={72} />
-            <div style={{ fontSize: 12, color: COLORS.faint, maxWidth: 340, lineHeight: 1.6 }}>
-              No study groups yet. Create one and hand the code to your batchmates — every group gets its own leaderboard.
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-            {groups.map(g => {
-              const roster = groupRoster[g.code] || { memberCodes: [], rows: [] };
-              const gRows = roster.rows.map(r => {
-                const stale = r.date !== todayStr();
-                return { code: r.code, name: r.name, minutes: stale ? 0 : (r.minutes || 0), streak: r.streak || 0, stale };
-              });
-              if (!gRows.some(r => r.code === profile.code)) {
-                gRows.push({ code: profile.code, name: profile.name, minutes: todayMin, streak: myStreak, stale: false });
-              }
-              gRows.sort((a, b) => b.minutes - a.minutes);
-              const gTop = gRows.slice(0, 3);
-              const youInTop = gTop.some(r => r.code === profile.code);
-              const gLeaderMin = gRows[0]?.minutes || 0;
-              const avatars = gRows.slice(0, 4);
-              return (
-                <div key={g.code} className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: 18, position: "relative", overflow: "hidden" }}>
-                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: COLORS.ink }} />
-                  <div style={{ ...between(), marginBottom: 12 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 10, background: `radial-gradient(80px 40px at 50% -20%, ${COLORS.inkGlow}, transparent 70%), ${COLORS.panel2}`, border: `1px solid ${hexToRgba(COLORS.ink, 0.4)}`, ...center() }}>
-                      <Award size={15} color={COLORS.ink} />
-                    </div>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", color: COLORS.done, background: hexToRgba(COLORS.done, 0.12), border: `1px solid ${hexToRgba(COLORS.done, 0.3)}`, padding: "3px 7px", borderRadius: RADIUS.badge }}>JOINED</div>
-                  </div>
-                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: FONTS.display, color: COLORS.text }}>{g.name}</div>
-                  <div style={{ ...row(8), marginTop: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.faint, letterSpacing: "0.08em", background: COLORS.panel2, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.badge, padding: "3px 8px" }}>{g.code}</span>
-                    <button onClick={() => copyText(g.code, (v) => setCopiedGroup(v ? g.code : ""))} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 600, color: COLORS.dim, background: "transparent", border: "none", cursor: "pointer", padding: 3 }}>
-                      <Copy size={11} /> {copiedGroup === g.code ? "Copied" : "Copy code"}
-                    </button>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
-                    <div style={{ ...row(5), fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>
-                      <TrendingUp size={11} color={COLORS.ink} /> Today's focus
-                    </div>
-                    <div style={{ ...row(2), alignItems: "center" }}>
-                      {avatars.map((m, i) => (
-                        <div key={m.code + i} title={seatName(m.name)} style={{ width: 22, height: 22, borderRadius: "50%", ...center(), fontFamily: FONTS.mono, fontSize: 9, fontWeight: 600, color: COLORS.bg, background: m.code === profile.code ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` : `linear-gradient(150deg, ${COLORS.faint}, ${darken(COLORS.faint, 20)})`, border: `2px solid ${COLORS.panel2}`, boxSizing: "border-box" }}>
-                          {initialsOf(m.name)}
-                        </div>
-                      ))}
-                      <span style={{ fontSize: 10.5, color: COLORS.dim, fontWeight: 600, marginLeft: 3 }}>{roster.memberCodes.length}</span>
-                    </div>
-                  </div>
-
-                  {gRows.some(r => r.minutes > 0) ? (
-                    <div style={{ marginTop: 8 }}>
-                      {gTop.map((m, i) => {
-                        const medal = RANK_COLORS[i];
-                        const self = m.code === profile.code;
-                        return (
-                          <div key={m.code} className="lg-row" style={{ ...row(8), padding: "6px 8px", borderRadius: 6 }}>
-                            <span style={{ fontFamily: FONTS.mono, fontSize: 10, fontWeight: i === 0 ? 700 : 600, color: medal, width: 13, textAlign: "center" }}>{i + 1}</span>
-                            <span style={{ width: 22, height: 22, borderRadius: 7, ...center(), fontFamily: FONTS.display, fontWeight: 600, fontSize: 10, color: COLORS.bg, background: self ? `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` : `linear-gradient(150deg, ${medal}, ${darken(medal, 22)})` }}>{initialsOf(m.name)}</span>
-                            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: self ? COLORS.ink : COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {seatName(m.name)}
-                            </span>
-                            <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, fontWeight: 600, color: COLORS.text }}>{fmtMin(m.minutes)}</span>
-                          </div>
-                        );
-                      })}
-                      {!youInTop && (
-                        <div className="lg-row" style={{ ...row(8), padding: "6px 8px", borderTop: `1px dashed ${COLORS.border}` }}>
-                          <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: COLORS.faint, width: 13, textAlign: "center" }}>…</span>
-                          <span style={{ width: 22, height: 22, borderRadius: 7, ...center(), fontFamily: FONTS.mono, fontWeight: 600, fontSize: 10, color: COLORS.bg, background: `linear-gradient(150deg, ${COLORS.ink}, ${darken(COLORS.ink, 22)})` }}>{initialsOf(profile.name)}</span>
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: COLORS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>you</span>
-                          <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, fontWeight: 600, color: COLORS.text }}>{fmtMin(todayMin)}</span>
-                        </div>
-                      )}
-                      <div style={{ height: 3, background: hexToRgba(COLORS.text, 0.1), borderRadius: 2, marginTop: 8, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${gLeaderMin > 0 ? 100 : 0}%`, background: `linear-gradient(90deg, ${darken(COLORS.ink, 25)}, ${COLORS.ink})` }} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 0 4px", textAlign: "center" }}>
-                      <EmptyArt variant="ring" width={104} height={56} />
-                      <div style={{ fontSize: 11, color: COLORS.faint, lineHeight: 1.5 }}>No focus logged in this group today yet.</div>
-                    </div>
-                  )}
-
-                  <div style={{ ...row(8), marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
-                    <Btn variant="danger" style={{ padding: "5px 10px", fontSize: 11.5 }} onClick={() => onLeaveGroup(g.code)}>Leave</Btn>
-                    <div style={{ fontSize: 10.5, color: COLORS.faint }}>Codes are real room keys — anyone with it can join.</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 14 }}>
-          Group boards read only the members' published rows — name, today's focus minutes, and streak. Nothing else about accounts is exposed.
-        </div>
-      </Card>
-
-      {/* STREAK RAIL — longest real streaks in your circle */}
-      <Card title="Streak leaders" right={<div style={{ fontSize: 10, color: COLORS.faint, ...row(5) }}><Flame size={11} color={COLORS.warn} /> longest burns in your circle</div>}>
-        {streakLeaders.length === 0 ? (
-          <div style={{ fontSize: 12, color: COLORS.faint }}>No streaks yet in your circle — your own run starts the moment you log a second consecutive day.</div>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {streakLeaders.map((p, i) => (
-              <div key={p.code} style={{ ...row(8), padding: "8px 12px", borderRadius: RADIUS.control, background: COLORS.glassFill, border: `1px solid ${COLORS.border}` }}>
-                <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: i === 0 ? COLORS.warn : COLORS.faint, fontWeight: 600 }}>#{i + 1}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>{seatName(p.name)}</span>
-                <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.warn, fontWeight: 600 }}>{p.streak}d</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* INVITE A PEER — add real codes from the shared table */}
-      <Card title="Grow your circle" right={<div style={{ fontSize: 10, color: COLORS.faint }}>peer codes, not friend requests</div>}>
-        <div style={{ display: "flex", gap: 8 }}>
-           <Input placeholder="Enter a peer code" value={codeInput} onChange={e => setCodeInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addPeer()} />
-          <Btn variant="ink" onClick={addPeer}><Plus size={14} /> Add</Btn>
-        </div>
-        {peers.length > 0 && (
-          <div className="lg-card" style={{ marginTop: 12, borderRadius: RADIUS.control, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
-            {peers.map((c, i, arr) => {
-              const d = peerData[c];
-              return (
-                <div key={c} className="lg-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: i < arr.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
-                  <Users size={13} color={COLORS.ink} />
-                  <span style={{ fontFamily: FONTS.mono, fontSize: 12.5, color: COLORS.text, letterSpacing: "0.06em" }}>{c}</span>
-                  <span style={{ flex: 1, fontSize: 11, color: d ? COLORS.dim : COLORS.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {d ? `${d.name} · synced ${d.date === todayStr() ? "today" : d.date}` : "pending first sync…"}
-                  </span>
-                  <Trash2 size={12} color={COLORS.faint} style={{ cursor: "pointer" }} onClick={() => removePeer(c)} />
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 10 }}>
-          Peers see only what's published to the shared table — name, today's focus minutes, and streak. Nothing else about your account is exposed.
-        </div>
       </Card>
     </div>
   );
@@ -5234,36 +4481,6 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
     reader.readAsText(file);
   };
 
-  // Single compact switch, reused by every settings toggle.
-  const Toggle = ({ checked, onChange }) => (
-    <label className="lg-switch" style={{ position: "relative", display: "inline-block", width: 40, height: 22, flexShrink: 0, cursor: "pointer" }}>
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ opacity: 0, width: 0, height: 0, position: "absolute" }} />
-      <span style={{ position: "absolute", inset: 0, borderRadius: 999, background: checked ? COLORS.ink : COLORS.panel2, border: checked ? "1px solid transparent" : `1px solid ${COLORS.border}`, boxShadow: checked ? "inset 0 1px 0 rgba(255,255,255,0.2)" : "inset 0 1px 2px rgba(0,0,0,0.3)", transition: "background 0.16s ease-out, border-color 0.16s ease-out" }} />
-      <span style={{ position: "absolute", top: 3, left: checked ? 23 : 3, width: 14, height: 14, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.35)", transition: "left 0.18s cubic-bezier(0.2,0.8,0.2,1)" }} />
-    </label>
-  );
-
-  // Row + panel primitives — same language as the rest of the app.
-  const Row = ({ title, sub, children, warn, first, style }) => (
-    <div className="lg-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 18px", flexWrap: "wrap", borderTop: first ? "none" : `1px solid ${COLORS.border}`, ...style }}>
-      <div style={{ flex: "1 1 200px", minWidth: 200 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: warn ? hexToRgba(COLORS.danger, 0.9) : COLORS.text }}>{title}</div>
-        {sub && <div style={{ fontSize: 10.5, color: COLORS.faint, marginTop: 2, lineHeight: 1.5, maxWidth: 440 }}>{sub}</div>}
-      </div>
-      {children}
-    </div>
-  );
-
-  const Panel = ({ title, sub, children, danger }) => (
-    <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${danger ? hexToRgba(COLORS.danger, 0.24) : COLORS.border}`, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
-        <span className="sys" style={{ fontSize: 9.5, letterSpacing: "0.22em", color: danger ? hexToRgba(COLORS.danger, 0.9) : COLORS.dim }}>{title}</span>
-        {sub && <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.faint }}>{sub}</span>}
-      </div>
-      {children}
-    </div>
-  );
-
   // Subject list — same chip language as the Coverage tabs, plus reorder.
   const moveSubject = (i, dir) => {
     const next = [...profile.subjects];
@@ -5349,7 +4566,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
         <div style={{ flex: "1 1 440px", maxWidth: 720, minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
 
           {cat === "profile" && (
-            <Panel title="Identity" sub="Shown across your app">
+            <Panel n="01" title="Identity" sub="Shown across your app">
               <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", flexWrap: "wrap" }}>
                 <div style={{ ...center(), width: 46, height: 46, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(150deg, ${hexToRgba(COLORS.ink, 0.22)}, ${COLORS.panel2})`, border: `1px solid ${hexToRgba(COLORS.ink, 0.45)}`, boxShadow: `0 2px 10px ${hexToRgba(COLORS.ink, 0.18)}` }}>
                   <span style={{ fontFamily: FONTS.mono, fontSize: 15, fontWeight: 700, color: COLORS.text }}>{initials}</span>
@@ -5394,7 +4611,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 
           {cat === "study" && (
             <>
-              <Panel title="Study plan" sub="Drives the studied bar on Home">
+              <Panel n="01" title="Study plan" sub="Drives the studied bar on Home">
                 <Row title="Daily study goal" sub="How many hours a day you're committing to." first>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 200px", maxWidth: 280 }}>
                     <Input type="number" min={0} max={24} step={0.5} value={settings.goalMin / 60}
@@ -5413,7 +4630,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                 </Row>
               </Panel>
 
-              <Panel title="Subjects" sub="Reordered, renamed, pruned">
+              <Panel n="02" title="Subjects" sub="Reordered, renamed, pruned">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "14px 18px 8px" }}>
                   {(profile.subjects || []).map((s, i) => (
                     <div key={s} style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 30, padding: "0 5px 0 11px", borderRadius: 7, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.border}` }}>
@@ -5440,7 +4657,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                 {subjMsg && <div style={{ fontSize: 11, color: COLORS.dim, padding: "0 18px 12px" }}>{subjMsg}</div>}
               </Panel>
 
-              <Panel title="Focus timer" sub="Optional floating badge">
+              <Panel n="03" title="Focus timer" sub="Optional floating badge">
                 <Row title="Floating timer badge" sub="Shows a small draggable badge with the running time when you leave Deep Work for another section of Ledger." first>
                   <Toggle checked={settings.floatingTimer !== false} onChange={v => setSettings(s => ({ ...s, floatingTimer: v }))} />
                 </Row>
@@ -5455,7 +4672,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
           )}
 
           {cat === "notify" && (
-            <Panel title="Notifications" sub="Quiet nudges, no alerts">
+            <Panel n="01" title="Notifications" sub="Quiet nudges, no alerts">
               <Row title="Focus session reminders" sub="Lets you know when a focus session ends." first>
                 <Toggle checked={settings.reminders.study} onChange={v => setSettings(s => ({ ...s, reminders: { ...s.reminders, study: v } }))} />
               </Row>
@@ -5473,7 +4690,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 
           {cat === "appearance" && (
             <>
-              <Panel title="Appearance" sub="One system, kept calm">
+              <Panel n="01" title="Appearance" sub="One system, kept calm">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, padding: "14px 18px" }}>
                   {Object.entries(THEME_PRESETS).map(([id, preset]) => {
                     const active = normalizeTheme(settings.theme) === id;
@@ -5495,7 +4712,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                   </div>
                 </Row>
               </Panel>
-              <Panel title="Typography" sub="The voice of your study OS">
+              <Panel n="02" title="Typography" sub="The voice of your study OS">
                 <div style={{ padding: "16px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
 <div className="sys" style={{ color: COLORS.accentFocus }}>TYPOGRAPHY PREVIEW</div>
                   <div className="t-display" style={{ color: COLORS.text, marginTop: 12 }}>Aa</div>
@@ -5522,7 +4739,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
           )}
 
           {cat === "wallpaper" && (
-            <Panel title="Wallpaper" sub="The backdrop behind everything">
+            <Panel n="01" title="Wallpaper" sub="The backdrop behind everything">
               <input id="ledger-wallpaper-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleWallpaperUpload} style={{ display: "none" }} />
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: 14 }}>
                 {[{ id: "nebula", label: "Nebula" }, { id: "black", label: "Black" }, { id: "custom", label: "Custom" }].map(w => <button key={w.id} aria-pressed={settings.wallpaper === w.id} onClick={() => setSettings(s => ({ ...s, wallpaper: w.id }))} style={{ padding: 10, borderRadius: 8, cursor: "pointer", color: COLORS.text, background: settings.wallpaper === w.id ? hexToRgba(COLORS.accentFocus, 0.12) : "transparent", border: `1px solid ${settings.wallpaper === w.id ? COLORS.accentFocus : COLORS.border}` }}>{w.label}</button>)}
@@ -5532,7 +4749,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
           )}
 
           {cat === "clock" && (
-            <Panel title="Clock" sub="The big time on Home">
+            <Panel n="01" title="Clock" sub="The big time on Home">
               <Row title="Style" sub="Digital, analog, flip or minimal." first>
                 <div className="lg-seg">{["digital", "analog", "flip", "minimal"].map(v => <button key={v} className={settings.clockStyle === v ? "lg-seg-item active" : "lg-seg-item"} onClick={() => setSettings(s => ({ ...s, clockStyle: v }))}>{v[0].toUpperCase() + v.slice(1)}</button>)}</div>
               </Row>
@@ -5540,11 +4757,11 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
             </Panel>
           )}
 
-          {cat === "sound" && <Panel title="Sound" sub="Quiet feedback"><Row title="Session-logged pulse" sub="A short tick when a session is recorded." first><Toggle checked={settings.sound?.ringPulse !== false} onChange={v => setSettings(s => ({ ...s, sound: { ...s.sound, ringPulse: v } }))} /></Row></Panel>}
+          {cat === "sound" && <Panel n="01" title="Sound" sub="Quiet feedback"><Row title="Session-logged pulse" sub="A short tick when a session is recorded." first><Toggle checked={settings.sound?.ringPulse !== false} onChange={v => setSettings(s => ({ ...s, sound: { ...s.sound, ringPulse: v } }))} /></Row></Panel>}
 
           {cat === "sync" && (
             <>
-              <Panel title="Sync" sub="Supabase, in real time">
+              <Panel n="01" title="Sync" sub="Supabase, in real time">
                 <Row title="Sync status" sub="Every change is written to your account automatically. This pulls the latest state back down." first>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
                     <span className="lg-statusdot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.done, boxShadow: `0 0 0 3px ${hexToRgba(COLORS.done, 0.12)}` }} />
@@ -5553,7 +4770,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                   </div>
                 </Row>
               </Panel>
-              <Panel title="Export & restore" sub="JSON, scoped to your account">
+              <Panel n="02" title="Export & restore" sub="JSON, scoped to your account">
                 <div className="lg-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "13px 18px" }}>
                   <Btn variant="ghost" onClick={exportData}><Download size={14} /> Export all data (JSON)</Btn>
                   <input id="ledger-import-input" type="file" accept="application/json" onChange={handleImportFile} style={{ display: "none" }} />
@@ -5570,7 +4787,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 
           {cat === "account" && (
             <>
-              <Panel title="Signed in">
+              <Panel n="01" title="Signed in">
                 <Row title="Email" sub="The address your magic link is sent to." first>
                   <span style={{ fontFamily: FONTS.mono, fontSize: 12, color: COLORS.dim }}>{email || "—"}</span>
                 </Row>
@@ -5589,7 +4806,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 
           {cat === "danger" && (
             <>
-              <Panel title="Danger zone" sub="Irreversible" danger>
+              <Panel n="01" title="Danger zone" sub="Irreversible" danger>
                 <div style={{ fontSize: 11, color: COLORS.faint, padding: "13px 18px", borderBottom: `1px solid ${COLORS.border}`, lineHeight: 1.6 }}>
                   Both of these wipe tracked study data. Your identity, subject list, appearance and email are kept.
                 </div>
