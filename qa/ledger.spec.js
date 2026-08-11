@@ -494,6 +494,30 @@ test("typography: presets and font roles update the live preview", async ({ page
   await expect.poll(async () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-display"))).toMatch(/Manrope/);
 });
 
+test("profile: account command center shows real identity, metrics and actions; closes on Escape/outside click", async ({ page }) => {
+  const trigger = page.getByRole("button", { name: "Account" });
+  await trigger.click();
+  const panel = page.getByRole("dialog", { name: "Profile" });
+  await expect(panel).toBeVisible();
+  // Identity + real-data sections
+  await expect(panel.getByText("CURRENT STREAK", { exact: true })).toBeVisible();
+  await expect(panel.getByText("THIS WEEK", { exact: true })).toBeVisible();
+  await expect(panel.getByText("ACCOUNT", { exact: true })).toBeVisible();
+  // Actions
+  await expect(panel.getByRole("menuitem", { name: "Edit profile" })).toBeVisible();
+  await expect(panel.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+  await expect(panel.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+  // Escape closes and focus returns to the trigger
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  // Outside click closes
+  await trigger.click();
+  await expect(panel).toBeVisible();
+  await page.mouse.click(700, 300);
+  await expect(panel).toHaveCount(0);
+});
+
 test("stories: opens a real 9:16 preview and switches recap/template", async ({ page }) => {
   await page.getByRole("button", { name: "Share today's Ledger Story" }).click();
   await expect(page.getByRole("dialog", { name: "Ledger Stories" })).toBeVisible();

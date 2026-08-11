@@ -28,9 +28,17 @@ export const COLORS = {
   canvas: "", sunken: "", overlay: "", railBg: "", atmosphere: "", onAccent: "",
   shadowRaised: "", shadowFloating: "", shadowOverlay: "",
 };
-export const FONTS = { display: "'Inter', sans-serif", body: "'Inter', sans-serif", mono: "'JetBrains Mono', monospace" };
+export const FONTS = {
+  display: "'Fraunces', Georgia, serif",
+  body: "'Instrument Sans', system-ui, sans-serif",
+  mono: "'JetBrains Mono', ui-monospace, monospace",
+};
 
 export const FONT_CATALOG = {
+  // Display role — an editorial serif with an optical-size axis (9…144).
+  // The default voice: Fraunces carries the "Ledger" book identity in the
+  // capped weights we actually ship (500/600/700); no extra weights loaded.
+  "Fraunces": { family: "Fraunces", fallback: "serif", weights: [500, 600, 700], optical: true },
   "Inter": { family: "Inter", fallback: "sans-serif", weights: [400, 500, 600, 700, 800] },
   "Manrope": { family: "Manrope", fallback: "sans-serif", weights: [400, 500, 600, 700, 800] },
   "Plus Jakarta Sans": { family: "Plus Jakarta Sans", fallback: "sans-serif", weights: [400, 500, 600, 700, 800] },
@@ -41,15 +49,24 @@ export const FONT_CATALOG = {
   "JetBrains Mono": { family: "JetBrains Mono", fallback: "monospace", weights: [400, 500, 600, 700] },
   "IBM Plex Mono": { family: "IBM Plex Mono", fallback: "monospace", weights: [400, 500, 600, 700] },
   "Geist Mono": { family: "Geist Mono", fallback: "monospace", weights: [400, 500, 600, 700] },
+  // Characterful display/mono voices — pixel-arcade (Minecraft), dot-matrix
+  // (Nothing), CRT terminal and structural mono. Single-weight families stay
+  // honest: one 400 in the request, no faux-bold in the UI.
+  "Press Start 2P": { family: "Press Start 2P", fallback: "monospace", weights: [400], note: "Arcade pixel · Minecraft-style" },
+  "DotGothic16": { family: "DotGothic16", fallback: "monospace", weights: [400], note: "Dot matrix · Nothing-style" },
+  "VT323": { family: "VT323", fallback: "monospace", weights: [400], note: "CRT terminal" },
+  "Space Mono": { family: "Space Mono", fallback: "monospace", weights: [400, 700], note: "Technical mono" },
 };
 
 export const TYPOGRAPHY_PRESETS = {
-  ledger: { label: "Ledger", sub: "Balanced default", display: "Space Grotesk", body: "Inter", mono: "JetBrains Mono", headingWeight: 700, bodyWeight: 400, uiWeight: 600, scale: 1, tracking: "-0.025em" },
-  editorial: { label: "Editorial", sub: "Quietly expressive", display: "Manrope", body: "DM Sans", mono: "IBM Plex Mono", headingWeight: 700, bodyWeight: 400, uiWeight: 600, scale: 1.04, tracking: "-0.04em" },
+  ledger: { label: "Ledger", sub: "Editorial academic default", display: "Fraunces", body: "Instrument Sans", mono: "JetBrains Mono", headingWeight: 700, bodyWeight: 400, uiWeight: 600, scale: 1, tracking: "-0.02em" },
+  editorial: { label: "Editorial", sub: "Quietly expressive", display: "Fraunces", body: "DM Sans", mono: "IBM Plex Mono", headingWeight: 700, bodyWeight: 400, uiWeight: 600, scale: 1.04, tracking: "-0.04em" },
   technical: { label: "Technical", sub: "Geometric and exact", display: "Space Grotesk", body: "IBM Plex Sans", mono: "IBM Plex Mono", headingWeight: 600, bodyWeight: 400, uiWeight: 600, scale: 0.98, tracking: "-0.018em" },
   minimal: { label: "Minimal", sub: "Quiet hierarchy", display: "Inter", body: "Inter", mono: "JetBrains Mono", headingWeight: 600, bodyWeight: 400, uiWeight: 500, scale: 0.98, tracking: "-0.02em" },
   terminal: { label: "Terminal", sub: "Monospace-led", display: "IBM Plex Mono", body: "IBM Plex Mono", mono: "IBM Plex Mono", headingWeight: 600, bodyWeight: 400, uiWeight: 500, scale: 0.96, tracking: "-0.01em" },
   compact: { label: "Compact", sub: "More signal per line", display: "DM Sans", body: "DM Sans", mono: "Geist Mono", headingWeight: 700, bodyWeight: 400, uiWeight: 600, scale: 0.92, tracking: "-0.025em" },
+  pixel: { label: "Pixel", sub: "Arcade blocks", display: "Press Start 2P", body: "Space Grotesk", mono: "VT323", headingWeight: 400, bodyWeight: 400, uiWeight: 500, scale: 0.9, tracking: "-0.02em" },
+  dotmatrix: { label: "Dot Matrix", sub: "Nothing punk-terminal", display: "DotGothic16", body: "Space Mono", mono: "DotGothic16", headingWeight: 400, bodyWeight: 400, uiWeight: 600, scale: 0.95, tracking: "-0.02em" },
 };
 
 const fontStack = (name) => {
@@ -57,10 +74,18 @@ const fontStack = (name) => {
   return `'${font.family}', ${font.fallback}`;
 };
 
+// One Google Fonts request for the active trio, whatever roles they fill.
+// Fraunces ships its optical-size axis (9…144) because display sizes want the
+// fine-cut small-optical glyphs; every other family stays wght-only.
+const familyQuery = (font) => {
+  if (font.optical) return `${font.family.replace(/ /g, "+")}:opsz,wght@9..144,${font.weights.join(";9..144,")}`;
+  return `${font.family.replace(/ /g, "+")}:wght@${font.weights.join(";")}`;
+};
+
 function activeFontImport(fonts) {
   const families = [...new Set(fonts.map(name => FONT_CATALOG[name]).filter(Boolean))];
   if (families.length === 0) return "";
-  const query = families.map(font => `${font.family.replace(/ /g, "+")}:wght@${font.weights.join(";")}`).join("&family=");
+  const query = families.map(familyQuery).join("&family=");
   return `@import url('https://fonts.googleapis.com/css2?family=${query}&display=swap');`;
 }
 
@@ -255,7 +280,6 @@ export const THEME_PRESETS = {
     chart: ["#C8EF4C", "#8CE0D0", "#7EE8A8", "#E0B268", "#F0685E"],
     focus: "#D6F46A", selection: "rgba(200,239,76,0.26)",
     countdown: "#F26A5E",
-    focus: "#D6F46A", selection: "rgba(200,239,76,0.26)",
   },
 };
 
@@ -356,7 +380,13 @@ export function applyTheme(themeId, opts = {}) {
   const display = typography.display || typographyPreset.display;
   const body = typography.body || typographyPreset.body;
   const mono = typography.mono || typographyPreset.mono;
-  Object.assign(FONTS, { display: fontStack(display), body: fontStack(body), mono: fontStack(mono) });
+  Object.assign(FONTS, {
+    display: fontStack(display),
+    body: fontStack(body),
+    mono: fontStack(mono),
+    ui: fontStack(body),   // semantic alias: interface text
+    data: fontStack(mono), // semantic alias: metrics/readouts
+  });
   FONT_IMPORT = activeFontImport([display, body, mono]);
   COLORS.typography = {
     display: typographyPreset,
@@ -526,9 +556,14 @@ html, body { overflow-x: hidden; width: 100%; min-height: 100%; }
   --fs-clock: clamp(30px, 4.4vw, 60px);
   --fs-num: clamp(24px, 3.2vw, 38px);
    --fs-title: clamp(18px, 2.4vw, 28px);
+   /* Typography roles — three voices, one system. --font-ui and --font-data
+     are semantic aliases of the body/mono roles; components consume roles,
+     never raw families. */
    --font-display: ${FONTS.display};
    --font-body: ${FONTS.body};
    --font-mono: ${FONTS.mono};
+   --font-ui: ${FONTS.body};
+   --font-data: ${FONTS.mono};
    --text-xs: ${Math.round(10 * typography.scale)}px;
    --text-sm: ${Math.round(12 * typography.scale)}px;
    --text-md: ${Math.round(14 * typography.scale)}px;
@@ -536,10 +571,20 @@ html, body { overflow-x: hidden; width: 100%; min-height: 100%; }
    --text-xl: ${Math.round(24 * typography.scale)}px;
    --text-2xl: ${Math.round(32 * typography.scale)}px;
    --text-display: ${Math.round(48 * typography.scale)}px;
+   /* Fluid display scale — editorial headings breathe with the viewport and
+      clamp so they never overflow a phone. */
+   --text-display-xl: clamp(${Math.round(44 * typography.scale)}px, 6.5vw, ${Math.round(84 * typography.scale)}px);
+   --text-display-lg: clamp(${Math.round(34 * typography.scale)}px, 5vw, ${Math.round(58 * typography.scale)}px);
+   --text-heading-xl: clamp(${Math.round(26 * typography.scale)}px, 4vw, ${Math.round(40 * typography.scale)}px);
+   --text-heading-lg: clamp(${Math.round(21 * typography.scale)}px, 3vw, ${Math.round(30 * typography.scale)}px);
+   --text-heading-md: clamp(${Math.round(17 * typography.scale)}px, 2.2vw, ${Math.round(21 * typography.scale)}px);
+   --text-data-xl: clamp(${Math.round(26 * typography.scale)}px, 3.4vw, ${Math.round(42 * typography.scale)}px);
+   --text-data-lg: clamp(${Math.round(19 * typography.scale)}px, 2.4vw, ${Math.round(27 * typography.scale)}px);
+   --text-data-md: clamp(${Math.round(15 * typography.scale)}px, 1.8vw, ${Math.round(18 * typography.scale)}px);
    --leading-tight: 1.08;
    --leading-normal: 1.45;
    --leading-relaxed: 1.65;
-   --tracking-label: 0.16em;
+   --tracking-label: 0.14em;
    --tracking-body: 0.005em;
    --tracking-display: ${typography.tracking};
    --weight-normal: ${typography.bodyWeight};
@@ -571,31 +616,43 @@ body {
 }
 ::selection { background: ${COLORS.selection}; color: ${COLORS.text}; }
 
-/* Numerals across the whole app use tabular mono — the system look. */
+/* Numerals across the whole app use the tabular data role — digits align in
+   every readout, timer and table. */
 .num {
-  font-family: ${FONTS.mono};
+  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
-/* System micro-label — tiny uppercase metadata, the Caelestia staple. */
+/* System micro-label — tiny uppercase metadata, the Caelestia staple. The
+   tracking is controlled (0.14em), never the 0.2em AI-dashboard cliché. */
 .sys {
-  font-family: ${FONTS.mono};
-  font-size: 9px; font-weight: 600; letter-spacing: 0.16em;
+  font-family: var(--font-data);
+  font-size: 9px; font-weight: 600; letter-spacing: var(--tracking-label);
   text-transform: uppercase; color: ${COLORS.faint};
   line-height: 1.1;
 }
 
 /* Type scale — the hierarchy, named once:
-   display → headline → title → body → label(sys) → caption → meta.
-   These are the canonical roles; .sys/.num remain the shorthand helpers. */
-.t-display { font-family: ${FONTS.display}; font-weight: 600; letter-spacing: -0.035em; line-height: 0.92; color: ${COLORS.text}; }
-.t-headline { font-family: ${FONTS.display}; font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; color: ${COLORS.text}; }
-.t-title { font-family: ${FONTS.body}; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; color: ${COLORS.text}; }
-.t-body { font-family: ${FONTS.body}; font-weight: 400; font-size: 13px; line-height: 1.55; color: ${COLORS.dim}; }
-.t-caption { font-family: ${FONTS.body}; font-weight: 400; font-size: 11.5px; line-height: 1.5; color: ${COLORS.dim}; }
-.t-meta { font-family: ${FONTS.mono}; font-size: 10px; font-weight: 500; letter-spacing: 0.06em; color: ${COLORS.faint}; }
-.t-num { font-family: ${FONTS.mono}; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: ${COLORS.text}; }
+   display → headline → title → body → label(sys) → caption → meta → data.
+   These are the canonical roles; .sys/.num remain the shorthand helpers.
+   Every step reads its size from the fluid tokens above, so the scale moves
+   with the typography preset and never hard-codes an orphan size. */
+.t-display { font-family: var(--font-display); font-size: var(--text-display-xl); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-display); line-height: 0.98; color: var(--text-primary); }
+.t-display-lg { font-family: var(--font-display); font-size: var(--text-display-lg); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-display); line-height: 1; color: var(--text-primary); }
+.t-headline { font-family: var(--font-display); font-size: var(--text-heading-xl); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-display); line-height: 1.06; color: var(--text-primary); }
+.t-heading-lg { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-display); line-height: 1.1; color: var(--text-primary); }
+.t-heading-md { font-family: var(--font-ui); font-size: var(--text-heading-md); font-weight: var(--weight-semibold); letter-spacing: -0.01em; line-height: 1.25; color: var(--text-primary); }
+.t-title { font-family: var(--font-ui); font-size: var(--text-lg); font-weight: var(--weight-semibold); letter-spacing: -0.01em; line-height: 1.25; color: var(--text-primary); }
+.t-body { font-family: var(--font-ui); font-weight: var(--weight-normal); font-size: var(--text-md); line-height: 1.6; color: var(--text-secondary); }
+.t-body-sm { font-family: var(--font-ui); font-weight: var(--weight-normal); font-size: var(--text-sm); line-height: 1.55; color: var(--text-secondary); }
+.t-caption { font-family: var(--font-ui); font-weight: var(--weight-normal); font-size: ${Math.round(11.5 * typography.scale)}px; line-height: 1.5; color: var(--text-secondary); }
+.t-label { font-family: var(--font-ui); font-size: var(--text-xs); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-tertiary); line-height: 1.3; }
+.t-meta { font-family: var(--font-data); font-size: var(--text-xs); font-weight: var(--weight-medium); letter-spacing: 0.06em; color: var(--text-tertiary); }
+.t-num { font-family: var(--font-data); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--text-primary); }
+.t-data-xl { font-family: var(--font-data); font-size: var(--text-data-xl); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1; color: var(--text-primary); }
+.t-data-lg { font-family: var(--font-data); font-size: var(--text-data-lg); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; letter-spacing: -0.025em; line-height: 1.05; color: var(--text-primary); }
+.t-data-md { font-family: var(--font-data); font-size: var(--text-data-md); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; letter-spacing: -0.015em; line-height: 1.2; color: var(--text-primary); }
 
 /* Desktop canvas: full-bleed, no floating slab. */
 .lg-shell {
@@ -1301,6 +1358,42 @@ input[type="range"] { accent-color: ${glowC}; cursor: pointer; }
 }
 .lg-pop-item:hover { background: ${COLORS.hoverOverlay}; color: ${COLORS.text}; }
 .lg-pop-item.active { color: ${glowC}; }
+
+/* ---------- Account command center (Sidebar → Profile) ----------
+   Portaled to <body> (never inside the sidebar's stacking context), so it
+   can be a plain fixed-position surface with viewport clamping — no giant
+   z-index arms race, no clipping behind the rail. */
+@keyframes lg-apIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes lg-apOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(6px) scale(0.985); } }
+@keyframes lg-apFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lg-apSpin { to { transform: rotate(360deg); } }
+.lg-ap-panel { animation: lg-apIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.lg-ap-panel.lg-ap-closing { animation: lg-apOut 0.13s ease-out both; }
+.lg-ap-backdrop { position: fixed; inset: 0; background: rgba(4, 6, 10, 0.45); animation: lg-apFade 0.18s ease-out both; }
+.lg-ap-item {
+  font-family: ${FONTS.body};
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px; border-radius: 8px;
+  cursor: pointer; border: none; text-align: left;
+  background: transparent; color: ${COLORS.text};
+  font-size: 12.5px;
+  transition: background 0.14s ease-out, color 0.14s ease-out;
+}
+.lg-ap-item:hover { background: ${COLORS.hoverOverlay}; color: ${COLORS.text}; }
+.lg-ap-item:focus-visible { outline: 2px solid ${glowC}; outline-offset: -2px; }
+.lg-ap-item[aria-disabled="true"] { opacity: 0.55; cursor: default; }
+.lg-ap-item .lg-ap-value { margin-left: auto; color: ${COLORS.faint}; font-family: ${FONTS.mono}; font-size: 10px; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.lg-ap-item.danger { color: ${COLORS.danger}; }
+.lg-ap-item.danger:hover { color: ${COLORS.danger}; background: ${hexToRgba(COLORS.danger, 0.1)}; }
+/* The desktop panel is an anchored fixed surface (left/top set from JS);
+   below 820px it becomes a bottom sheet with safe-area breathing room. */
+@media (max-width: 820px) {
+  .lg-ap-anchor { left: 10px !important; right: 10px !important; top: auto !important; bottom: max(10px, env(safe-area-inset-bottom)) !important; width: auto !important; max-width: none !important; }
+  .lg-ap-panel { max-height: min(78vh, 640px) !important; overflow-y: auto !important; border-radius: 20px 20px 14px 14px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-ap-panel, .lg-ap-backdrop { animation: none !important; }
+}
 
 /* Command-strip cells on Home — quiet, pressable, real numbers. */
 .lg-ws { transition: border-color 0.16s ease-out, background 0.16s ease-out, transform 0.16s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.16s ease-out; }

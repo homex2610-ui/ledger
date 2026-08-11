@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Target, Timer as TimerIcon, BookOpen, Layers, TrendingUp, AlertTriangle,
-  Users, Settings as SettingsIcon, LogOut, Flame, Pin, PinOff
+  Users, Flame, Pin, PinOff
 } from "lucide-react";
 import { COLORS, FONTS, hexToRgba } from "../../lib/theme";
 import { todayStr, fmtMin } from "../../lib/utils";
+import AccountPanel from "./AccountPanel";
 
 // 6 hours/day default focus goal — the "focus ring" reference.
 export const DAILY_GOAL_MIN = 360;
@@ -120,16 +121,25 @@ function ProfileBadge({ initials, streakOn, onClick, expanded, hue = 260 }) {
 
 // The dock rail — a floating icon column. Labels appear on hover; the active
 // tab gets a tiny left tick. Overflow + account live in quiet popovers.
-export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSignOut, notifyRecall = false }) {
+export default function Sidebar({ tab, setTab, profile = {}, sessions = [], settings, stats, email, avatarUrl, onSignOut, notifyRecall = false }) {
   const [open, setOpen] = useState(null); // null | "more" | "account"
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const rootRef = useRef(null);
+  const accountCellRef = useRef(null);
+  const panelElRef = useRef(null);
 
   useEffect(() => {
-    const onDoc = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(null); };
-    const onEsc = (e) => { if (e.key === "Escape") setOpen(null); };
+    // The account panel renders in a portal (document.body), so clicks inside
+    // it land outside the rail. While it's open it owns its dismissal (outside
+    // click + Escape) so it can play its closing animation — the handlers
+    // below stand down for it entirely.
+    const onDoc = (e) => {
+      if (panelElRef.current) return;
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(null);
+    };
+    const onEsc = (e) => { if (e.key === "Escape" && !panelElRef.current) setOpen(null); };
     // Safety net: pressing anywhere outside the rail clears focus from
     // anything inside it, so :focus-within-style expansion can never get
     // stuck (touch taps, pen, or clicking a non-focusable page area).
@@ -156,12 +166,7 @@ export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSi
     .map(w => w[0]).join("").toUpperCase() || "?";
   const hue = nameHue(profile?.name);
 
-  // normalize icon components for the popover list
-  const accountItems = [
-    { id: "settings", label: "Settings", icon: SettingsIcon },
-    { type: "divider" },
-    { id: "signout", label: "Sign out", icon: LogOut },
-  ];
+  const accountOpen = open === "account";
 
   return (
     <div
@@ -190,39 +195,29 @@ export default function Sidebar({ tab, setTab, profile = {}, sessions = [], onSi
           <div className="lg-dock-divider" style={{ width: "72%", height: 1, background: `linear-gradient(90deg, transparent, ${hexToRgba(COLORS.borderStrong, 0.45)} 30%, ${hexToRgba(COLORS.borderStrong, 0.45)} 70%, transparent)`, margin: "8px 0 6px", alignSelf: "center" }} />
           <DockItem n={COMMUNITY} active={tab === COMMUNITY.id} onClick={() => { setTab(COMMUNITY.id); setOpen(null); }} />
 
-          <div title={streak > 0 ? `${streak}-day streak` : "No streak yet"} className="lg-account-cell" style={{ height: 44, flexShrink: 0, display: "flex", alignItems: "center", cursor: "pointer", borderRadius: 10 }} onClick={() => { setOpen(open === "account" ? null : "account"); }}>
-            <ProfileBadge initials={initials} streakOn={streak > 0} expanded={open === "account"} hue={hue} onClick={(e) => { e.stopPropagation(); setOpen(open === "account" ? null : "account"); if (e.detail > 0) e.currentTarget.blur(); }} />
+          <div ref={accountCellRef} title={streak > 0 ? `${streak}-day streak` : "No streak yet"} className="lg-account-cell" style={{ height: 44, flexShrink: 0, display: "flex", alignItems: "center", cursor: "pointer", borderRadius: 10 }} onClick={() => { setOpen(open === "account" ? null : "account"); }}>
+            <ProfileBadge initials={initials} streakOn={streak > 0} expanded={accountOpen} hue={hue} onClick={(e) => { e.stopPropagation(); setOpen(open === "account" ? null : "account"); if (e.detail > 0) e.currentTarget.blur(); }} />
             <span className="dock-label num" style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: FONTS.mono, fontSize: 9.5, letterSpacing: "0.08em", textTransform: "none", color: streak > 0 ? COLORS.accentWarm : COLORS.dim, whiteSpace: "nowrap" }}>
               {streak > 0 && <Flame size={9} strokeWidth={2.5} />}
               {fmtMin(todayMin)}
               <span style={{ color: COLORS.faint, marginLeft: 1 }}>today</span>
             </span>
-            {open === "account" && (
-              <div className="lg-pop" role="menu" onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: "calc(100% + 12px)", bottom: 0, zIndex: 80, minWidth: 196, maxHeight: "min(60vh, 420px)", overflowY: "auto", borderRadius: 12, padding: 6, background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`, boxShadow: `0 18px 44px -18px ${COLORS.shadowStrong}` }}>
-                <div style={{ padding: "8px 10px 7px", borderBottom: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize: 11.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.name || "Student"}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-                    <span className="num" style={{ fontSize: 9, color: COLORS.faint }}>{fmtMin(todayMin)} today · {streak}d streak</span>
-                  </div>
-                </div>
-                {accountItems.map((it, idx) => {
-                  const isActive = !it.type && it.id !== "signout" && tab === it.id;
-                  return it.type === "divider" ? (
-                    <div key={"d" + idx} style={{ height: 1, background: COLORS.border, margin: "6px 8px" }} />
-                  ) : (
-                    <button key={it.id} role="menuitem" aria-current={isActive ? "page" : undefined} className={isActive ? "lg-pop-item active" : "lg-pop-item"}
-                      onClick={(e) => { if (it.id === "signout") onSignOut(); else { setTab(it.id); setOpen(null); } if (e.detail > 0) e.currentTarget.blur(); }}
-                      style={{ color: it.id === "signout" ? COLORS.danger : undefined }}>
-                      <it.icon size={13} color={isActive ? COLORS.accentFocus : (it.id === "signout" ? COLORS.danger : COLORS.faint)} />
-                      <span style={{ letterSpacing: "0.06em" }}>{it.label}</span>
-                      {isActive && <span style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: COLORS.accentFocus }} />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
+
+        <AccountPanel
+          open={accountOpen}
+          onClose={() => setOpen(null)}
+          anchorRef={accountCellRef}
+          onPanelRef={(el) => { panelElRef.current = el; }}
+          profile={profile}
+          stats={stats}
+          settings={settings}
+          email={email}
+          avatarUrl={avatarUrl}
+          onSignOut={onSignOut}
+          onNavigate={(tabId) => { setTab(tabId); setOpen(null); }}
+        />
 
         <button
           className="lg-pin-btn"

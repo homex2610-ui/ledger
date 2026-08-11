@@ -285,7 +285,7 @@ function Card({ title, right, children, style, id }) {
     <div id={id} className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: `${SPACE.lg}px ${SPACE.xl}px`, ...style }}>
       {(title || right) && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SPACE.md }}>
-          {title && <div style={{ fontSize: 10.5, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.dim, fontWeight: 600 }}>{title}</div>}
+          {title && <div className="t-label" style={{ color: COLORS.dim }}>{title}</div>}
           {right}
         </div>
       )}
@@ -304,9 +304,9 @@ function Stat({ label, value, sub, onClick, accent, trend }) {
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
       style={{ borderRadius: RADIUS.control, border: `1px solid ${COLORS.border}`, padding: `${SPACE.md}px ${SPACE.lg}px` }}
     >
-      <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
+      <div className="t-label" style={{ color: COLORS.faint, marginBottom: SPACE.xs + 2 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 23, fontWeight: 600, color: accent || COLORS.text, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{value}</div>
+        <div className="num t-data-lg" style={{ color: accent || COLORS.text }}>{value}</div>
         {trend && (
           <span title="vs the prior period"
             style={{ fontFamily: FONTS.mono, fontSize: 10.5, fontWeight: 700, color: trend.color }}>
@@ -342,8 +342,8 @@ function PageHead({ title, lead, right }) {
 function MiniStat({ k, v, sub, pct, tint }) {
   return (
     <div className="lg-card" style={{ borderRadius: RADIUS.card, border: `1px solid ${COLORS.border}`, padding: "13px 15px", minWidth: 0, position: "relative", overflow: "hidden" }}>
-      <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: COLORS.faint, fontWeight: 600 }}>{k}</div>
-      <div className="num" style={{ fontSize: 22, fontWeight: 700, color: tint || COLORS.text, marginTop: 7, letterSpacing: "-0.02em" }}>{v}</div>
+      <div className="t-label" style={{ color: COLORS.faint }}>{k}</div>
+      <div className="num t-data-lg" style={{ color: tint || COLORS.text, marginTop: 7 }}>{v}</div>
       {sub && <div style={{ fontSize: 10.5, color: COLORS.dim, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>}
       {typeof pct === "number" && (
         <div className="lg-progress" style={{ height: 3, marginTop: 10, borderRadius: 2 }}>
@@ -1151,6 +1151,24 @@ function Workspace({ session }) {
     if (pipOpen && !timerRunning && timerElapsed === 0) closePipWindow();
   }, [pipOpen, timerRunning, timerElapsed]);
 
+  // Profile-panel stats — computed once per data change, all real numbers
+  // derived from stored sessions/syllabus/tasks, never fabricated.
+  const profileStats = useMemo(() => {
+    const weekDates = new Set(Array.from({ length: 7 }, (_, i) => addDays(todayStr(), -i)));
+    const weekSessions = sessions.filter(s => weekDates.has(s.date));
+    const allCh = Object.values(syllabus || {}).flat();
+    const done = allCh.filter(c => c.status === "done" || c.status === "mastered").length;
+    return {
+      streak: computeStreak(sessions),
+      best: longestStreak(sessions),
+      weekSessions: weekSessions.length,
+      weekMin: weekSessions.reduce((a, s) => a + s.minutes, 0),
+      donePct: allCh.length ? Math.round((done / allCh.length) * 100) : 0,
+      xp: computeXP({ sessions, tasks, mocks, syllabus, dpp: dpp || [] }),
+      xpCap: XP_PER_LEVEL,
+    };
+  }, [sessions, tasks, mocks, syllabus, dpp]);
+
   if (!ready) {
     return (
       <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.dim, fontFamily: FONTS.body, padding: 24 }}>
@@ -1213,7 +1231,9 @@ function Workspace({ session }) {
       <style>{globalCss() + focusCss()}</style>
       <WallpaperLayer mode={settings.wallpaper || "nebula"} image={loadWallpaperImage()} />
 
-      <Sidebar tab={tab} setTab={setTab} profile={profile} sessions={sessions} onSignOut={() => supabase.auth.signOut()}
+      <Sidebar tab={tab} setTab={setTab} profile={profile} sessions={sessions} settings={settings} stats={profileStats}
+        email={session?.user?.email || null} avatarUrl={session?.user?.user_metadata?.avatar_url || null}
+        onSignOut={() => supabase.auth.signOut()}
         notifyRecall={settings.recall?.goalDot !== false && dueReviews(syllabus).length > 0} />
 
       <div className="app-main lg-main">
@@ -2122,9 +2142,9 @@ const recommendation = (c) => {
           </div>
         </div>
         <div className="lg-coverage-read" style={{ background: COLORS.panel, padding: "24px 28px", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(180px, 0.75fr)", gap: 28, alignItems: "center" }}>
-          <div><div style={{ color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.2em", marginBottom: 14 }}>THE NEXT READ</div><div style={{ color: COLORS.text, fontFamily: FONTS.display, fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>{reviewsDue > 0 ? `${reviewsDue} review${reviewsDue === 1 ? "" : "s"} need attention` : covDoing > 0 ? `${covDoing} chapter${covDoing === 1 ? " is" : "s are"} in motion` : "Choose your next chapter"}</div><div style={{ color: COLORS.dim, fontSize: 12, lineHeight: 1.6, marginTop: 9, maxWidth: 420 }}>{reviewsDue > 0 ? "Spaced repetition is the shortest route from familiar to retained." : "Use the subject map below to move from intention into a concrete study block."}</div></div>
+<div><div className="sys" style={{ color: COLORS.faint, marginBottom: 14 }}>THE NEXT READ</div><div className="t-heading-lg" style={{ color: COLORS.text }}>{reviewsDue > 0 ? `${reviewsDue} review${reviewsDue === 1 ? "" : "s"} need attention` : covDoing > 0 ? `${covDoing} chapter${covDoing === 1 ? " is" : "s are"} in motion` : "Choose your next chapter"}</div><div className="t-caption" style={{ marginTop: 9, maxWidth: 420 }}>{reviewsDue > 0 ? "Spaced repetition is the shortest route from familiar to retained." : "Use the subject map below to move from intention into a concrete study block."}</div></div>
           <div style={{ borderLeft: `1px solid ${COLORS.border}`, paddingLeft: 24, display: "grid", gap: 13 }}>
-            {[["DONE", covDone, COLORS.done], ["IN FLIGHT", covDoing, COLORS.warn], ["BACKLOG", covTodo, COLORS.faint], ["REVIEW DUE", reviewsDue, reviewsDue ? COLORS.warn : COLORS.faint]].map(([label, value, color]) => <div key={label} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14 }}><span style={{ color: COLORS.faint, fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.12em" }}>{label}</span><span className="num" style={{ color, fontSize: 17, fontWeight: 700 }}>{value}</span></div>)}
+            {[["DONE", covDone, COLORS.done], ["IN FLIGHT", covDoing, COLORS.warn], ["BACKLOG", covTodo, COLORS.faint], ["REVIEW DUE", reviewsDue, reviewsDue ? COLORS.warn : COLORS.faint]].map(([label, value, color]) => <div key={label} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14 }}><span className="t-label" style={{ color: COLORS.faint }}>{label}</span><span className="num t-data-md" style={{ color }}>{value}</span></div>)}
           </div>
         </div>
       </div>
@@ -2677,8 +2697,8 @@ function focusCss() {
 
 /* Segmented filter control — the active pill carries the Focus accent, the
    same inset-marker language as the sidebar's cyan rail. */
-.lg-focus-seg { display: flex; gap: 3; padding: 3px; background: rgba(255,255,255,0.04); border: 1px solid ${COLORS.border}; border-radius: 9px; }
-.lg-focus-seg-btn { padding: 5px 12px; border-radius: 6px; border: none; background: transparent; color: ${COLORS.faint}; font-size: 9.5; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; font-family: ${FONTS.mono}; cursor: pointer; transition: background 0.16s ease-out, color 0.16s ease-out; }
+.lg-focus-seg { display: flex; gap: 3px; padding: 3px; background: rgba(255,255,255,0.04); border: 1px solid ${COLORS.border}; border-radius: 9px; }
+.lg-focus-seg-btn { padding: 5px 12px; border-radius: 6px; border: none; background: transparent; color: ${COLORS.faint}; font-size: 9.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; font-family: ${FONTS.mono}; cursor: pointer; transition: background 0.16s ease-out, color 0.16s ease-out; }
 .lg-focus-seg-btn:hover { color: ${COLORS.dim}; }
 .lg-focus-seg-btn[aria-pressed="true"] { background: ${hexToRgba(COLORS.accentFocus, 0.12)}; color: ${COLORS.accentFocus}; box-shadow: inset 0 -2px 0 ${COLORS.accentFocus}; }
 
@@ -4769,7 +4789,7 @@ function Peers({ profile, peers, setPeers, peerData, sessions, groupDefs, groupR
 
   return (
     <div style={stack(SPACE.xl)}>
-      {groups.length === 0 && <div><h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Welcome to study circles</h2><p style={{ color: COLORS.faint }}>You haven't joined a study circle yet.</p><p style={{ color: COLORS.faint }}>You're in demo mode — sign in to create or join study circles.</p><div style={{ display: "flex", gap: 8 }}><Btn variant="ink" onClick={() => document.getElementById("circle-create-name")?.focus()}>Create study circle</Btn><Btn variant="ghost" onClick={() => document.getElementById("circle-join-code")?.focus()}>Join with code</Btn></div></div>}
+      {groups.length === 0 && <div><h2 className="t-heading-md" style={{ margin: 0, color: COLORS.text }}>Welcome to study circles</h2><p style={{ color: COLORS.faint }}>You haven't joined a study circle yet.</p><p style={{ color: COLORS.faint }}>You're in demo mode — sign in to create or join study circles.</p><div style={{ display: "flex", gap: 8 }}><Btn variant="ink" onClick={() => document.getElementById("circle-create-name")?.focus()}>Create study circle</Btn><Btn variant="ghost" onClick={() => document.getElementById("circle-join-code")?.focus()}>Join with code</Btn></div></div>}
       {/* HERO — your identity + today's live standing, all real numbers */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
         <div style={{ borderRadius: RADIUS.modal, position: "relative", overflow: "hidden", padding: "24px 26px", border: `1px solid ${COLORS.border}`, background: `radial-gradient(620px 200px at 10% -10%, ${hexToRgba(COLORS.ink, 0.1)}, transparent 66%), linear-gradient(170deg, ${hexToRgba(COLORS.panel, 0.82)}, ${hexToRgba(COLORS.panel2, 0.66)})`, backdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, WebkitBackdropFilter: `blur(${COLORS.glassBlur}) saturate(1.16)`, boxShadow: elev("e3") }}>
@@ -5477,11 +5497,11 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
               </Panel>
               <Panel title="Typography" sub="The voice of your study OS">
                 <div style={{ padding: "16px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.18em", color: COLORS.accentFocus }}>TYPOGRAPHY PREVIEW</div>
-                  <div style={{ fontFamily: FONTS.display, fontSize: 34, fontWeight: COLORS.typography?.headingWeight || 700, letterSpacing: COLORS.typography?.tracking || "-0.025em", color: COLORS.text, marginTop: 12 }}>Aa</div>
-                  <div style={{ fontFamily: FONTS.display, fontSize: 17, fontWeight: COLORS.typography?.headingWeight || 700, color: COLORS.text, marginTop: 3 }}>Build consistency.</div>
-                  <div style={{ fontFamily: FONTS.body, fontSize: 12, fontWeight: COLORS.typography?.bodyWeight || 400, color: COLORS.dim, marginTop: 5 }}>Study with intent.</div>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.accentFocus, marginTop: 13 }}>PBCEL3&nbsp;&nbsp; 01:42:18&nbsp;&nbsp; 98%</div>
+<div className="sys" style={{ color: COLORS.accentFocus }}>TYPOGRAPHY PREVIEW</div>
+                  <div className="t-display" style={{ color: COLORS.text, marginTop: 12 }}>Aa</div>
+                  <div className="t-headline" style={{ color: COLORS.text, marginTop: 3 }}>Build consistency.</div>
+                  <div className="t-body" style={{ color: COLORS.dim, marginTop: 5 }}>Study with intent.</div>
+                  <div className="t-meta" style={{ color: COLORS.accentFocus, marginTop: 13 }}>PBCEL3&nbsp;&nbsp; 01:42:18&nbsp;&nbsp; 98%</div>
                 </div>
                 <Row title="Preset" sub="Each preset changes display, body and mono roles.">
                   <div className="lg-seg" role="radiogroup" aria-label="Typography preset">
@@ -5489,7 +5509,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
                   </div>
                 </Row>
                 <Row title="Display font" sub="Used for page titles and editorial headings.">
-                  <SelectBox value={settings.typography?.display || TYPOGRAPHY_PRESETS[settings.typography?.preset || "ledger"].display} onChange={v => setSettings(s => ({ ...s, typography: { ...s.typography, display: v } }))} ariaLabel="Display font" options={Object.keys(FONT_CATALOG).filter(name => FONT_CATALOG[name].fallback === "sans-serif").map(name => ({ value: name, label: name }))} style={{ minWidth: 190 }} />
+                  <SelectBox value={settings.typography?.display || TYPOGRAPHY_PRESETS[settings.typography?.preset || "ledger"].display} onChange={v => setSettings(s => ({ ...s, typography: { ...s.typography, display: v } }))} ariaLabel="Display font" options={Object.keys(FONT_CATALOG).map(name => ({ value: name, label: name }))} style={{ minWidth: 190 }} />
                 </Row>
                 <Row title="Body font" sub="Used for readable copy and controls.">
                   <SelectBox value={settings.typography?.body || TYPOGRAPHY_PRESETS[settings.typography?.preset || "ledger"].body} onChange={v => setSettings(s => ({ ...s, typography: { ...s.typography, body: v } }))} ariaLabel="Body font" options={Object.keys(FONT_CATALOG).filter(name => FONT_CATALOG[name].fallback === "sans-serif").map(name => ({ value: name, label: name }))} style={{ minWidth: 190 }} />
