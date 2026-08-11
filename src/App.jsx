@@ -21,6 +21,7 @@ import { DEFAULT_SYLLABUS, EXAM_SUBJECTS, EXAM_LABELS, examPresetsFor, buildInit
 import { pipSupported, openPipWindow, closePipWindow } from "./lib/pipTimer";
 import { unlockAudio, playTick, playReward, __ledgerAudioState } from "./lib/sounds.js";
 import { validateUpload, fileToDataUrl, loadWallpaperImage, saveWallpaperImage, clearWallpaperImage, extractPalette, clampAccentHex } from "./lib/wallpaper.js";
+import { sendNotification, requestNotifyPermission, notifyPermission, notifyCapable } from "./lib/notify";
 import { computeRingSegments, fmtTotal } from "./lib/ringSegments.js";
 import Sidebar from "./components/layout/Sidebar";
 import { DAILY_GOAL_MIN, FocusRing } from "./components/layout/Sidebar";
@@ -301,7 +302,7 @@ const subjOpts = (subjects) => (subjects || []).map(s => ({ value: s, label: s, 
 const PRIO_OPTS = PRIORITY_ORDER.map(p => ({ value: p, label: PRIORITY_LABEL[p] }));
 
 // Dev-mode hooks for QA harness — only present in dev builds.
-function useDevHooks({ sessions, setSessions }) {
+function useDevHooks({ sessions, setSessions, setSyllabus }) {
   const seededCountRef = useRef(0);
   useEffect(() => {
     const unlock = () => { unlockAudio(); if (!window.__ledgerAudioCtx) window.__ledgerAudioCtx = { state: "running" }; };
@@ -310,6 +311,7 @@ function useDevHooks({ sessions, setSessions }) {
       window.__ledgerWallpaper = { validateUpload, fileToDataUrl, loadWallpaperImage, saveWallpaperImage, clearWallpaperImage, extractPalette, clampAccentHex };
        window.__ledgerSound = { unlockAudio, playTick, playReward, state: () => ({ ...__ledgerAudioState(), ctxState: __ledgerAudioState().ctxState === "none" && window.__ledgerAudioCtx ? window.__ledgerAudioCtx.state : __ledgerAudioState().ctxState, ticks: Math.max(__ledgerAudioState().ticks, seededCountRef.current) }) };
       window.__ledgerSessions = { get: () => sessions, set: setSessions, seed: (rows) => { seededCountRef.current += 1; setSessions(rows); } };
+      window.__ledgerSyllabus = { set: setSyllabus, seed: (syl) => setSyllabus(syl) };
     }
     return () => {
       window.removeEventListener("pointerdown", unlock);
@@ -317,9 +319,10 @@ function useDevHooks({ sessions, setSessions }) {
         delete window.__ledgerWallpaper;
         delete window.__ledgerSound;
         delete window.__ledgerSessions;
+        delete window.__ledgerSyllabus;
       }
     };
-  }, [sessions, setSessions]);
+  }, [sessions, setSessions, setSyllabus]);
 }
 
 // Renamed from the default export: this is the actual app, mounted only
@@ -344,6 +347,28 @@ function Workspace({ session }) {
   }, []);
   useEffect(() => () => { clearTimeout(saveToastTimerRef.current); clearTimeout(saveToastExitRef.current); }, []);
   const { load, save, markLoaded } = useStorage(session, onSaveError);
+  // Reminder notifications: prefer the browser Notification API (no service
+  // worker, no server — only visible while the app is open), and fall back
+  // to a quiet in-app toast when the browser can't or won't show one.
+  const [denyToast, setDenyToast] = useState(null); // { title, body, tag }
+  const [denyToastLeaving, setDenyToastLeaving] = useState(false);
+  const denyToastTimerRef = useRef(null);
+  const denyToastExitRef = useRef(null);
+  const notifyLogRef = useRef([]);
+  const notify = useCallback((title, body, tag) => {
+    const channel = sendNotification(title, body, tag);
+    if (import.meta.env.DEV) notifyLogRef.current.push({ channel, title, body, tag });
+    if (channel === "native") return;
+    setDenyToastLeaving(false);
+    setDenyToast({ title, body, tag });
+    clearTimeout(denyToastTimerRef.current);
+    clearTimeout(denyToastExitRef.current);
+    denyToastTimerRef.current = setTimeout(() => {
+      setDenyToastLeaving(true);
+      denyToastExitRef.current = setTimeout(() => { setDenyToast(null); setDenyToastLeaving(false); }, 180);
+    }, 4500);
+  }, []);
+  useEffect(() => () => { clearTimeout(denyToastTimerRef.current); clearTimeout(denyToastExitRef.current); }, []);
   const [ready, setReady] = useState(false);
   // Dev-only crash seam for the error-boundary e2e: throws during render so
   // the boundary fallback can be exercised. DEV-gated — absent from prod.
@@ -379,7 +404,7 @@ function Workspace({ session }) {
   const [storiesOpen, setStoriesOpen] = useState(false);
   const appRef = useRef(null);
 
-  useDevHooks({ sessions, setSessions });
+  useDevHooks({ sessions, setSessions, setSyllabus });
   useEffect(() => {
     const unlock = () => unlockAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
@@ -684,6 +709,10 @@ function Workspace({ session }) {
   // marks a chapter "doing" at the user's explicit confirmation.
   const logSession = (session) => {
     setSessions(prev => [...prev, session]);
+    if (settings.reminders?.study) {
+      const min = Math.round(session.minutes || 0);
+      notify("Focus session complete", `${min} ${min === 1 ? "minute" : "minutes"}${session.subject ? ` on ${session.subject}` : ""} logged.`, "focus-end");
+    }
     if (session.subject && (syllabus[session.subject] || []).length > 0) setPendingChapterLog({ sessionId: session.id, subject: session.subject });
   };
   const stampChapter = (chapterId, chapterName) => {
@@ -699,6 +728,52 @@ function Workspace({ session }) {
     setPendingChapterLog(null);
   };
   const skipChapterLog = () => setPendingChapterLog(null);
+
+  // Reminder triggers — all client-side, no service worker: they only fire
+  // while the app is open. Each fires at most once per day (ref keyed by
+  // local date), and only when its reminder toggle is on.
+  const lastReviewNudgeRef = useRef("");
+  useEffect(() => {
+    if (!settings.reminders?.review) return;
+    const today = todayStr();
+    if (lastReviewNudgeRef.current === today) return;
+    const due = dueReviews(syllabus);
+    if (due.length === 0) return;
+    lastReviewNudgeRef.current = today;
+    notify("Reviews are due", `${due.length} chapter${due.length === 1 ? "" : "s"} ready in Recall.`, "review-due");
+  }, [syllabus, settings.reminders?.review, notify]);
+
+  const lastTargetNudgeRef = useRef("");
+  const fireDailyTarget = useCallback((ignoreHour = false) => {
+    if (!settings.reminders?.targets) return;
+    const today = todayStr();
+    if (lastTargetNudgeRef.current === today) return;
+    const goal = Number(settings.goalMin) || 360;
+    const todayMin = sessions.filter(s => s.date === today).reduce((a, s) => a + (s.minutes || 0), 0);
+    if (todayMin >= goal) return;
+    if (!ignoreHour) {
+      const [h, m] = String(settings.reminders?.time || "21:00").split(":").map(Number);
+      const now = new Date();
+      if (now.getHours() < h || (now.getHours() === h && now.getMinutes() < m)) return;
+    }
+    lastTargetNudgeRef.current = today;
+    notify("Daily target still open", `${fmtMin(todayMin)} of ${fmtMin(goal)} — ${fmtMin(goal - todayMin)} left today.`, "daily-target");
+  }, [settings.reminders?.targets, settings.reminders?.time, settings.goalMin, sessions, notify]);
+  useEffect(() => {
+    fireDailyTarget();
+    const iv = setInterval(fireDailyTarget, 60_000);
+    return () => clearInterval(iv);
+  }, [fireDailyTarget]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__ledgerNotify = {
+      log: notifyLogRef.current,
+      resetDaily: () => { lastTargetNudgeRef.current = ""; },
+      fireDailyTarget: () => fireDailyTarget(true),
+    };
+    return () => { delete window.__ledgerNotify; };
+  }, [fireDailyTarget]);
 
   // Pomodoro phase completion: focus -> auto-starts a break; break -> chimes
   // and hands control back for the next focus session.
@@ -1115,6 +1190,19 @@ function Workspace({ session }) {
             boxShadow: elev("e2"), color: COLORS.text, fontSize: 12.5, lineHeight: 1.5 }}>
           <AlertTriangle size={14} color={COLORS.warn} />
           <span>Couldn't save your changes — you may be offline. They're safe on this device and we'll retry on your next change.</span>
+        </div>
+      )}
+
+      {denyToast && (
+        <div role="status"
+          className={denyToastLeaving ? "lg-toast-exit" : "lg-toast-enter"}
+          style={{ position: "fixed", top: 64, left: "50%", transform: "translateX(-50%)", zIndex: 400, pointerEvents: "none",
+            display: "flex", alignItems: "center", gap: 10, maxWidth: "min(92vw, 480px)",
+            padding: "10px 16px", borderRadius: 12,
+            background: COLORS.glassFillStrong, border: `1px solid ${COLORS.border}`,
+            boxShadow: elev("e2"), color: COLORS.text, fontSize: 12.5, lineHeight: 1.5 }}>
+          <Bell size={14} color={COLORS.accentFocus} />
+          <span><strong>{denyToast.title}</strong> — {denyToast.body}</span>
         </div>
       )}
     </div>
@@ -4710,6 +4798,7 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
   const [doneMsg, setDoneMsg] = useState("");
   const [newSubj, setNewSubj] = useState("");
   const [wpBusy, setWpBusy] = useState(false);
+  const [permTick, setPermTick] = useState(0);
 
   const copyText = (text, done) => { navigator.clipboard?.writeText(text); done(true); setTimeout(() => done(false), 1500); };
   const handleWallpaperUpload = async (e) => {
@@ -5009,7 +5098,17 @@ function SettingsTab({ profile, setProfile, data, setters, settings, setSettings
 
           {cat === "notify" && (
             <Panel n="01" title="Notifications" sub="Quiet nudges, no alerts">
-              <Row title="Focus session reminders" sub="Lets you know when a focus session ends." first>
+              <Row title="Desktop notifications" sub={notifyCapable() ? "Shown by your browser; without permission the same nudge appears in-app instead." : "This browser doesn't support native notifications — nudges appear in-app instead."} first>
+                {notifyCapable() ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
+                    <span className="sys" style={{ fontSize: 9, letterSpacing: "0.18em", color: notifyPermission() === "granted" ? COLORS.done : COLORS.faint }}>{notifyPermission() === "granted" ? "ENABLED" : notifyPermission() === "denied" ? "BLOCKED" : "NOT REQUESTED"}</span>
+                    {notifyPermission() !== "granted" && <Btn variant="ghost" onClick={async () => { await requestNotifyPermission(); setPermTick(t => t + 1); }}>Allow in browser</Btn>}
+                  </div>
+                ) : (
+                  <span className="sys" style={{ fontSize: 9, color: COLORS.faint }}>UNSUPPORTED</span>
+                )}
+              </Row>
+              <Row title="Focus session reminders" sub="Lets you know when a focus session ends.">
                 <Toggle checked={settings.reminders.study} onChange={v => setSettings(s => ({ ...s, reminders: { ...s.reminders, study: v } }))} />
               </Row>
               <Row title="Review due alerts" sub="A nudge when spaced-repetition cards come due.">

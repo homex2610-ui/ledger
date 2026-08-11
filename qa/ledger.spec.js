@@ -794,6 +794,85 @@ test("settings: Data & Sync check-in summarizes today's sessions against the dai
   await expect(page.locator(".lg-progress-fill").first()).toHaveAttribute("style", /width: 100%/);
 });
 
+test("notify: focus-end sends a native browser notification when granted, falls back to an in-app toast; daily target and review-due fire once per day", async ({ page }) => {
+  await enterDemo(page);
+  // Settings shows the delivery row + (unpermitted) Allow button.
+  await openSettings(page);
+  await page.getByRole("button", { name: "Notifications" }).click();
+  await expect(page.getByText("Desktop notifications", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow in browser" })).toBeVisible();
+
+  // Stub the browser API: granted → the native channel must be used.
+  await page.evaluate(() => {
+    window.__qaNotifications = [];
+    window.Notification = class {
+      static permission = "granted";
+      constructor(title, opts = {}) { window.__qaNotifications.push({ title, ...opts }); this.close = () => {}; }
+    };
+  });
+  await sideNav(page).getByRole("button", { name: "Focus" }).click();
+  await page.getByRole("button", { name: "Log", exact: true }).click();
+  await page.getByRole("spinbutton", { name: "Session hours" }).fill("1");
+  await page.getByRole("button", { name: "Add session" }).click();
+  await expect.poll(async () => (await page.evaluate(() => window.__ledgerNotify.log.length)) >= 1).toBe(true);
+  const log = await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "focus-end"));
+  expect(log[0].channel).toBe("native");
+  const native = await page.evaluate(() => window.__qaNotifications);
+  expect(native.some(n => n.title === "Focus session complete" && /60 minutes/.test(n.body))).toBe(true);
+  await expect(page.getByRole("status").filter({ hasText: "Focus session complete" })).toHaveCount(0);
+  // Dismiss the chapter-stamp prompt so it can't shadow later clicks.
+  await page.getByRole("button", { name: "Skip" }).click();
+
+  // Denied → the same trigger surfaces the in-app toast instead.
+  await page.evaluate(() => { window.Notification.permission = "denied"; });
+  await page.evaluate(() => window.__ledgerNotify.log.length = 0);
+  await sideNav(page).getByRole("button", { name: "Home" }).click();
+  await sideNav(page).getByRole("button", { name: "Focus" }).click();
+  await page.getByRole("button", { name: "Log", exact: true }).click();
+  await page.getByRole("spinbutton", { name: "Session hours" }).fill("1");
+  await page.getByRole("button", { name: "Add session" }).click();
+  const toast = page.getByRole("status").filter({ hasText: "Focus session complete" });
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText("Physics");
+  await expect(toast).toBeHidden({ timeout: 8000 });
+  expect((await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "focus-end")))[0].channel).toBe("inapp");
+  await page.getByRole("dialog", { name: /Which chapter did you study/ }).getByRole("button", { name: "Skip" }).click();
+
+  // Daily target: unmet → native nudge; met → silent; immutable per day.
+  await page.evaluate(() => { window.Notification.permission = "granted"; window.__ledgerNotify.log.length = 0; });
+  await page.evaluate(() => window.__ledgerNotify.fireDailyTarget());
+  expect((await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "daily-target")))[0].channel).toBe("native");
+  await page.evaluate(() => window.__ledgerNotify.fireDailyTarget());
+  expect((await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "daily-target"))).length).toBe(1);
+  // Met today → silent even on a fresh day-ref.
+  await page.evaluate((t) => {
+    window.__ledgerNotify.resetDaily();
+    window.__ledgerSessions.seed([{ id: "qa-tgt-1", date: t, minutes: 1440, subject: "Physics", startHour: 9, mode: "manual" }]);
+  }, todayStr());
+  await page.evaluate(() => window.__ledgerNotify.fireDailyTarget());
+  expect((await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "daily-target"))).length).toBe(1);
+  // Unmet with native denied → the in-app toast carries the daily message.
+  await page.evaluate(() => {
+    window.Notification.permission = "denied";
+    window.__ledgerNotify.resetDaily();
+    window.__ledgerNotify.log.length = 0;
+    window.__ledgerSessions.seed([]);
+  });
+  await page.evaluate(() => window.__ledgerNotify.fireDailyTarget());
+  const dailyToast = page.getByRole("status").filter({ hasText: "Daily target still open" });
+  await expect(dailyToast).toBeVisible();
+  expect((await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "daily-target")))[0].channel).toBe("inapp");
+
+  // Review due: a chapter past its revision date triggers the nudge.
+  await page.evaluate(() => { window.Notification.permission = "granted"; });
+  await page.evaluate((t) => {
+    window.__ledgerSyllabus.seed({ Physics: [{ id: "qa-rev-1", name: "Units & Measurements", status: "done", revisionStage: 0, nextRevision: t }] });
+    window.__ledgerNotify.log.length = 0;
+  }, todayStr());
+  await expect.poll(async () => (await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "review-due"))).length >= 1).toBe(true);
+  expect((await page.evaluate(() => window.__ledgerNotify.log.filter(e => e.tag === "review-due")))[0].channel).toBe("native");
+});
+
 test("stories: opens a real 9:16 preview and switches recap/template", async ({ page }) => {
   await page.getByRole("button", { name: "Share today's Ledger Story" }).click();
   await expect(page.getByRole("dialog", { name: "Ledger Stories" })).toBeVisible();
