@@ -1,6 +1,5 @@
-import { addDays, todayStr, parseLocalDate } from "./utils.js";
+import { addDays, todayStr, parseLocalDate, computeStreak, longestStreak } from "./utils.js";
 
-const DAY = 86400000;
 const MOTIVATION = [
   "Small sessions become big results.",
   "Quiet work. Visible progress.",
@@ -54,20 +53,6 @@ function mockStats(mocks, start, end) {
   return { rows, tests: rows.length, accuracy: scores.length ? round(scores.reduce((a, b) => a + b, 0) / scores.length) : undefined };
 }
 
-function currentStreak(sessions, end) {
-  const days = new Set(sessions.map(s => s.date));
-  let streak = 0;
-  for (let d = end; days.has(d); d = addDays(d, -1)) streak++;
-  return streak || undefined;
-}
-
-function longestStreak(sessions) {
-  const days = Array.from(new Set(sessions.map(s => s.date))).sort();
-  let best = 0, run = 0, previous = null;
-  days.forEach(day => { run = previous && Math.round((parseLocalDate(day) - parseLocalDate(previous)) / DAY) === 1 ? run + 1 : 1; best = Math.max(best, run); previous = day; });
-  return best || undefined;
-}
-
 function delta(current, previous) {
   if (!(current > 0 && previous > 0)) return undefined;
   const value = round(((current - previous) / previous) * 100);
@@ -91,7 +76,7 @@ export function buildStoryData({ mode = "today", sessions = [], dpp = [], mocks 
   if (mode === "today") {
     const longest = Math.max(...periodSessions.map(s => Number(s.minutes) || 0), 0);
     const bestMock = periodMocks.rows.map(m => ({ m, score: pctOf(m) })).filter(x => x.score !== null).sort((a, b) => b.score - a.score)[0];
-    return { ...base, studyMinutes: sum(periodSessions), sessions: periodSessions.length || undefined, questions: questions || undefined, accuracy: periodMocks.accuracy, subjects: subjects.length ? subjects : undefined, streak: currentStreak(sessions, today), biggestWin: bestMock ? `${round(bestMock.score)}% on ${bestMock.m.name || "a mock"}` : longest > 0 ? `${round(longest)} focused minutes` : undefined };
+    return { ...base, studyMinutes: sum(periodSessions), sessions: periodSessions.length || undefined, questions: questions || undefined, accuracy: periodMocks.accuracy, subjects: subjects.length ? subjects : undefined, streak: computeStreak(sessions, today) || undefined, biggestWin: bestMock ? `${round(bestMock.score)}% on ${bestMock.m.name || "a mock"}` : longest > 0 ? `${round(longest)} focused minutes` : undefined };
   }
 
   const previousStart = mode === "week" ? addDays(start, -7) : dateKey(new Date(parseLocalDate(start).getFullYear(), parseLocalDate(start).getMonth() - 1, 1));
@@ -108,7 +93,7 @@ export function buildStoryData({ mode = "today", sessions = [], dpp = [], mocks 
     accuracy: periodMocks.accuracy,
     subjects: subjects.length ? subjects : undefined,
     dailyActivity: days,
-    streak: currentStreak(sessions, today),
+    streak: computeStreak(sessions, today) || undefined,
     strongestSubject: subjects[0]?.name,
     bestDay: bestDay?.minutes > 0 ? { label: bestDay.label, minutes: bestDay.minutes } : undefined,
     accuracyDelta: delta(periodMocks.accuracy, previousMocks.accuracy),

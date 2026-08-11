@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { initials, todayStr, fmtMin } from "../../lib/utils";
+import { initials, todayStr, fmtMin, computeStreak } from "../../lib/utils";
 import { Card } from "../ui/Panels";
 import { CommunityHeader } from "./CommunityHeader";
 import { CommunityOverview } from "./CommunityOverview";
@@ -33,18 +33,7 @@ export default function Community({
     .filter(session => session.date === today)
     .reduce((sum, session) => sum + (session.minutes || 0), 0);
   
-  const streak = useMemo(() => {
-    const dates = new Set(
-      sessions.filter(session => session.minutes > 0).map(session => session.date)
-    );
-    let count = 0;
-    const date = new Date();
-    while (dates.has(date.toISOString().slice(0, 10))) {
-      count += 1;
-      date.setDate(date.getDate() - 1);
-    }
-    return count;
-  }, [sessions]);
+  const streak = useMemo(() => computeStreak(sessions), [sessions]);
   
   const activeRows = section === "circle"
     ? circleRows

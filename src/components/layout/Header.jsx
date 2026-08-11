@@ -1,22 +1,14 @@
 import React from "react";
 import { Flame } from "lucide-react";
 import { COLORS, FONTS, hexToRgba } from "../../lib/theme";
-import { todayStr, fmtMin } from "../../lib/utils";
+import { todayStr, fmtMin, computeStreak } from "../../lib/utils";
 import { DAILY_GOAL_MIN } from "./Sidebar";
-
-function streakOf(sessions = []) {
-  const days = new Set(sessions.map(s => s.date));
-  let streak = 0;
-  const d = new Date();
-  while (days.has(todayStr(d))) { streak++; d.setDate(d.getDate() - 1); }
-  return streak;
-}
 
 // The status bar — one quiet line of system metadata across the top:
 //   LEDGER · WED 09 AUG │ FOCUS 06:45 · JEE MAIN · 127 DAYS · ●
 // No greeting, no hero. It reads like an OS status strip.
 export default function Header({ profile = {}, sessions = [], tasks = [] }) {
-  const streak = streakOf(sessions);
+  const streak = computeStreak(sessions);
   const today = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
   const doneToday = tasks.filter(t => t.date === todayStr() && t.done).length;
   const todayTasks = tasks.filter(t => t.date === todayStr());

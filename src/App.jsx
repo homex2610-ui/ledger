@@ -16,7 +16,7 @@ Target, Timer as TimerIcon, ClipboardList, AlertTriangle,
   RefreshCw, User as UserIcon, Users, Lock
 } from "lucide-react";
 import { COLORS, FONTS, THEME_PRESETS, FONT_PRESETS, FONT_CATALOG, TYPOGRAPHY_PRESETS, applyTheme, globalCss, normalizeTheme, RANK_COLORS, hexToRgba, darken, SPACE, RADIUS, MOTION, VIEW, row, stack, center, between, elev, subjectColor, subjectDot } from "./lib/theme";
-import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate } from "./lib/utils";
+import { uid, todayStr, daysBetween, genCode, fmtMin, addDays, parseLocalDate, computeStreak, longestStreak } from "./lib/utils";
 import { pipSupported, openPipWindow, closePipWindow } from "./lib/pipTimer";
 import { unlockAudio, playTick, playReward, __ledgerAudioState } from "./lib/sounds.js";
 import { validateUpload, fileToDataUrl, loadWallpaperImage, saveWallpaperImage, clearWallpaperImage, extractPalette, clampAccentHex } from "./lib/wallpaper.js";
@@ -1114,26 +1114,6 @@ function consistencyAlert(sessions) {
 
 function todayDppRecord(dpp) {
   return dpp.find(d => d.date === todayStr()) || { date: todayStr(), target: 50, solved: 0 };
-}
-
-function computeStreak(sessions) {
-  const days = new Set(sessions.map(s => s.date));
-  let streak = 0;
-  let d = new Date();
-  while (days.has(todayStr(d))) { streak++; d.setDate(d.getDate() - 1); }
-  return streak;
-}
-
-// Longest uninterrupted run of active days, from all-time session history.
-function longestStreak(sessions) {
-  const days = Array.from(new Set(sessions.map(s => s.date))).sort();
-  let best = 0, run = 0, prev = null;
-  for (const d of days) {
-    run = prev !== null && daysBetween(prev, d) === 1 ? run + 1 : 1;
-    if (run > best) best = run;
-    prev = d;
-  }
-  return best;
 }
 
 function computeDppStreak(dpp) {

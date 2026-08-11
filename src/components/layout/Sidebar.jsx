@@ -4,7 +4,7 @@ import {
   Users, Flame, Pin, PinOff
 } from "lucide-react";
 import { COLORS, FONTS, hexToRgba } from "../../lib/theme";
-import { todayStr, fmtMin } from "../../lib/utils";
+import { todayStr, fmtMin, computeStreak } from "../../lib/utils";
 import AccountPanel from "./AccountPanel";
 
 // 6 hours/day default focus goal — the "focus ring" reference.
@@ -23,14 +23,6 @@ const DOCK = [
 // Community sits below a divider; the account popover carries Settings,
 // Sign out and overflow actions only.
 const COMMUNITY = { id: "community", label: "Community", icon: Users };
-
-function streakOf(sessions = []) {
-  const days = new Set(sessions.map(s => s.date));
-  let streak = 0;
-  const d = new Date();
-  while (days.has(todayStr(d))) { streak++; d.setDate(d.getDate() - 1); }
-  return streak;
-}
 
 // The signature motif in miniature — today's focus minutes vs the daily goal.
 export function FocusRing({ todayMin = 0, goal = DAILY_GOAL_MIN, size = 64, stroke = 6, gid = "lr-focus-grad", label }) {
@@ -159,7 +151,7 @@ export default function Sidebar({ tab, setTab, profile = {}, sessions = [], sett
     };
   }, []);
 
-  const streak = streakOf(sessions);
+  const streak = computeStreak(sessions);
   const todayMin = sessions.filter(s => s.date === todayStr()).reduce((a, s) => a + s.minutes, 0);
   const initials = (profile?.name || "?")
     .replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2)

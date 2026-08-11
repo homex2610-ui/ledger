@@ -79,6 +79,33 @@ export const addDays = (dateStr, n) => {
   return todayStr(d);
 };
 
+// Canonical streak definitions — every surface (App, Header, Sidebar,
+// Community, Stories) consumes these so the metric can never drift between
+// copies. Both use local-date math: session `date` strings are compared
+// against local calendar days (todayStr/parseLocalDate), never UTC slices.
+
+// Consecutive study days ending at `end` (defaults to today, local). A day
+// counts if a session was logged at all — minutes are irrelevant.
+export const computeStreak = (sessions = [], end = new Date()) => {
+  const days = new Set(sessions.map(s => s.date));
+  let streak = 0;
+  const d = parseLocalDate(end);
+  while (days.has(todayStr(d))) { streak++; d.setDate(d.getDate() - 1); }
+  return streak;
+};
+
+// Longest uninterrupted run of active days, from all-time session history.
+export const longestStreak = (sessions = []) => {
+  const days = Array.from(new Set(sessions.map(s => s.date))).sort();
+  let best = 0, run = 0, prev = null;
+  for (const d of days) {
+    run = prev !== null && daysBetween(prev, d) === 1 ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = d;
+  }
+  return best;
+};
+
 export const initials = (name) =>
   String(name || "Ledger member")
     .split(/\s+/)
