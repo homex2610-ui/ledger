@@ -1,0 +1,12 @@
+{
+  "name": "@workspace/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "qa": "node ./qa-isolation.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}
