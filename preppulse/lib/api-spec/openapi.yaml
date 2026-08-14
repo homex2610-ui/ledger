@@ -1,0 +1,1953 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.2.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: prep
+    description: Preparation tracking operations
+  - name: study
+    description: Focus sessions and tasks
+  - name: recall
+    description: Spaced-repetition recall deck
+  - name: community
+    description: Circles and groups
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/signup:
+    post:
+      operationId: signUp
+      tags: [auth]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupInput"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "409":
+          description: Email already registered
+  /auth/login:
+    post:
+      operationId: logIn
+      tags: [auth]
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+  /auth/logout:
+    post:
+      operationId: logOut
+      tags: [auth]
+      summary: Sign out the current session
+      responses:
+        "204":
+          description: Signed out
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get the signed-in user and profile
+      responses:
+        "200":
+          description: Current session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Not signed in
+
+  /auth/oauth/providers:
+    get:
+      operationId: getAuthOauthProviders
+      tags: [auth]
+      summary: List OAuth providers with availability and connection state
+      responses:
+        "200":
+          description: Provider availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthProvidersResponse"
+
+  /auth/google:
+    post:
+      operationId: googleAuth
+      tags: [auth]
+      summary: Exchange a Google Identity Services ID token for a session
+      description: >
+        Verifies the GIS ID token against Google's JWKS (aud, iss, exp, signature),
+        then logs in or creates a local account for the verified Google identity.
+        A CSRF token must be supplied that matches the g_csrf_token cookie set by GIS.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleAuthInput"
+      responses:
+        "200":
+          description: Signed in with an existing OAuth identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "201":
+          description: New local account created from the Google identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid, expired, or CSRF-mismatched credential
+        "409":
+          description: Email matches an existing non-linked account (account_linking_required)
+
+  /auth/oauth/link:
+    post:
+      operationId: oauthLink
+      tags: [auth]
+      summary: Link an OAuth identity to the signed-in account
+      description: >
+        Requires an authenticated session. Explicit account linking only -
+        never merges accounts by matching email alone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthLinkInput"
+      responses:
+        "200":
+          description: Identity linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid credential or CSRF mismatch
+        "401":
+          description: Not signed in
+        "409":
+          description: Identity already linked to another account
+
+  /auth/discord/authorize:
+    get:
+      operationId: getAuthDiscordAuthorize
+      tags: [auth]
+      summary: Build the Discord OAuth2 authorization URL
+      parameters:
+        - name: link
+          in: query
+          required: false
+          description: When true, requires a session and links instead of signing in
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Authorization URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthAuthorizeResponse"
+        "400":
+          description: Discord OAuth is not configured
+        "401":
+          description: link=true requested without a session
+
+  /auth/discord/callback:
+    get:
+      operationId: discordAuthCallback
+      tags: [auth]
+      summary: Discord OAuth2 callback (browser redirect flow)
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirects back to the SPA with an oauth result parameter
+        "400":
+          description: Missing or mismatched state, or exchange failure
+
+  /auth/oauth/{provider}:
+    delete:
+      operationId: disconnectOauthProvider
+      tags: [auth]
+      summary: Disconnect an OAuth provider from the signed-in account
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, discord]
+      responses:
+        "204":
+          description: Disconnected
+        "401":
+          description: Not signed in
+        "409":
+          description: Refused - would leave the account with no sign-in method
+
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [prep]
+      summary: Get the current preparation dashboard
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA timezone used for streak and daily activity day boundaries
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /topics:
+    get:
+      operationId: listTopics
+      tags: [prep]
+      summary: List syllabus topics with progress
+      responses:
+        "200":
+          description: Syllabus topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Topic"
+  /topics/{topicId}/progress:
+    patch:
+      operationId: updateTopicProgress
+      tags: [prep]
+      summary: Update a topic's preparation status
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TopicProgressInput"
+      responses:
+        "200":
+          description: Updated topic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Topic"
+  /syllabus/summary:
+    get:
+      operationId: getSyllabusSummary
+      tags: [prep]
+      summary: Weightage-aware syllabus coverage summary
+      responses:
+        "200":
+          description: Coverage summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyllabusSummary"
+  /tests:
+    get:
+      operationId: listTestAttempts
+      tags: [prep]
+      summary: List mock test attempts
+      responses:
+        "200":
+          description: Mock test attempts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TestAttempt"
+    post:
+      operationId: createTestAttempt
+      tags: [prep]
+      summary: Log a mock test attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestAttemptInput"
+      responses:
+        "201":
+          description: Logged mock test attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttempt"
+  /tests/{id}:
+    patch:
+      operationId: updateTestAttempt
+      tags: [prep]
+      summary: Update a logged mock test attempt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestAttemptUpdateInput"
+      responses:
+        "200":
+          description: Updated mock test attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttempt"
+        "404":
+          description: Attempt not found
+    delete:
+      operationId: deleteTestAttempt
+      tags: [prep]
+      summary: Delete a logged mock test attempt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Attempt not found
+  /tests/analyze:
+    get:
+      operationId: analyzeTestAttempts
+      tags: [prep]
+      summary: Performance trend, subject averages and weak areas
+      responses:
+        "200":
+          description: Analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAnalysis"
+  /study-sessions:
+    get:
+      operationId: listStudySessions
+      tags: [prep]
+      summary: List study session history
+      responses:
+        "200":
+          description: Study sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudySession"
+    post:
+      operationId: createStudySession
+      tags: [prep]
+      summary: Log a study session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudySessionInput"
+      responses:
+        "201":
+          description: Logged study session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudySession"
+  /focus-sessions:
+    get:
+      operationId: listFocusSessions
+      tags: [study]
+      summary: List focus sessions
+      responses:
+        "200":
+          description: Focus sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FocusSession"
+    post:
+      operationId: createFocusSession
+      tags: [study]
+      summary: Start a timed focus session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FocusSessionInput"
+      responses:
+        "201":
+          description: Started focus session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusSession"
+  /focus-sessions/{focusSessionId}:
+    patch:
+      operationId: updateFocusSession
+      tags: [study]
+      summary: Complete or abandon a focus session
+      parameters:
+        - name: focusSessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FocusSessionUpdate"
+      responses:
+        "200":
+          description: Updated focus session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusSession"
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [study]
+      summary: List tasks
+      responses:
+        "200":
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      tags: [study]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+  /tasks/{taskId}:
+    patch:
+      operationId: updateTask
+      tags: [study]
+      summary: Update a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskUpdate"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    delete:
+      operationId: deleteTask
+      tags: [study]
+      summary: Delete a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /cards:
+    get:
+      operationId: listCards
+      tags: [recall]
+      summary: List recall cards
+      responses:
+        "200":
+          description: Cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Card"
+    post:
+      operationId: createCard
+      tags: [recall]
+      summary: Add a card
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardInput"
+      responses:
+        "201":
+          description: Added card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+  /cards/stats:
+    get:
+      operationId: getCardStats
+      tags: [recall]
+      summary: Deck statistics
+      responses:
+        "200":
+          description: Deck statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardStats"
+  /cards/{cardId}:
+    patch:
+      operationId: updateCard
+      tags: [recall]
+      summary: Update a card
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardUpdate"
+      responses:
+        "200":
+          description: Updated card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+    delete:
+      operationId: deleteCard
+      tags: [recall]
+      summary: Delete a card
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+  /cards/{cardId}/review:
+    post:
+      operationId: reviewCard
+      tags: [recall]
+      summary: Grade a card review (SM-2 scheduling)
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardReviewInput"
+      responses:
+        "200":
+          description: Rescheduled card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [prep]
+      summary: Get the current learner profile
+      responses:
+        "200":
+          description: Learner profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+    patch:
+      operationId: updateProfile
+      tags: [prep]
+      summary: Update profile preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated learner profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+
+  /me/export:
+    get:
+      operationId: exportMyData
+      tags: [prep]
+      summary: Download a JSON export of everything the signed-in user owns
+      responses:
+        "200":
+          description: Complete data export for the current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportMyData"
+  /me:
+    delete:
+      operationId: deleteMyAccount
+      tags: [prep]
+      summary: Permanently delete the signed-in account and all of its data
+      responses:
+        "204":
+          description: Account deleted
+
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [community]
+      summary: Get the current weekly circle leaderboard
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA timezone used for weekly and streak day boundaries
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Weekly leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leaderboard"
+  /circles:
+    get:
+      operationId: getCircles
+      tags: [community]
+      summary: List circle connections with weekly activity
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA timezone used for connection streaks
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Circle connections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CirclesResponse"
+  /circles/connect:
+    post:
+      operationId: connectByCode
+      tags: [community]
+      summary: Connect to a peer using their profile code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CircleConnectInput"
+      responses:
+        "201":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CircleMember"
+        "400":
+          description: The code is your own code
+        "404":
+          description: No user with that code
+        "409":
+          description: Connection rejected because a circle is full (25-member limit)
+  /circles/feed:
+    get:
+      operationId: getCircleFeed
+      tags: [community]
+      summary: Recent activity from circle connections
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CircleFeedItem"
+  /circles/{userId}:
+    delete:
+      operationId: removeConnection
+      tags: [community]
+      summary: Remove a circle connection
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+
+  /groups:
+    get:
+      operationId: listGroups
+      tags: [community]
+      summary: List the groups I belong to
+      responses:
+        "200":
+          description: My groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupSummary"
+    post:
+      operationId: createGroup
+      tags: [community]
+      summary: Create a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupInput"
+      responses:
+        "201":
+          description: Created group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSummary"
+  /groups/join:
+    post:
+      operationId: joinGroupByCode
+      tags: [community]
+      summary: Join a group using its invite code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupJoinInput"
+      responses:
+        "200":
+          description: Joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSummary"
+        "404":
+          description: No group with that code
+  /groups/discover:
+    get:
+      operationId: discoverGroups
+      tags: [community]
+      summary: Search discoverable groups by name
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Discoverable groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupSummary"
+  /groups/{groupId}:
+    get:
+      operationId: getGroup
+      tags: [community]
+      summary: Get group details and roster
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetail"
+        "404":
+          description: Group not found or not a member
+    patch:
+      operationId: updateGroup
+      tags: [community]
+      summary: Update a group (owner only)
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupInput"
+      responses:
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupSummary"
+    delete:
+      operationId: deleteGroup
+      tags: [community]
+      summary: Delete a group (owner only)
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+  /groups/{groupId}/leave:
+    post:
+      operationId: leaveGroup
+      tags: [community]
+      summary: Leave a group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Left
+  /groups/{groupId}/leaderboard:
+    get:
+      operationId: getGroupLeaderboard
+      tags: [community]
+      summary: Weekly pulse leaderboard for a group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Group leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupLeaderboard"
+        "404":
+          description: Group not found or not a member
+  /groups/{groupId}/activity:
+    get:
+      operationId: getGroupActivity
+      tags: [community]
+      summary: Per-member daily minutes for the last week
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Group activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupActivityItem"
+        "404":
+          description: Group not found or not a member
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        handle:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, handle, createdAt]
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        profile:
+          $ref: "#/components/schemas/Profile"
+      required: [user, profile]
+    SignupInput:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        handle:
+          type: string
+          minLength: 2
+      required: [email, password]
+    LoginInput:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required: [email, password]
+
+    OAuthProviderInfo:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        clientId:
+          type: string
+        connected:
+          type: boolean
+      required: [enabled, connected]
+    OAuthProvidersResponse:
+      type: object
+      properties:
+        google:
+          $ref: "#/components/schemas/OAuthProviderInfo"
+        discord:
+          $ref: "#/components/schemas/OAuthProviderInfo"
+      required: [google, discord]
+    GoogleAuthInput:
+      type: object
+      properties:
+        credential:
+          type: string
+        csrfToken:
+          type: string
+      required: [credential, csrfToken]
+    OAuthLinkInput:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [google]
+        credential:
+          type: string
+        csrfToken:
+          type: string
+      required: [provider, credential, csrfToken]
+    OAuthAuthorizeResponse:
+      type: object
+      properties:
+        url:
+          type: string
+      required: [url]
+
+
+    Profile:
+      type: object
+      properties:
+        handle:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        examTrack:
+          type: string
+          enum: [jee_main, neet]
+        stage:
+          type: string
+          enum: [class_11, class_12, dropper]
+        targetYear:
+          type: number
+        examDate:
+          type: string
+          format: date
+          nullable: true
+        dailyGoalMinutes:
+          type: number
+        weeklyGoalMinutes:
+          type: number
+        focusMode:
+          type: boolean
+        showOnLeaderboard:
+          type: boolean
+        profileCode:
+          type: string
+      required: [handle, email, avatarUrl, examTrack, stage, targetYear, examDate, dailyGoalMinutes, weeklyGoalMinutes, focusMode, showOnLeaderboard, profileCode]
+
+    ExportGroup:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        inviteCode:
+          type: string
+        isDiscoverable:
+          type: boolean
+        memberCount:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, inviteCode, isDiscoverable, memberCount, createdAt]
+    ExportGroupMembership:
+      type: object
+      properties:
+        groupId:
+          type: string
+        groupName:
+          type: string
+        role:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+      required: [groupId, groupName, role, joinedAt]
+    ExportConnection:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        connectedAt:
+          type: string
+          format: date-time
+      required: [userId, handle, avatarUrl, connectedAt]
+    ExportMyData:
+      type: object
+      properties:
+        exportedAt:
+          type: string
+          format: date-time
+        profile:
+          $ref: "#/components/schemas/Profile"
+        topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/Topic"
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        studySessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudySession"
+        focusSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/FocusSession"
+        testAttempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestAttempt"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        ownedGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportGroup"
+        groupMemberships:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportGroupMembership"
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportConnection"
+      required: [exportedAt, profile, topics, cards, studySessions, focusSessions, testAttempts, tasks, ownedGroups, groupMemberships, connections]
+    ProfileUpdate:
+      type: object
+      properties:
+        handle:
+          type: string
+          minLength: 2
+        examTrack:
+          type: string
+          enum: [jee_main, neet]
+        stage:
+          type: string
+          enum: [class_11, class_12, dropper]
+        targetYear:
+          type: number
+        examDate:
+          type: string
+          format: date
+          nullable: true
+        dailyGoalMinutes:
+          type: number
+          minimum: 1
+        weeklyGoalMinutes:
+          type: number
+          minimum: 1
+        focusMode:
+          type: boolean
+        showOnLeaderboard:
+          type: boolean
+
+    TestAttemptUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        exam:
+          type: string
+          enum: [jee_main, jee_adv, neet]
+        subject:
+          type: string
+          nullable: true
+        subjectScores:
+          allOf:
+            - $ref: "#/components/schemas/SubjectScores"
+          nullable: true
+        score:
+          type: number
+          minimum: 0
+        maxScore:
+          type: number
+          minimum: 1
+        attempted:
+          type: number
+          minimum: 0
+        totalQuestions:
+          type: number
+          minimum: 1
+        timeMinutes:
+          type: number
+          minimum: 1
+        negativeMarksLost:
+          type: number
+          minimum: 0
+
+    Topic:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        chapter:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [not_started, learning, practiced, revised, mastered]
+        weightage:
+          type: string
+          enum: [high, medium, low]
+        accuracy:
+          type: number
+        questionCount:
+          type: number
+        prerequisites:
+          type: array
+          items:
+            type: string
+        locked:
+          type: boolean
+      required: [id, subject, chapter, name, status, weightage, accuracy, questionCount, prerequisites, locked]
+    TopicProgressInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [not_started, learning, practiced, revised, mastered]
+      required: [status]
+    SubjectCoverage:
+      type: object
+      properties:
+        subject:
+          type: string
+        total:
+          type: number
+        mastered:
+          type: number
+        percent:
+          type: number
+        weightagePercent:
+          type: number
+      required: [subject, total, mastered, percent, weightagePercent]
+    SyllabusSummary:
+      type: object
+      properties:
+        totalTopics:
+          type: number
+        masteredTopics:
+          type: number
+        inProgressTopics:
+          type: number
+        syllabusPercent:
+          type: number
+        weightagePercent:
+          type: number
+        bySubject:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectCoverage"
+      required: [totalTopics, masteredTopics, inProgressTopics, syllabusPercent, weightagePercent, bySubject]
+
+    SubjectScores:
+      type: object
+      additionalProperties: false
+      properties:
+        physics:
+          type: number
+          minimum: 0
+        chemistry:
+          type: number
+          minimum: 0
+        mathematics:
+          type: number
+          minimum: 0
+        biology:
+          type: number
+          minimum: 0
+    TestAttempt:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        exam:
+          type: string
+          enum: [jee_main, jee_adv, neet]
+        subject:
+          type: string
+          nullable: true
+        subjectScores:
+          allOf:
+            - $ref: "#/components/schemas/SubjectScores"
+          nullable: true
+        date:
+          type: string
+          format: date-time
+        score:
+          type: number
+        maxScore:
+          type: number
+        accuracy:
+          type: number
+        attempted:
+          type: number
+        totalQuestions:
+          type: number
+        timeMinutes:
+          type: number
+        negativeMarksLost:
+          type: number
+        weakAreas:
+          type: array
+          items:
+            type: string
+      required: [id, name, exam, subject, subjectScores, date, score, maxScore, accuracy, attempted, totalQuestions, timeMinutes, negativeMarksLost, weakAreas]
+    TestAttemptInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        exam:
+          type: string
+          enum: [jee_main, jee_adv, neet]
+        subject:
+          type: string
+          nullable: true
+        subjectScores:
+          allOf:
+            - $ref: "#/components/schemas/SubjectScores"
+          nullable: true
+        score:
+          type: number
+          minimum: 0
+        maxScore:
+          type: number
+          minimum: 1
+        attempted:
+          type: number
+          minimum: 0
+        totalQuestions:
+          type: number
+          minimum: 1
+        timeMinutes:
+          type: number
+          minimum: 1
+        negativeMarksLost:
+          type: number
+          minimum: 0
+      required: [name, exam, score, maxScore, attempted, totalQuestions, timeMinutes, negativeMarksLost]
+    TestTrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        name:
+          type: string
+        accuracy:
+          type: number
+      required: [date, name, accuracy]
+    SubjectAverage:
+      type: object
+      properties:
+        subject:
+          type: string
+        averageAccuracy:
+          type: number
+        attempts:
+          type: number
+      required: [subject, averageAccuracy, attempts]
+    WeakAreaCount:
+      type: object
+      properties:
+        name:
+          type: string
+        count:
+          type: number
+      required: [name, count]
+    TestAnalysis:
+      type: object
+      properties:
+        totalAttempts:
+          type: number
+        averageAccuracy:
+          type: number
+        bestAccuracy:
+          type: number
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/TestTrendPoint"
+        subjectAverages:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectAverage"
+        weakAreas:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeakAreaCount"
+      required: [totalAttempts, averageAccuracy, bestAccuracy, trend, subjectAverages, weakAreas]
+
+    StudySession:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        minutes:
+          type: number
+        source:
+          type: string
+          enum: [manual, timer]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, subject, minutes, source, createdAt]
+    StudySessionInput:
+      type: object
+      properties:
+        subject:
+          type: string
+          minLength: 1
+        minutes:
+          type: number
+          minimum: 1
+          maximum: 600
+        source:
+          type: string
+          enum: [manual, timer]
+      required: [subject, minutes, source]
+
+    FocusSession:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        plannedMinutes:
+          type: number
+        actualMinutes:
+          type: number
+        status:
+          type: string
+          enum: [active, completed, abandoned]
+        taskId:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, subject, plannedMinutes, actualMinutes, status, taskId, startedAt, endedAt]
+    FocusSessionInput:
+      type: object
+      properties:
+        subject:
+          type: string
+          minLength: 1
+        plannedMinutes:
+          type: number
+          minimum: 1
+        taskId:
+          type: string
+          nullable: true
+      required: [subject, plannedMinutes]
+    FocusSessionUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [completed, abandoned]
+        actualMinutes:
+          type: number
+          minimum: 0
+        taskId:
+          type: string
+          nullable: true
+      required: [status, actualMinutes]
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        subject:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, title, subject, status, createdAt, completedAt]
+    TaskInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        subject:
+          type: string
+      required: [title]
+    TaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        subject:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+      required: [status]
+
+    Card:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        front:
+          type: string
+        back:
+          type: string
+        ease:
+          type: number
+        interval:
+          type: number
+        reps:
+          type: number
+        due:
+          type: string
+          format: date
+        lastReviewed:
+          type: string
+          format: date
+          nullable: true
+        missed:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, subject, front, back, ease, interval, reps, due, lastReviewed, missed, createdAt]
+    CardInput:
+      type: object
+      properties:
+        subject:
+          type: string
+        front:
+          type: string
+          minLength: 1
+        back:
+          type: string
+          minLength: 1
+      required: [front, back]
+    CardUpdate:
+      type: object
+      properties:
+        subject:
+          type: string
+        front:
+          type: string
+          minLength: 1
+        back:
+          type: string
+          minLength: 1
+      required: []
+    CardReviewInput:
+      type: object
+      properties:
+        grade:
+          type: string
+          enum: [again, hard, good, easy]
+      required: [grade]
+    CardStats:
+      type: object
+      properties:
+        total:
+          type: number
+        due:
+          type: number
+        overdue:
+          type: number
+        learning:
+          type: number
+        mastered:
+          type: number
+        reviewedToday:
+          type: number
+        retentionRate:
+          type: number
+        avgEase:
+          type: number
+        reviewStreak:
+          type: number
+        newToday:
+          type: number
+      required: [total, due, overdue, learning, mastered, reviewedToday, retentionRate, avgEase, reviewStreak, newToday]
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: number
+        handle:
+          type: string
+        initials:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        score:
+          type: number
+        hours:
+          type: number
+        topics:
+          type: number
+        isCurrentUser:
+          type: boolean
+      required: [rank, handle, initials, avatarUrl, score, hours, topics, isCurrentUser]
+    Leaderboard:
+      type: object
+      properties:
+        weekLabel:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        focused:
+          type: boolean
+      required: [weekLabel, entries, focused]
+
+    CircleMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        initials:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        weeklyMinutes:
+          type: number
+        weeklyTopics:
+          type: number
+        streak:
+          type: number
+        isOwner:
+          type: boolean
+      required: [userId, handle, initials, avatarUrl, weeklyMinutes, weeklyTopics, streak, isOwner]
+    CirclesResponse:
+      type: object
+      properties:
+        profileCode:
+          type: string
+        memberCount:
+          type: number
+          description: Total members in this circle, including the owner
+        capacity:
+          type: number
+          description: Maximum members per circle (25, owner included)
+        self:
+          $ref: "#/components/schemas/CircleMember"
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/CircleMember"
+      required: [profileCode, memberCount, capacity, self, connections]
+    CircleConnectInput:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 4
+      required: [code]
+    CircleFeedItem:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [session, test, topic]
+        subject:
+          type: string
+        detail:
+          type: string
+        date:
+          type: string
+          format: date-time
+      required: [userId, handle, avatarUrl, type, subject, detail, date]
+
+    GroupSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        examFocus:
+          type: string
+          nullable: true
+        subjectFocus:
+          type: array
+          items:
+            type: string
+        memberCount:
+          type: number
+        isDiscoverable:
+          type: boolean
+        inviteCode:
+          type: string
+        ownerId:
+          type: string
+        myRole:
+          type: string
+          enum: [owner, member, null]
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, description, examFocus, subjectFocus, memberCount, isDiscoverable, inviteCode, ownerId, myRole, createdAt]
+    GroupInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        examFocus:
+          type: string
+        subjectFocus:
+          type: array
+          items:
+            type: string
+        isDiscoverable:
+          type: boolean
+      required: [name]
+    GroupJoinInput:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 4
+      required: [code]
+    GroupMemberRow:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        initials:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        role:
+          type: string
+      required: [userId, handle, initials, avatarUrl, role]
+    GroupDetail:
+      type: object
+      properties:
+        group:
+          $ref: "#/components/schemas/GroupSummary"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupMemberRow"
+      required: [group, members]
+    GroupLeaderboard:
+      type: object
+      properties:
+        weekLabel:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        focused:
+          type: boolean
+      required: [weekLabel, entries, focused]
+    GroupActivityItem:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        day:
+          type: string
+          format: date
+        minutes:
+          type: number
+      required: [userId, handle, day, minutes]
+
+    Dashboard:
+      type: object
+      properties:
+        greeting:
+          type: string
+        examLabel:
+          type: string
+        targetYear:
+          type: number
+        daysLeft:
+          type: number
+        streak:
+          type: number
+        todayMinutes:
+          type: number
+        todayGoalMinutes:
+          type: number
+        weeklyMinutes:
+          type: number
+        weeklyGoalMinutes:
+          type: number
+        syllabusPercent:
+          type: number
+        masteredTopics:
+          type: number
+        totalTopics:
+          type: number
+        weakTopics:
+          type: array
+          items:
+            type: string
+        recentSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudySession"
+        testTrend:
+          type: array
+          items:
+            type: number
+        subjectProgress:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectCoverage"
+        activity7d:
+          type: array
+          items:
+            $ref: "#/components/schemas/DayActivity"
+      required: [greeting, examLabel, targetYear, daysLeft, streak, todayMinutes, todayGoalMinutes, weeklyMinutes, weeklyGoalMinutes, syllabusPercent, masteredTopics, totalTopics, weakTopics, recentSessions, testTrend, subjectProgress, activity7d]
+    DayActivity:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+        minutes:
+          type: number
+      required: [day, minutes]

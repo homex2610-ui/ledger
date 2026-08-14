@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "PrepPulse"
+description = "A mobile-first JEE and NEET preparation tracker that helps students monitor syllabus progress, log mock tests, build study consistency, and compete with friends through effort-weighted weekly progress."
+version = "1.0.0"
+id = "artifacts/prep-pulse"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19390
+
+[services.development]
+run = "pnpm --filter @workspace/prep-pulse run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/prep-pulse", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/prep-pulse/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19390"
+BASE_PATH = "/"
