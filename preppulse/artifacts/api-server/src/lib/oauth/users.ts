@@ -10,6 +10,7 @@ export interface OAuthUserContext {
   providerUserId: string;
   email: string | null;
   displayName: string;
+  avatarUrl?: string | null;
 }
 
 export class OAuthLinkConflictError extends Error {
@@ -36,11 +37,12 @@ export async function createUserWithProfile(values: {
   email: string;
   handle: string;
   passwordHash?: string | null;
+  avatarUrl?: string | null;
 }): Promise<User> {
   const user = (
     await db
       .insert(usersTable)
-      .values({ email: values.email, handle: values.handle, passwordHash: values.passwordHash ?? null })
+      .values({ email: values.email, handle: values.handle, passwordHash: values.passwordHash ?? null, avatarUrl: values.avatarUrl ?? null })
       .returning()
   )[0];
 
@@ -89,7 +91,10 @@ export async function resolveOrCreateOAuthUser(context: OAuthUserContext): Promi
   if (existing) {
     const rows = await db.select().from(usersTable).where(eq(usersTable.id, existing.userId)).limit(1);
     if (!rows[0]) throw new Error("OAuth account references a missing user");
-    return { user: rows[0], created: false };
+    if (context.avatarUrl) {
+      await db.update(usersTable).set({ avatarUrl: context.avatarUrl }).where(eq(usersTable.id, existing.userId));
+    }
+    return { user: { ...rows[0], avatarUrl: context.avatarUrl ?? rows[0].avatarUrl }, created: false };
   }
 
   const email = context.email?.trim().toLowerCase() || null;
@@ -100,7 +105,7 @@ export async function resolveOrCreateOAuthUser(context: OAuthUserContext): Promi
 
   const fallbackEmail = `${context.provider}-${context.providerUserId}@local.preppulse`;
   const handle = await uniqueHandle(context.displayName || email?.split("@")[0] || "learner");
-  const user = await createUserWithProfile({ email: email ?? fallbackEmail, handle });
+  const user = await createUserWithProfile({ email: email ?? fallbackEmail, handle, avatarUrl: context.avatarUrl ?? null });
   await db.insert(oauthAccountsTable).values({
     userId: user.id,
     provider: context.provider,

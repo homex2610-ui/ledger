@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { ProfileUpdateExamTrack } from './profileUpdateExamTrack';
-import type { ProfileUpdateGuardianConsentStatus } from './profileUpdateGuardianConsentStatus';
 import type { ProfileUpdateStage } from './profileUpdateStage';
 
 export interface ProfileUpdate {
@@ -22,5 +21,4 @@ export interface ProfileUpdate {
   weeklyGoalMinutes?: number;
   focusMode?: boolean;
   showOnLeaderboard?: boolean;
-  guardianConsentStatus?: ProfileUpdateGuardianConsentStatus;
 }

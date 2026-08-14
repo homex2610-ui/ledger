@@ -42,6 +42,7 @@ export const SignUpResponse = zod.object({
   "profile": zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -50,7 +51,6 @@ export const SignUpResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 })
@@ -74,6 +74,7 @@ export const LogInResponse = zod.object({
   "profile": zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -82,7 +83,6 @@ export const LogInResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 })
@@ -107,6 +107,7 @@ export const GetMeResponse = zod.object({
   "profile": zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -115,7 +116,6 @@ export const GetMeResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 })
@@ -157,6 +157,7 @@ export const GoogleAuthResponse = zod.object({
   "profile": zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -165,7 +166,6 @@ export const GoogleAuthResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 })
@@ -191,6 +191,7 @@ export const OauthLinkResponse = zod.object({
   "profile": zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -199,7 +200,6 @@ export const OauthLinkResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 })
@@ -348,11 +348,27 @@ export const GetSyllabusSummaryResponse = zod.object({
 /**
  * @summary List mock test attempts
  */
+export const listTestAttemptsResponseSubjectScoresOnePhysicsMin = 0;
+
+export const listTestAttemptsResponseSubjectScoresOneChemistryMin = 0;
+
+export const listTestAttemptsResponseSubjectScoresOneMathematicsMin = 0;
+
+export const listTestAttemptsResponseSubjectScoresOneBiologyMin = 0;
+
+
+
 export const ListTestAttemptsResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "exam": zod.enum(['jee_main', 'neet']),
+  "exam": zod.enum(['jee_main', 'jee_adv', 'neet']),
   "subject": zod.string().nullable(),
+  "subjectScores": zod.object({
+  "physics": zod.number().min(listTestAttemptsResponseSubjectScoresOnePhysicsMin).optional(),
+  "chemistry": zod.number().min(listTestAttemptsResponseSubjectScoresOneChemistryMin).optional(),
+  "mathematics": zod.number().min(listTestAttemptsResponseSubjectScoresOneMathematicsMin).optional(),
+  "biology": zod.number().min(listTestAttemptsResponseSubjectScoresOneBiologyMin).optional()
+}).nullable(),
   "date": zod.coerce.date(),
   "score": zod.number(),
   "maxScore": zod.number(),
@@ -370,6 +386,14 @@ export const ListTestAttemptsResponse = zod.array(ListTestAttemptsResponseItem)
  * @summary Log a mock test attempt
  */
 
+export const createTestAttemptBodySubjectScoresOnePhysicsMin = 0;
+
+export const createTestAttemptBodySubjectScoresOneChemistryMin = 0;
+
+export const createTestAttemptBodySubjectScoresOneMathematicsMin = 0;
+
+export const createTestAttemptBodySubjectScoresOneBiologyMin = 0;
+
 export const createTestAttemptBodyScoreMin = 0;
 
 
@@ -383,8 +407,14 @@ export const createTestAttemptBodyNegativeMarksLostMin = 0;
 
 export const CreateTestAttemptBody = zod.object({
   "name": zod.string().min(1),
-  "exam": zod.enum(['jee_main', 'neet']),
+  "exam": zod.enum(['jee_main', 'jee_adv', 'neet']),
   "subject": zod.string().nullish(),
+  "subjectScores": zod.object({
+  "physics": zod.number().min(createTestAttemptBodySubjectScoresOnePhysicsMin).optional(),
+  "chemistry": zod.number().min(createTestAttemptBodySubjectScoresOneChemistryMin).optional(),
+  "mathematics": zod.number().min(createTestAttemptBodySubjectScoresOneMathematicsMin).optional(),
+  "biology": zod.number().min(createTestAttemptBodySubjectScoresOneBiologyMin).optional()
+}).nullish(),
   "score": zod.number().min(createTestAttemptBodyScoreMin),
   "maxScore": zod.number().min(1),
   "attempted": zod.number().min(createTestAttemptBodyAttemptedMin),
@@ -393,11 +423,27 @@ export const CreateTestAttemptBody = zod.object({
   "negativeMarksLost": zod.number().min(createTestAttemptBodyNegativeMarksLostMin)
 })
 
+export const createTestAttemptResponseSubjectScoresOnePhysicsMin = 0;
+
+export const createTestAttemptResponseSubjectScoresOneChemistryMin = 0;
+
+export const createTestAttemptResponseSubjectScoresOneMathematicsMin = 0;
+
+export const createTestAttemptResponseSubjectScoresOneBiologyMin = 0;
+
+
+
 export const CreateTestAttemptResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "exam": zod.enum(['jee_main', 'neet']),
+  "exam": zod.enum(['jee_main', 'jee_adv', 'neet']),
   "subject": zod.string().nullable(),
+  "subjectScores": zod.object({
+  "physics": zod.number().min(createTestAttemptResponseSubjectScoresOnePhysicsMin).optional(),
+  "chemistry": zod.number().min(createTestAttemptResponseSubjectScoresOneChemistryMin).optional(),
+  "mathematics": zod.number().min(createTestAttemptResponseSubjectScoresOneMathematicsMin).optional(),
+  "biology": zod.number().min(createTestAttemptResponseSubjectScoresOneBiologyMin).optional()
+}).nullable(),
   "date": zod.coerce.date(),
   "score": zod.number(),
   "maxScore": zod.number(),
@@ -408,6 +454,94 @@ export const CreateTestAttemptResponse = zod.object({
   "negativeMarksLost": zod.number(),
   "weakAreas": zod.array(zod.string())
 })
+
+
+/**
+ * @summary Update a logged mock test attempt
+ */
+export const UpdateTestAttemptParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+export const updateTestAttemptBodySubjectScoresOnePhysicsMin = 0;
+
+export const updateTestAttemptBodySubjectScoresOneChemistryMin = 0;
+
+export const updateTestAttemptBodySubjectScoresOneMathematicsMin = 0;
+
+export const updateTestAttemptBodySubjectScoresOneBiologyMin = 0;
+
+export const updateTestAttemptBodyScoreMin = 0;
+
+
+export const updateTestAttemptBodyAttemptedMin = 0;
+
+
+
+export const updateTestAttemptBodyNegativeMarksLostMin = 0;
+
+
+
+export const UpdateTestAttemptBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "exam": zod.enum(['jee_main', 'jee_adv', 'neet']).optional(),
+  "subject": zod.string().nullish(),
+  "subjectScores": zod.object({
+  "physics": zod.number().min(updateTestAttemptBodySubjectScoresOnePhysicsMin).optional(),
+  "chemistry": zod.number().min(updateTestAttemptBodySubjectScoresOneChemistryMin).optional(),
+  "mathematics": zod.number().min(updateTestAttemptBodySubjectScoresOneMathematicsMin).optional(),
+  "biology": zod.number().min(updateTestAttemptBodySubjectScoresOneBiologyMin).optional()
+}).nullish(),
+  "score": zod.number().min(updateTestAttemptBodyScoreMin).optional(),
+  "maxScore": zod.number().min(1).optional(),
+  "attempted": zod.number().min(updateTestAttemptBodyAttemptedMin).optional(),
+  "totalQuestions": zod.number().min(1).optional(),
+  "timeMinutes": zod.number().min(1).optional(),
+  "negativeMarksLost": zod.number().min(updateTestAttemptBodyNegativeMarksLostMin).optional()
+})
+
+export const updateTestAttemptResponseSubjectScoresOnePhysicsMin = 0;
+
+export const updateTestAttemptResponseSubjectScoresOneChemistryMin = 0;
+
+export const updateTestAttemptResponseSubjectScoresOneMathematicsMin = 0;
+
+export const updateTestAttemptResponseSubjectScoresOneBiologyMin = 0;
+
+
+
+export const UpdateTestAttemptResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "exam": zod.enum(['jee_main', 'jee_adv', 'neet']),
+  "subject": zod.string().nullable(),
+  "subjectScores": zod.object({
+  "physics": zod.number().min(updateTestAttemptResponseSubjectScoresOnePhysicsMin).optional(),
+  "chemistry": zod.number().min(updateTestAttemptResponseSubjectScoresOneChemistryMin).optional(),
+  "mathematics": zod.number().min(updateTestAttemptResponseSubjectScoresOneMathematicsMin).optional(),
+  "biology": zod.number().min(updateTestAttemptResponseSubjectScoresOneBiologyMin).optional()
+}).nullable(),
+  "date": zod.coerce.date(),
+  "score": zod.number(),
+  "maxScore": zod.number(),
+  "accuracy": zod.number(),
+  "attempted": zod.number(),
+  "totalQuestions": zod.number(),
+  "timeMinutes": zod.number(),
+  "negativeMarksLost": zod.number(),
+  "weakAreas": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Delete a logged mock test attempt
+ */
+export const DeleteTestAttemptParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteTestAttemptResponse = zod.void()
 
 
 /**
@@ -749,6 +883,7 @@ export const ReviewCardResponse = zod.object({
 export const GetProfileResponse = zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -757,7 +892,6 @@ export const GetProfileResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 
@@ -780,13 +914,13 @@ export const UpdateProfileBody = zod.object({
   "dailyGoalMinutes": zod.number().min(1).optional(),
   "weeklyGoalMinutes": zod.number().min(1).optional(),
   "focusMode": zod.boolean().optional(),
-  "showOnLeaderboard": zod.boolean().optional(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']).optional()
+  "showOnLeaderboard": zod.boolean().optional()
 })
 
 export const UpdateProfileResponse = zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -795,7 +929,6 @@ export const UpdateProfileResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 })
 
@@ -803,11 +936,22 @@ export const UpdateProfileResponse = zod.object({
 /**
  * @summary Download a JSON export of everything the signed-in user owns
  */
+export const exportMyDataResponseTestAttemptsItemSubjectScoresOnePhysicsMin = 0;
+
+export const exportMyDataResponseTestAttemptsItemSubjectScoresOneChemistryMin = 0;
+
+export const exportMyDataResponseTestAttemptsItemSubjectScoresOneMathematicsMin = 0;
+
+export const exportMyDataResponseTestAttemptsItemSubjectScoresOneBiologyMin = 0;
+
+
+
 export const ExportMyDataResponse = zod.object({
   "exportedAt": zod.coerce.date(),
   "profile": zod.object({
   "handle": zod.string(),
   "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "examTrack": zod.enum(['jee_main', 'neet']),
   "stage": zod.enum(['class_11', 'class_12', 'dropper']),
   "targetYear": zod.number(),
@@ -816,7 +960,6 @@ export const ExportMyDataResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
-  "guardianConsentStatus": zod.enum(['pending', 'verified']),
   "profileCode": zod.string()
 }),
   "topics": zod.array(zod.object({
@@ -864,8 +1007,14 @@ export const ExportMyDataResponse = zod.object({
   "testAttempts": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "exam": zod.enum(['jee_main', 'neet']),
+  "exam": zod.enum(['jee_main', 'jee_adv', 'neet']),
   "subject": zod.string().nullable(),
+  "subjectScores": zod.object({
+  "physics": zod.number().min(exportMyDataResponseTestAttemptsItemSubjectScoresOnePhysicsMin).optional(),
+  "chemistry": zod.number().min(exportMyDataResponseTestAttemptsItemSubjectScoresOneChemistryMin).optional(),
+  "mathematics": zod.number().min(exportMyDataResponseTestAttemptsItemSubjectScoresOneMathematicsMin).optional(),
+  "biology": zod.number().min(exportMyDataResponseTestAttemptsItemSubjectScoresOneBiologyMin).optional()
+}).nullable(),
   "date": zod.coerce.date(),
   "score": zod.number(),
   "maxScore": zod.number(),
@@ -901,6 +1050,7 @@ export const ExportMyDataResponse = zod.object({
   "connections": zod.array(zod.object({
   "userId": zod.string(),
   "handle": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "connectedAt": zod.coerce.date()
 }))
 })
@@ -925,6 +1075,7 @@ export const GetLeaderboardResponse = zod.object({
   "rank": zod.number(),
   "handle": zod.string(),
   "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "score": zod.number(),
   "hours": zod.number(),
   "topics": zod.number(),
@@ -943,13 +1094,27 @@ export const GetCirclesQueryParams = zod.object({
 
 export const GetCirclesResponse = zod.object({
   "profileCode": zod.string(),
+  "memberCount": zod.number().describe('Total members in this circle, including the owner'),
+  "capacity": zod.number().describe('Maximum members per circle (25, owner included)'),
+  "self": zod.object({
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "weeklyMinutes": zod.number(),
+  "weeklyTopics": zod.number(),
+  "streak": zod.number(),
+  "isOwner": zod.boolean()
+}),
   "connections": zod.array(zod.object({
   "userId": zod.string(),
   "handle": zod.string(),
   "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "weeklyMinutes": zod.number(),
   "weeklyTopics": zod.number(),
-  "streak": zod.number()
+  "streak": zod.number(),
+  "isOwner": zod.boolean()
 }))
 })
 
@@ -969,9 +1134,11 @@ export const ConnectByCodeResponse = zod.object({
   "userId": zod.string(),
   "handle": zod.string(),
   "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "weeklyMinutes": zod.number(),
   "weeklyTopics": zod.number(),
-  "streak": zod.number()
+  "streak": zod.number(),
+  "isOwner": zod.boolean()
 })
 
 
@@ -981,6 +1148,7 @@ export const ConnectByCodeResponse = zod.object({
 export const GetCircleFeedResponseItem = zod.object({
   "userId": zod.string(),
   "handle": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "type": zod.enum(['session', 'test', 'topic']),
   "subject": zod.string(),
   "detail": zod.string(),
@@ -1121,6 +1289,7 @@ export const GetGroupResponse = zod.object({
   "userId": zod.string(),
   "handle": zod.string(),
   "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "role": zod.string()
 }))
 })
@@ -1192,6 +1361,7 @@ export const GetGroupLeaderboardResponse = zod.object({
   "rank": zod.number(),
   "handle": zod.string(),
   "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
   "score": zod.number(),
   "hours": zod.number(),
   "topics": zod.number(),

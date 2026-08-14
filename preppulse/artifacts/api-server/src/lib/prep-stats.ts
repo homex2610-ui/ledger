@@ -12,9 +12,7 @@ import {
   usersTable,
 } from "@workspace/db/schema";
 import { startOfDay, startOfWeek, dayKeyIn, startOfDayIn } from "./utils";
-
-export const TOPIC_STATUSES = ["not_started", "learning", "practiced", "revised", "mastered"] as const;
-export type TopicStatus = (typeof TOPIC_STATUSES)[number];
+import type { TopicStatus } from "@workspace/exam-config";
 
 export const STATUS_WEIGHT: Record<string, number> = {
   not_started: 0,
@@ -31,28 +29,21 @@ export const WEIGHTAGE_VALUE: Record<string, number> = {
 };
 
 export async function listSyllabusTopics(userId: string) {
-  const progressRows = await db
-    .select()
-    .from(topicProgressTable)
-    .where(eq(topicProgressTable.userId, userId));
+  const [profileRows, progressRows] = await Promise.all([
+    db.select({ examTrack: profilesTable.examTrack }).from(profilesTable).where(eq(profilesTable.userId, userId)).limit(1),
+    db.select().from(topicProgressTable).where(eq(topicProgressTable.userId, userId)),
+  ]);
+  const track = profileRows[0]?.examTrack ?? "jee_main";
   const progressByTopic = new Map(progressRows.map((row) => [row.topicId, row]));
 
   const catalog = await db
     .select()
     .from(topicsTable)
+    .where(eq(topicsTable.examTrack, track))
     .orderBy(asc(topicsTable.sortOrder));
 
   return catalog.map((topic) => {
     const progress = progressByTopic.get(topic.id);
-    const prereqIds = topic.prerequisites
-      .map((name) => catalog.find((item) => item.name === name && item.subject === topic.subject)?.id)
-      .filter((id): id is string => Boolean(id));
-    const locked =
-      prereqIds.length > 0 &&
-      prereqIds.some((prereqId) => {
-        const prereqProgress = progressByTopic.get(prereqId);
-        return (prereqProgress ? STATUS_WEIGHT[prereqProgress.status] : 0) < STATUS_WEIGHT.practiced;
-      });
     return {
       id: topic.id,
       subject: topic.subject,
@@ -63,7 +54,7 @@ export async function listSyllabusTopics(userId: string) {
       accuracy: progress?.accuracy ?? 0,
       questionCount: progress?.questionCount ?? 0,
       prerequisites: topic.prerequisites,
-      locked,
+      locked: false,
     };
   });
 }
@@ -205,6 +196,7 @@ export async function toProfileShape(userId: string) {
   return {
     handle: user.handle,
     email: user.email,
+    avatarUrl: user.avatarUrl,
     examTrack: profile.examTrack as "jee_main" | "neet",
     stage: profile.stage as "class_11" | "class_12" | "dropper",
     targetYear: profile.targetYear,
@@ -213,7 +205,6 @@ export async function toProfileShape(userId: string) {
     weeklyGoalMinutes: profile.weeklyGoalMinutes,
     focusMode: profile.focusMode,
     showOnLeaderboard: profile.showOnLeaderboard,
-    guardianConsentStatus: profile.guardianConsentStatus as "pending" | "verified",
     profileCode: profile.profileCode,
   };
 }
@@ -286,9 +277,9 @@ export async function myGroupRole(groupId: string, userId: string): Promise<"own
 }
 
 export async function userHandlesById(userIds: string[]) {
-  if (userIds.length === 0) return new Map<string, { handle: string; initials: string }>();
+  if (userIds.length === 0) return new Map<string, { handle: string; initials: string; avatarUrl: string | null }>();
   const rows = await db
-    .select({ id: usersTable.id, handle: usersTable.handle })
+    .select({ id: usersTable.id, handle: usersTable.handle, avatarUrl: usersTable.avatarUrl })
     .from(usersTable)
     .where(inArray(usersTable.id, userIds));
   return new Map(
@@ -296,6 +287,7 @@ export async function userHandlesById(userIds: string[]) {
       row.id,
       {
         handle: row.handle,
+        avatarUrl: row.avatarUrl,
         initials: row.handle
           .split(/[^a-zA-Z0-9]+/)
           .filter(Boolean)

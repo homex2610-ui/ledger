@@ -8,7 +8,7 @@ import { toProfileShape } from "../lib/prep-stats";
 import { createUserWithProfile } from "../lib/oauth/users";
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
-const AUTH_MAX_REQUESTS = 60;
+const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
 
 export function authRateLimit(req: Request, res: Response, next: NextFunction): void {
   const now = Date.now();

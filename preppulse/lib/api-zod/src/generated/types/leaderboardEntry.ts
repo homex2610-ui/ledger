@@ -10,6 +10,7 @@ export interface LeaderboardEntry {
   rank: number;
   handle: string;
   initials: string;
+  avatarUrl: string | null;
   score: number;
   hours: number;
   topics: number;

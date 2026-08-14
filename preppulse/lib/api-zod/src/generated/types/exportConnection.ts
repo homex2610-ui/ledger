@@ -9,5 +9,6 @@
 export interface ExportConnection {
   userId: string;
   handle: string;
+  avatarUrl: string | null;
   connectedAt: Date;
 }

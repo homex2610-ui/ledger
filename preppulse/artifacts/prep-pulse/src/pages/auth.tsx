@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowRight, Eye, EyeOff, LoaderCircle, Mail, ShieldCheck, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, useLogIn, useSignUp, type AuthResponse } from '@workspace/api-client-react';
-import { GoogleSignInButton, DiscordOAuthButton } from '@/components/oauth-buttons';
+import { getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, type AuthResponse } from '@workspace/api-client-react';
+import { GoogleSignInButton, GoogleOAuthButton, DiscordOAuthButton } from '@/components/oauth-buttons';
+import { DashboardBackdrop } from '@/components/dashboard-backdrop';
 import { getGisCsrfToken } from '@/lib/utils';
 
 function useOauthQueryNotice(): string | null {
@@ -14,7 +15,7 @@ function useOauthQueryNotice(): string | null {
     if (!oauth) return;
     const providerLabel = provider === 'google' ? 'Google' : provider === 'discord' ? 'Discord' : null;
     if (oauth === 'error') setNotice(`${providerLabel ? providerLabel + ' ' : ''}sign-in failed. Try again.`);
-    if (oauth === 'conflict') setNotice(`An account with this email already exists. Sign in with email and password, then connect ${providerLabel ?? 'the provider'} in Settings.`);
+    if (oauth === 'conflict') setNotice(`This email already belongs to an account. If it\u2019s your account, sign in with the provider that created it, then connect ${providerLabel ?? 'the provider'} in Settings.`);
     if (oauth === 'success') setNotice('Signed in.');
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
@@ -23,34 +24,19 @@ function useOauthQueryNotice(): string | null {
 
 export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) => void }) {
   const queryClient = useQueryClient();
-  const signUp = useSignUp();
-  const logIn = useLogIn();
   const providers = useGetAuthOauthProviders();
   const googleAuth = useGoogleAuth();
   const discordAuthorize = useGetAuthDiscordAuthorize({ link: false }, { query: { queryKey: getGetAuthDiscordAuthorizeQueryKey({ link: false }), enabled: false } });
-  const [mode, setMode] = useState<'signup' | 'login'>('signup');
-  const [handle, setHandle] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const notice = useOauthQueryNotice();
-  const pending = signUp.isPending || logIn.isPending || googleAuth.isPending;
+
+  const googleEnabled = providers.data?.google.enabled ?? false;
+  const discordEnabled = providers.data?.discord.enabled ?? false;
+  const pending = googleAuth.isPending;
 
   const complete = (auth: AuthResponse) => {
     queryClient.setQueryData(getGetMeQueryKey(), auth);
     onAuthed(auth);
-  };
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    const onSuccess = (auth: AuthResponse) => complete(auth);
-    if (mode === 'signup') {
-      signUp.mutate({ data: { email, password, handle: handle || undefined } }, { onSuccess, onError: (err) => setError(err instanceof Error ? err.message : 'Sign up failed') });
-    } else {
-      logIn.mutate({ data: { email, password } }, { onSuccess, onError: (err) => setError(err instanceof Error ? err.message : 'Sign in failed') });
-    }
   };
 
   const handleGoogleCredential = (credential: string) => {
@@ -68,7 +54,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
           const message = err instanceof Error ? err.message : '';
           const parsed = /"code":"([a-z_]+)"/.exec(message);
           if (parsed?.[1] === 'account_linking_required') {
-            setError('An account with this email already exists. Sign in with email and password, then connect Google in Settings.');
+            setError('This email already belongs to an account. If it\u2019s yours, sign in with the provider that created it, then connect Google in Settings.');
           } else if (parsed?.[1] === 'invalid_credential' || parsed?.[1] === 'csrf_mismatch') {
             setError('Google sign-in failed — the credential was invalid or expired. Try again.');
           } else {
@@ -93,61 +79,59 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
     }
   };
 
-  const googleEnabled = providers.data?.google.enabled ?? false;
-  const discordEnabled = providers.data?.discord.enabled ?? false;
-  const showProviders = googleEnabled || discordEnabled;
+  const handleGoogleUnavailable = () => {
+    setError('Google sign-in isn\u2019t configured yet — use Discord or your email for now.');
+  };
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-5">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent font-display text-2xl font-bold text-accent-foreground shadow-sm">P</span>
-          <p className="mt-6 font-mono-custom text-[10px] uppercase tracking-[.2em] text-primary">PrepPulse · keep moving</p>
-          <h1 className="mt-2 font-display text-4xl font-bold tracking-[-.04em]">{mode === 'signup' ? 'Make your account' : 'Welcome back'}</h1>
-          <p className="mt-3 max-w-sm text-sm text-muted-foreground">{mode === 'signup' ? 'A private study companion that tracks your pulse, tests, and recall — no socials required.' : 'Pick up exactly where you left off.'}</p>
-        </div>
+    <div className="relative min-h-[100dvh] overflow-hidden bg-background">
+      <div className="pointer-events-none absolute inset-0 scale-105 blur-[14px] saturate-[.85]">
+        <div className="pt-10"><DashboardBackdrop /></div>
+      </div>
+      <div className="pointer-events-none absolute inset-0 bg-background/55" />
+      <div className="absolute inset-0 flex items-center justify-center px-5 py-10">
+        <div className="relative grid w-full max-w-4xl overflow-hidden rounded-3xl border border-border/80 bg-card/95 shadow-[0_24px_80px_hsl(186_32%_16%/.25)] backdrop-blur-xl md:grid-cols-[1.1fr_1fr]">
+          <div className="hidden flex-col justify-between border-r border-border/70 p-10 md:flex">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent font-display text-xl font-bold text-accent-foreground shadow-sm">P</span>
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-display text-lg font-bold leading-none tracking-[-.02em]">PrepPulse</span>
+                  <span className="font-mono-custom text-[9px] uppercase tracking-[.2em] text-muted-foreground">keep moving</span>
+                </span>
+              </div>
+              <p className="mt-10 font-mono-custom text-[9px] uppercase tracking-[.28em] text-primary">A study companion for JEE / NEET prep</p>
+              <p className="mt-4 max-w-md font-display text-[2.1rem] font-bold leading-[1.08] tracking-[-.03em]">Every session accounted.<br />Every chapter a step closer.</p>
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">A daily pulse, syllabus coverage, spaced recall and a mistake ledger — one instrument, day by day, until the exam.</p>
+            </div>
+            <p className="font-mono-custom text-[8.5px] uppercase tracking-[.2em] text-muted-foreground/60">Study · Recall · Tests · Compete · Circles</p>
+          </div>
 
-        <div className="mt-8 rounded-2xl border border-border/80 bg-card p-6 shadow-[0_18px_50px_hsl(186_32%_16%/.08)]">
-          {showProviders && (
-            <div className="space-y-2.5">
-              {googleEnabled && <GoogleSignInButton clientId={providers.data!.google.clientId!} onCredential={handleGoogleCredential} disabled={pending} />}
-              {discordEnabled && <DiscordOAuthButton label="Continue with Discord" onStart={handleDiscord} disabled={pending} />}
+          <div className="p-7 md:p-10">
+            <div className="mb-6 flex items-center gap-3 md:hidden">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-accent-foreground shadow-sm">P</span>
+              <span className="font-display text-lg font-bold tracking-[-.02em]">PrepPulse</span>
+            </div>
+            <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Continue as you</p>
+            <h1 className="mt-1 font-display text-3xl font-bold tracking-[-.04em]">Sign in to keep your pulse</h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">One account for your sessions, recall and circles. Pick a provider to continue.</p>
+
+            <div className="mt-6 space-y-2.5">
+              {googleEnabled
+                ? <GoogleSignInButton clientId={providers.data!.google.clientId ?? null} onCredential={handleGoogleCredential} disabled={pending} />
+                : <GoogleOAuthButton label="Continue with Google" onStart={handleGoogleUnavailable} disabled={pending} />}
               <div className="flex items-center gap-3 py-1">
                 <span className="h-px flex-1 bg-border" />
                 <span className="font-mono-custom text-[9px] uppercase tracking-[.18em] text-muted-foreground">or</span>
                 <span className="h-px flex-1 bg-border" />
               </div>
+              <DiscordOAuthButton label="Continue with Discord" onStart={discordEnabled ? handleDiscord : () => setError('Discord sign-in isn\u2019t configured yet.')} disabled={pending} />
             </div>
-          )}
 
-          <form onSubmit={submit} className="mt-4 space-y-4">
-            {error && <div className="rounded-xl border border-accent/25 bg-accent/10 px-4 py-3 text-xs font-semibold text-accent" data-testid="auth-error">{error}</div>}
-            {notice && <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs font-semibold text-primary" data-testid="auth-notice">{notice}</div>}
-            {mode === 'signup' && (
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold"><UserRound size={13} /> Handle</span>
-                <input value={handle} onChange={(event) => setHandle(event.target.value)} placeholder="e.g. aarav" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid="input-auth-handle" />
-              </label>
-            )}
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold"><Mail size={13} /> Email</span>
-              <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid="input-auth-email" />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold"><ShieldCheck size={13} /> Password</span>
-              <div className="relative">
-                <input type={showPassword ? 'text' : 'password'} required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === 'signup' ? 'At least 8 characters' : 'Your password'} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} className="h-11 w-full rounded-xl border border-border bg-background px-3 pr-11 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid="input-auth-password" />
-                <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground hover:bg-secondary" aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
-              </div>
-            </label>
-            <button type="submit" disabled={pending} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-60" data-testid="button-auth-submit">
-              {pending ? <LoaderCircle size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-              {mode === 'signup' ? 'Create account' : 'Sign in'}
-            </button>
-            <button type="button" onClick={() => { setMode((current) => current === 'signup' ? 'login' : 'signup'); setError(null); }} className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="button-auth-toggle">
-              {mode === 'signup' ? 'Already have an account? Sign in' : "New here? Create an account"}
-            </button>
-          </form>
+            {pending && <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-muted-foreground"><LoaderCircle size={14} className="animate-spin" /> Signing you in…</div>}
+            {error && <div className="mt-4 rounded-xl border border-accent/25 bg-accent/10 px-4 py-3 text-xs font-semibold text-accent" data-testid="auth-error">{error}</div>}
+            {notice && <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs font-semibold text-primary" data-testid="auth-notice">{notice}</div>}
+          </div>
         </div>
       </div>
     </div>

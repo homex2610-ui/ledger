@@ -51,6 +51,9 @@ import { generateInviteCode, safeTimeZone, startOfDay, toISODate, weekLabel } fr
 const router: IRouter = Router();
 router.use(requireAuth);
 
+const CIRCLE_CAPACITY = 25;
+const MAX_CONNECTIONS = CIRCLE_CAPACITY - 1;
+
 async function groupSummaryFor(userId: string, group: typeof groupsTable.$inferSelect) {
   const memberRows = await db
     .select()
@@ -89,12 +92,13 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
 
   const entries = visibleIds
     .map((id) => {
-      const info = handles.get(id) ?? { handle: "unknown", initials: "??" };
+      const info = handles.get(id) ?? { handle: "unknown", initials: "??", avatarUrl: null };
       const minutes = minutesByUser.get(id) ?? 0;
       const topics = topicsByUser.get(id) ?? 0;
       return {
         handle: info.handle,
         initials: info.initials,
+        avatarUrl: info.avatarUrl,
         score: Math.round(minutes + topics * 30),
         hours: Math.round((minutes / 60) * 10) / 10,
         topics,
@@ -125,24 +129,36 @@ router.get("/leaderboard", async (req, res) => {
 router.get("/circles", async (req, res) => {
   const timeZone = safeTimeZone(req.query.tz);
   const [profile, connectionIds] = await Promise.all([toProfileShape(req.userId), connectionUserIds(req.userId)]);
-  const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(connectionIds);
-  const handles = await userHandlesById(connectionIds);
+  const allIds = [...connectionIds, req.userId];
+  const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(allIds);
+  const handles = await userHandlesById(allIds);
 
-  const connections = await Promise.all(
-    connectionIds.map(async (id) => {
-      const info = handles.get(id) ?? { handle: "unknown", initials: "??" };
-      return {
-        userId: id,
-        handle: info.handle,
-        initials: info.initials,
-        weeklyMinutes: minutesByUser.get(id) ?? 0,
-        weeklyTopics: topicsByUser.get(id) ?? 0,
-        streak: await computeStreak(id, timeZone),
-      };
+  const memberShape = async (id: string, isOwner: boolean) => {
+    const info = handles.get(id) ?? { handle: "unknown", initials: "??", avatarUrl: null };
+    return {
+      userId: id,
+      handle: info.handle,
+      initials: info.initials,
+      avatarUrl: info.avatarUrl,
+      weeklyMinutes: minutesByUser.get(id) ?? 0,
+      weeklyTopics: topicsByUser.get(id) ?? 0,
+      streak: await computeStreak(id, timeZone),
+      isOwner,
+    };
+  };
+
+  const self = await memberShape(req.userId, true);
+  const connections = await Promise.all(connectionIds.map((id) => memberShape(id, false)));
+
+  res.json(
+    GetCirclesResponse.parse({
+      profileCode: profile?.profileCode ?? "",
+      memberCount: 1 + connections.length,
+      capacity: CIRCLE_CAPACITY,
+      self,
+      connections,
     }),
   );
-
-  res.json(GetCirclesResponse.parse({ profileCode: profile?.profileCode ?? "", connections }));
 });
 
 router.post("/circles/connect", async (req, res) => {
@@ -160,33 +176,54 @@ router.post("/circles/connect", async (req, res) => {
     return;
   }
 
-  const already = await db
-    .select()
-    .from(circleConnectionsTable)
-    .where(and(eq(circleConnectionsTable.userId, req.userId), eq(circleConnectionsTable.connectionId, target.userId)))
-    .limit(1);
+  // Atomic two-sided capacity check. Both users' profile rows are locked so
+  // concurrent connects involving either user serialize; both circles must
+  // have room before the reciprocal pair is inserted. On failure nothing is
+  // written and the joining user keeps their own independent circle.
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: profilesTable.userId })
+      .from(profilesTable)
+      .where(inArray(profilesTable.userId, [req.userId, target.userId]))
+      .for("update");
 
-  if (!already[0]) {
-    await db
+    const [mine, theirs] = await Promise.all([
+      tx.select().from(circleConnectionsTable).where(eq(circleConnectionsTable.userId, req.userId)),
+      tx.select().from(circleConnectionsTable).where(eq(circleConnectionsTable.userId, target.userId)),
+    ]);
+
+    const alreadyConnected = mine.some((row) => row.connectionId === target.userId) || theirs.some((row) => row.connectionId === req.userId);
+    if (alreadyConnected) return;
+
+    if (mine.length >= MAX_CONNECTIONS || theirs.length >= MAX_CONNECTIONS) {
+      res.status(409).json({ error: "Your circle is full — this private circle can have up to 25 members." });
+      return;
+    }
+
+    await tx
       .insert(circleConnectionsTable)
       .values([
         { userId: req.userId, connectionId: target.userId },
         { userId: target.userId, connectionId: req.userId },
       ])
       .onConflictDoNothing();
-  }
+  });
+
+  if (res.headersSent) return;
 
   const handles = await userHandlesById([target.userId]);
-  const info = handles.get(target.userId) ?? { handle: "unknown", initials: "??" };
+  const info = handles.get(target.userId) ?? { handle: "unknown", initials: "??", avatarUrl: null };
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers([target.userId]);
   res.status(201).json(
     ConnectByCodeResponse.parse({
       userId: target.userId,
       handle: info.handle,
       initials: info.initials,
+      avatarUrl: info.avatarUrl,
       weeklyMinutes: minutesByUser.get(target.userId) ?? 0,
       weeklyTopics: topicsByUser.get(target.userId) ?? 0,
       streak: await computeStreak(target.userId),
+      isOwner: false,
     }),
   );
 });
@@ -220,7 +257,7 @@ router.delete("/circles/:userId", async (req, res) => {
 router.get("/circles/feed", async (req, res) => {
   const connectionIds = await connectionUserIds(req.userId);
   const handles = await userHandlesById(connectionIds);
-  const items: Array<{ userId: string; handle: string; type: "session" | "test" | "topic"; subject: string; detail: string; date: Date }> = [];
+  const items: Array<{ userId: string; handle: string; avatarUrl: string | null; type: "session" | "test" | "topic"; subject: string; detail: string; date: Date }> = [];
 
   const since = new Date(Date.now() - 7 * 86_400_000);
 
@@ -234,6 +271,7 @@ router.get("/circles/feed", async (req, res) => {
     items.push({
       userId: session.userId,
       handle: handles.get(session.userId)?.handle ?? "unknown",
+      avatarUrl: handles.get(session.userId)?.avatarUrl ?? null,
       type: "session",
       subject: session.subject,
       detail: `studied ${session.subject} for ${session.minutes} minutes`,
@@ -251,6 +289,7 @@ router.get("/circles/feed", async (req, res) => {
     items.push({
       userId: test.userId,
       handle: handles.get(test.userId)?.handle ?? "unknown",
+      avatarUrl: handles.get(test.userId)?.avatarUrl ?? null,
       type: "test",
       subject: test.subject ?? "Full syllabus",
       detail: `logged ${test.name} at ${test.accuracy}% accuracy`,
@@ -269,6 +308,7 @@ router.get("/circles/feed", async (req, res) => {
     items.push({
       userId: progress.userId,
       handle: handles.get(progress.userId)?.handle ?? "unknown",
+      avatarUrl: handles.get(progress.userId)?.avatarUrl ?? null,
       type: "topic",
       subject: topic.subject,
       detail: `moved ${topic.name} to ${progress.status.replace("_", " ")}`,
@@ -375,6 +415,7 @@ router.get("/groups/:groupId", async (req, res) => {
     userId: row.userId,
     handle: handles.get(row.userId)?.handle ?? "unknown",
     initials: handles.get(row.userId)?.initials ?? "??",
+    avatarUrl: handles.get(row.userId)?.avatarUrl ?? null,
     role: row.role,
   }));
 

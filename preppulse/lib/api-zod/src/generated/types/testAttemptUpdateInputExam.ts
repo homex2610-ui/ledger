@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export type TestAttemptInputExam = typeof TestAttemptInputExam[keyof typeof TestAttemptInputExam];
+export type TestAttemptUpdateInputExam = typeof TestAttemptUpdateInputExam[keyof typeof TestAttemptUpdateInputExam];
 
 
-export const TestAttemptInputExam = {
+export const TestAttemptUpdateInputExam = {
   jee_main: 'jee_main',
   jee_adv: 'jee_adv',
   neet: 'neet',

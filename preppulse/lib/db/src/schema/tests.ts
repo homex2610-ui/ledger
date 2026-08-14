@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const testAttemptsTable = pgTable(
@@ -11,6 +11,7 @@ export const testAttemptsTable = pgTable(
     name: text("name").notNull(),
     exam: text("exam").notNull().default("jee_main"),
     subject: text("subject"),
+    subjectScores: jsonb("subject_scores").$type<Record<string, number> | null>(),
     date: timestamp("date", { withTimezone: true }).notNull().defaultNow(),
     score: integer("score").notNull(),
     maxScore: integer("maxScore").notNull(),

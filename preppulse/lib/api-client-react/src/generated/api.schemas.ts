@@ -33,17 +33,10 @@ export const ProfileStage = {
   dropper: 'dropper',
 } as const;
 
-export type ProfileGuardianConsentStatus = typeof ProfileGuardianConsentStatus[keyof typeof ProfileGuardianConsentStatus];
-
-
-export const ProfileGuardianConsentStatus = {
-  pending: 'pending',
-  verified: 'verified',
-} as const;
-
 export interface Profile {
   handle: string;
   email: string;
+  avatarUrl: string | null;
   examTrack: ProfileExamTrack;
   stage: ProfileStage;
   targetYear: number;
@@ -52,7 +45,6 @@ export interface Profile {
   weeklyGoalMinutes: number;
   focusMode: boolean;
   showOnLeaderboard: boolean;
-  guardianConsentStatus: ProfileGuardianConsentStatus;
   profileCode: string;
 }
 
@@ -126,6 +118,7 @@ export interface ExportGroupMembership {
 export interface ExportConnection {
   userId: string;
   handle: string;
+  avatarUrl: string | null;
   connectedAt: string;
 }
 
@@ -217,14 +210,27 @@ export type TestAttemptExam = typeof TestAttemptExam[keyof typeof TestAttemptExa
 
 export const TestAttemptExam = {
   jee_main: 'jee_main',
+  jee_adv: 'jee_adv',
   neet: 'neet',
 } as const;
+
+export interface SubjectScores {
+  /** @minimum 0 */
+  physics?: number;
+  /** @minimum 0 */
+  chemistry?: number;
+  /** @minimum 0 */
+  mathematics?: number;
+  /** @minimum 0 */
+  biology?: number;
+}
 
 export interface TestAttempt {
   id: string;
   name: string;
   exam: TestAttemptExam;
   subject: string | null;
+  subjectScores: SubjectScores | null;
   date: string;
   score: number;
   maxScore: number;
@@ -285,14 +291,6 @@ export const ProfileUpdateStage = {
   dropper: 'dropper',
 } as const;
 
-export type ProfileUpdateGuardianConsentStatus = typeof ProfileUpdateGuardianConsentStatus[keyof typeof ProfileUpdateGuardianConsentStatus];
-
-
-export const ProfileUpdateGuardianConsentStatus = {
-  pending: 'pending',
-  verified: 'verified',
-} as const;
-
 export interface ProfileUpdate {
   /** @minLength 2 */
   handle?: string;
@@ -306,7 +304,35 @@ export interface ProfileUpdate {
   weeklyGoalMinutes?: number;
   focusMode?: boolean;
   showOnLeaderboard?: boolean;
-  guardianConsentStatus?: ProfileUpdateGuardianConsentStatus;
+}
+
+export type TestAttemptUpdateInputExam = typeof TestAttemptUpdateInputExam[keyof typeof TestAttemptUpdateInputExam];
+
+
+export const TestAttemptUpdateInputExam = {
+  jee_main: 'jee_main',
+  jee_adv: 'jee_adv',
+  neet: 'neet',
+} as const;
+
+export interface TestAttemptUpdateInput {
+  /** @minLength 1 */
+  name?: string;
+  exam?: TestAttemptUpdateInputExam;
+  subject?: string | null;
+  subjectScores?: SubjectScores | null;
+  /** @minimum 0 */
+  score?: number;
+  /** @minimum 1 */
+  maxScore?: number;
+  /** @minimum 0 */
+  attempted?: number;
+  /** @minimum 1 */
+  totalQuestions?: number;
+  /** @minimum 1 */
+  timeMinutes?: number;
+  /** @minimum 0 */
+  negativeMarksLost?: number;
 }
 
 export type TopicProgressInputStatus = typeof TopicProgressInputStatus[keyof typeof TopicProgressInputStatus];
@@ -346,6 +372,7 @@ export type TestAttemptInputExam = typeof TestAttemptInputExam[keyof typeof Test
 
 export const TestAttemptInputExam = {
   jee_main: 'jee_main',
+  jee_adv: 'jee_adv',
   neet: 'neet',
 } as const;
 
@@ -354,6 +381,7 @@ export interface TestAttemptInput {
   name: string;
   exam: TestAttemptInputExam;
   subject?: string | null;
+  subjectScores?: SubjectScores | null;
   /** @minimum 0 */
   score: number;
   /** @minimum 1 */
@@ -505,6 +533,7 @@ export interface LeaderboardEntry {
   rank: number;
   handle: string;
   initials: string;
+  avatarUrl: string | null;
   score: number;
   hours: number;
   topics: number;
@@ -521,13 +550,20 @@ export interface CircleMember {
   userId: string;
   handle: string;
   initials: string;
+  avatarUrl: string | null;
   weeklyMinutes: number;
   weeklyTopics: number;
   streak: number;
+  isOwner: boolean;
 }
 
 export interface CirclesResponse {
   profileCode: string;
+  /** Total members in this circle, including the owner */
+  memberCount: number;
+  /** Maximum members per circle (25, owner included) */
+  capacity: number;
+  self: CircleMember;
   connections: CircleMember[];
 }
 
@@ -548,6 +584,7 @@ export const CircleFeedItemType = {
 export interface CircleFeedItem {
   userId: string;
   handle: string;
+  avatarUrl: string | null;
   type: CircleFeedItemType;
   subject: string;
   detail: string;
@@ -594,6 +631,7 @@ export interface GroupMemberRow {
   userId: string;
   handle: string;
   initials: string;
+  avatarUrl: string | null;
   role: string;
 }
 

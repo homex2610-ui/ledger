@@ -31,13 +31,34 @@ function loadGisScript(): Promise<void> {
   return gisScriptPromise;
 }
 
-export function GoogleSignInButton({ clientId, onCredential, disabled }: { clientId: string; onCredential: (credential: string) => void; disabled?: boolean }) {
+export function GoogleOAuthButton({ label, onStart, disabled }: { label: string; onStart: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onStart}
+      disabled={disabled}
+      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-background text-sm font-bold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+      data-testid="button-google-oauth"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.57 5.57 0 0 1-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82Z" />
+        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09A11.99 11.99 0 0 0 12 24Z" />
+        <path fill="#FBBC05" d="M5.27 14.29a7.2 7.2 0 0 1 0-4.58V6.62H1.29a12.04 12.04 0 0 0 0 10.76l3.98-3.09Z" />
+        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A11.99 11.99 0 0 0 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75Z" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+export function GoogleSignInButton({ clientId, onCredential, disabled }: { clientId: string | null; onCredential: (credential: string) => void; disabled?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const onCredentialRef = useRef(onCredential);
   onCredentialRef.current = onCredential;
 
   useEffect(() => {
+    if (!clientId) return;
     let cancelled = false;
     loadGisScript()
       .then(() => {
@@ -65,6 +86,9 @@ export function GoogleSignInButton({ clientId, onCredential, disabled }: { clien
 
   if (disabled) {
     return <div className="flex h-11 w-full items-center justify-center rounded-xl bg-secondary/60" aria-busy="true"><LoaderCircle size={16} className="animate-spin text-muted-foreground" /></div>;
+  }
+  if (!clientId) {
+    return <GoogleOAuthButton label="Continue with Google" onStart={() => undefined} />;
   }
   if (status === 'error') {
     return <div className="flex h-11 w-full items-center justify-center rounded-xl border border-border/70 bg-secondary/30 text-xs font-semibold text-muted-foreground">Google sign-in could not load.</div>;

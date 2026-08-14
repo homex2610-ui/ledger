@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.2.0
  */
+import type { SubjectScores } from './subjectScores';
 import type { TestAttemptExam } from './testAttemptExam';
 
 export interface TestAttempt {
@@ -12,6 +13,7 @@ export interface TestAttempt {
   name: string;
   exam: TestAttemptExam;
   subject: string | null;
+  subjectScores: SubjectScores | null;
   date: Date;
   score: number;
   maxScore: number;

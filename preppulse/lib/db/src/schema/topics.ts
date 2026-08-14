@@ -5,6 +5,7 @@ export const topicsTable = pgTable(
   "topics",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    examTrack: text("exam_track").notNull().default("jee_main"),
     subject: text("subject").notNull(),
     chapter: text("chapter").notNull(),
     name: text("name").notNull(),
@@ -13,7 +14,7 @@ export const topicsTable = pgTable(
     prerequisites: text("prerequisites").array().notNull().default([]),
   },
   (table) => [
-    uniqueIndex("topics_subject_chapter_name_unique").on(table.subject, table.chapter, table.name),
+    uniqueIndex("topics_subject_chapter_name_unique").on(table.examTrack, table.subject, table.chapter, table.name),
   ],
 );
 

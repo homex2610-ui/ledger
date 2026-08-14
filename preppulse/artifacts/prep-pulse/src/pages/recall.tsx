@@ -7,12 +7,15 @@ import {
   useCreateCard,
   useDeleteCard,
   useGetCardStats,
+  useGetProfile,
   useListCards,
   useReviewCard,
   type Card as CardItem,
   type CardReviewInputGrade,
 } from '@workspace/api-client-react';
+import { getExamConfig } from '@workspace/exam-config';
 import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle } from '@/components/ui-elements';
+import { Select } from '@/components/ui/select';
 
 const gradeMeta: Array<{ grade: CardReviewInputGrade; label: string; hint: string; accent: boolean }> = [
   { grade: 'again', label: 'Again', hint: 'forgot it', accent: true },
@@ -20,8 +23,6 @@ const gradeMeta: Array<{ grade: CardReviewInputGrade; label: string; hint: strin
   { grade: 'good', label: 'Good', hint: 'got it', accent: false },
   { grade: 'easy', label: 'Easy', hint: 'too easy', accent: false },
 ];
-
-const subjects = ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'General'];
 
 function isDue(card: CardItem): boolean {
   const endOfToday = new Date();
@@ -36,6 +37,8 @@ export default function Recall() {
   const reviewCard = useReviewCard();
   const createCard = useCreateCard();
   const deleteCard = useDeleteCard();
+  const profileQuery = useGetProfile();
+  const subjects = [...getExamConfig(profileQuery.data?.examTrack ?? 'jee_main').subjects, 'General'];
 
   const cards = cardsQuery.data ?? [];
   const dueCards = useMemo(() => cards.filter(isDue).sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime()), [cards]);
@@ -43,7 +46,7 @@ export default function Recall() {
   const [queueIndex, setQueueIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ front: '', back: '', subject: 'Physics' });
+  const [form, setForm] = useState({ front: '', back: '', subject: subjects[0] });
 
   const current = queueIndex < dueCards.length ? dueCards[queueIndex] : undefined;
 
@@ -86,7 +89,7 @@ export default function Recall() {
       { data: { front: form.front.trim(), back: form.back.trim(), subject: form.subject } },
       {
         onSuccess: () => {
-          setForm({ front: '', back: '', subject: 'Physics' });
+          setForm({ front: '', back: '', subject: subjects[0] });
           setShowForm(false);
           refresh();
         },
@@ -147,7 +150,7 @@ export default function Recall() {
             <Card className="border-primary/25 p-5 md:p-6">
               <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-primary">New card</p>
               <form onSubmit={addCard} className="mt-4 space-y-3">
-                <label className="block"><span className="mb-1.5 block text-xs font-bold">Subject</span><select value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none" data-testid="select-card-subject">{subjects.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
+                <label className="block"><span className="mb-1.5 block text-xs font-bold">Subject</span><Select value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} data-testid="select-card-subject">{subjects.map((subject) => <option key={subject}>{subject}</option>)}</Select></label>
                 <label className="block"><span className="mb-1.5 block text-xs font-bold">Question</span><textarea required rows={2} value={form.front} onChange={(event) => setForm({ ...form, front: event.target.value })} placeholder="e.g. State Newton's second law" className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid="input-card-front" /></label>
                 <label className="block"><span className="mb-1.5 block text-xs font-bold">Answer</span><textarea required rows={3} value={form.back} onChange={(event) => setForm({ ...form, back: event.target.value })} placeholder="The shorthand you want to recall" className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid="input-card-back" /></label>
                 <button type="submit" disabled={createCard.isPending || !form.front.trim() || !form.back.trim()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50" data-testid="button-save-card">{createCard.isPending ? 'Saving…' : 'Save card'}</button>

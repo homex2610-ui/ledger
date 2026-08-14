@@ -10,6 +10,7 @@ import type { CircleFeedItemType } from './circleFeedItemType';
 export interface CircleFeedItem {
   userId: string;
   handle: string;
+  avatarUrl: string | null;
   type: CircleFeedItemType;
   subject: string;
   detail: string;

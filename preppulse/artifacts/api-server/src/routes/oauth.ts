@@ -8,7 +8,7 @@ import { createSession, resolveSession, setSessionCookie, requireAuth } from "..
 import { authRateLimit } from "./auth";
 import { toProfileShape } from "../lib/prep-stats";
 import { GoogleVerificationError, verifyGoogleCredential } from "../lib/oauth/google";
-import { DiscordOAuthError, exchangeDiscordCode, fetchDiscordUser, getDiscordAuthorizeUrl } from "../lib/oauth/discord";
+import { DiscordOAuthError, discordAvatarUrl, exchangeDiscordCode, fetchDiscordUser, getDiscordAuthorizeUrl, joinDiscordGuild } from "../lib/oauth/discord";
 import { loadOAuthConfig } from "../lib/oauth/config";
 import {
   AlreadyLinkedError,
@@ -188,9 +188,10 @@ router.get("/discord/callback", async (req, res) => {
   res.clearCookie(OAUTH_LINK_COOKIE, { httpOnly: true, sameSite: "lax", path: "/" });
 
   let identity;
+  let accessToken: string | null = null;
   try {
     const redirectUri = buildRedirectUri(req);
-    const accessToken = await exchangeDiscordCode(code, redirectUri);
+    accessToken = await exchangeDiscordCode(code, redirectUri);
     identity = await fetchDiscordUser(accessToken);
   } catch (error) {
     if (error instanceof DiscordOAuthError) {
@@ -200,7 +201,22 @@ router.get("/discord/callback", async (req, res) => {
     throw error;
   }
 
-  const context = { provider: "discord" as const, providerUserId: identity.id, email: identity.email, displayName: identity.globalName ?? identity.username };
+  if (accessToken) {
+    try {
+      await joinDiscordGuild(accessToken, identity.id);
+    } catch (error) {
+      if (error instanceof DiscordOAuthError) console.warn("[oauth] discord guild join skipped:", error.message);
+      else throw error;
+    }
+  }
+
+  const context = {
+    provider: "discord" as const,
+    providerUserId: identity.id,
+    email: identity.email,
+    displayName: identity.username,
+    avatarUrl: discordAvatarUrl(identity.id, identity.avatar),
+  };
 
   if (link) {
     const session = await resolveSession(req);

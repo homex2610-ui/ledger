@@ -10,7 +10,9 @@ export interface CircleMember {
   userId: string;
   handle: string;
   initials: string;
+  avatarUrl: string | null;
   weeklyMinutes: number;
   weeklyTopics: number;
   streak: number;
+  isOwner: boolean;
 }

@@ -1,10 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, HelpCircle, Link2, LoaderCircle, ShieldCheck, Trash2, Unplug, UserRound } from 'lucide-react';
+import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Sun, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { exportMyData, getGetProfileQueryKey, useDeleteMyAccount, useDisconnectOauthProvider, getGetAuthDiscordAuthorizeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type ProfileUpdate } from '@workspace/api-client-react';
+import { exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type ProfileUpdate } from '@workspace/api-client-react';
+import { EXAM_TRACKS, getExamConfig } from '@workspace/exam-config';
 import { Card, ErrorState, LoadingBlock, SavingLabel, SectionTitle } from '@/components/ui-elements';
+import { Select } from '@/components/ui/select';
 import { GoogleSignInButton, DiscordOAuthButton } from '@/components/oauth-buttons';
+import { Avatar } from '@/components/avatar';
 import { getGisCsrfToken, initialsFor } from '@/lib/utils';
+import { applyTemplate, applyTheme, getStoredTemplate, getStoredTheme, type AppTemplate, type AppTheme } from '@/lib/theme';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -18,17 +22,27 @@ export default function Settings() {
   const profile = query.data;
   const [values, setValues] = useState<ProfileUpdate>({ focusMode: false, showOnLeaderboard: true });
   const [copied, setCopied] = useState(false);
-  const [consentInfoOpen, setConsentInfoOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<AppTheme>(getStoredTheme());
+  const [template, setTemplate] = useState<AppTemplate>(getStoredTemplate());
   useEffect(() => { if (profile) setValues({ focusMode: profile.focusMode, showOnLeaderboard: profile.showOnLeaderboard }); }, [profile]);
 
   const update = (next: Partial<ProfileUpdate>) => {
     const merged = { ...values, ...next };
     setValues(merged);
-    updateProfile.mutate({ data: merged }, { onSuccess: (saved) => { queryClient.setQueryData(getGetProfileQueryKey(), saved); } });
+    updateProfile.mutate({ data: merged }, {
+      onSuccess: (saved) => {
+        queryClient.setQueryData(getGetProfileQueryKey(), saved);
+        if (next.examTrack !== undefined && next.examTrack !== profile?.examTrack) {
+          for (const queryKey of [getListTopicsQueryKey(), getGetSyllabusSummaryQueryKey(), getGetDashboardQueryKey(), getGetCardStatsQueryKey(), getListCardsQueryKey(), getListTestAttemptsQueryKey()]) {
+            queryClient.invalidateQueries({ queryKey });
+          }
+        }
+      },
+    });
   };
 
   const updateField = (field: keyof ProfileUpdate) => (value: string | number | boolean) => update({ [field]: value } as Partial<ProfileUpdate>);
@@ -114,15 +128,15 @@ export default function Settings() {
 
   return <div className="mx-auto max-w-4xl">
     <div><p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Your space, your rules</p><h1 className="mt-2 font-display text-4xl font-bold tracking-[-.04em] md:text-5xl">Settings</h1><p className="mt-3 max-w-xl text-sm text-muted-foreground">Shape the companion around how you actually study.</p></div>
-    <Card className="mt-7 flex flex-col gap-5 p-5 sm:flex-row sm:items-center md:p-7"><div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary font-display text-xl font-bold text-primary-foreground">{initialsFor(profile.handle)}</div><div className="flex-1"><p className="font-display text-2xl font-bold">{profile.handle}</p><p className="mt-1 text-sm text-muted-foreground">{profile.examTrack === 'jee_main' ? 'JEE Main' : 'NEET'} · {labelStage(profile.stage)} · target {profile.targetYear}</p></div><div className="rounded-xl bg-secondary px-3 py-2 text-center"><p className="font-mono-custom text-[10px] uppercase tracking-[.13em] text-muted-foreground">Consent</p><p className={`mt-1 text-xs font-bold ${profile.guardianConsentStatus === 'verified' ? 'text-primary' : 'text-accent'}`}>{profile.guardianConsentStatus === 'verified' ? 'Verified' : 'Pending'}</p></div></Card>
+    <Card className="mt-7 flex flex-col gap-5 p-5 sm:flex-row sm:items-center md:p-7"><Avatar src={profile.avatarUrl} initials={initialsFor(profile.handle)} className="h-16 w-16 bg-primary text-xl text-primary-foreground" title={profile.handle} /><div className="flex-1"><p className="font-display text-2xl font-bold">{profile.handle}</p><p className="mt-1 text-sm text-muted-foreground">{getExamConfig(profile.examTrack).label} · {labelStage(profile.stage)} · target {profile.targetYear}</p></div></Card>
 
     <div className="mt-7 space-y-6">
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Profile" title="Who this pulse belongs to" action={<SavingLabel pending={updateProfile.isPending} />} />
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Handle" value={profile.handle} onCommit={(value) => updateField('handle')(value)} placeholder="your handle" testId="input-profile-handle" />
-          <label className="block"><span className="mb-1.5 block text-xs font-bold">Exam track</span><select value={profile.examTrack} onChange={(event) => updateField('examTrack')(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none" data-testid="select-profile-exam"><option value="jee_main">JEE Main</option><option value="neet">NEET</option></select></label>
-          <label className="block"><span className="mb-1.5 block text-xs font-bold">Stage</span><select value={profile.stage} onChange={(event) => updateField('stage')(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none" data-testid="select-profile-stage"><option value="class_11">Class 11</option><option value="class_12">Class 12</option><option value="dropper">Dropper</option></select></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">Exam track</span><Select value={profile.examTrack} onChange={(event) => updateField('examTrack')(event.target.value)} data-testid="select-profile-exam">{EXAM_TRACKS.map((track) => <option key={track.value} value={track.value}>{track.label}</option>)}</Select></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">Stage</span><Select value={profile.stage} onChange={(event) => updateField('stage')(event.target.value)} data-testid="select-profile-stage"><option value="class_11">Class 11</option><option value="class_12">Class 12</option><option value="dropper">Dropper</option></Select></label>
           <label className="block"><span className="mb-1.5 block text-xs font-bold">Target year</span><NumberField value={profile.targetYear} min={new Date().getFullYear()} max={new Date().getFullYear() + 3} onCommit={(value) => updateField('targetYear')(value)} testId="input-profile-year" /></label>
         </div>
       </Card>
@@ -136,6 +150,50 @@ export default function Settings() {
       </Card>
 
       <Card className="p-5 md:p-7"><SectionTitle eyebrow="Preferences" title="How PrepPulse shows up" action={<SavingLabel pending={updateProfile.isPending} />} /><div className="divide-y divide-border/70"><SettingRow icon={<Focus size={17} />} title="Focus mode" detail="Keep your rank and activity out of the weekly circle." enabled={values.focusMode ?? false} onToggle={() => update({ focusMode: !values.focusMode })} testId="switch-focus-mode" /><SettingRow icon={values.showOnLeaderboard ? <Eye size={17} /> : <EyeOff size={17} />} title="Show me on leaderboard" detail="Let your friends see your handle and weekly pulse." enabled={values.showOnLeaderboard ?? true} onToggle={() => update({ showOnLeaderboard: !values.showOnLeaderboard })} testId="switch-leaderboard-visibility" /></div></Card>
+
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="Appearance" title="Pick your vibe" />
+        <div className="mt-4 flex gap-2">
+          {([
+            { value: 'light', label: 'Light', icon: Sun },
+            { value: 'dark', label: 'Dark', icon: Moon },
+            { value: 'black', label: 'Black', icon: MoonStar },
+          ] as const).map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => { setTheme(value); applyTheme(value); }}
+              data-testid={`button-theme-${value}`}
+              className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${theme === value ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-secondary'}`}
+            >
+              <Icon size={15} /> {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {([
+            { value: 'original', label: 'Original', swatch: ['#1e9a83', '#e5613a'] },
+            { value: 'ocean', label: 'Ocean', swatch: ['#4f46e5', '#f59e0b', '#22c3d6'] },
+            { value: 'ember', label: 'Ember', swatch: ['#d64545', '#1e9a83', '#ed9f0f'] },
+            { value: 'forest', label: 'Forest', swatch: ['#2f9e5f', '#8ac926', '#23927f'] },
+            { value: 'sunset', label: 'Sunset', swatch: ['#e0579b', '#f59e0b', '#8a7bf2'] },
+            { value: 'midnight', label: 'Midnight', swatch: ['#5b5be0', '#22c3d6', '#eba817'] },
+            { value: 'grape', label: 'Grape', swatch: ['#8b5cf6', '#ec4899', '#eba817'] },
+            { value: 'royal', label: 'Royal', swatch: ['#d9a326', '#3b5bdb', '#14a3c9'] },
+          ] as const).map(({ value, label, swatch }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => { setTemplate(value); applyTemplate(value); }}
+              data-testid={`button-template-${value}`}
+              className={`inline-flex min-w-[104px] flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${template === value ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-secondary'}`}
+            >
+              <span className="flex h-4 w-8 overflow-hidden rounded-full border border-border/70" aria-hidden="true">{swatch.map((color) => <span key={color} className="h-full flex-1" style={{ background: color }} />)}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <Card className="p-5 md:p-7"><SectionTitle eyebrow="Circle code" title="Find your people" action={<Link2 size={17} className="text-primary" />} /><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Share this code with someone on PrepPulse. They enter it under Compete → My circle, and you become mutual connections — the only way anyone sees your pulse.</p><div className="mt-4 flex items-center justify-between rounded-2xl border border-dashed border-border p-5"><p className="font-mono-custom text-3xl font-bold tracking-[.25em] text-primary" data-testid="text-settings-code">{profile.profileCode}</p><button type="button" onClick={copyCode} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-secondary" data-testid="button-copy-code">{copied ? <Check size={13} className="text-primary" /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div></Card>
 
@@ -152,13 +210,6 @@ export default function Settings() {
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Privacy & care" title="Your data stays yours" />
         <div className="space-y-4">
-          <InfoRow icon={<ShieldCheck size={17} />} title="Guardian consent" detail={profile.guardianConsentStatus === 'verified' ? 'Consent verified. You can use private competition features.' : 'Consent is still pending. Ask your guardian to complete the approval step.'} status={profile.guardianConsentStatus === 'verified' ? 'Verified' : 'Pending'} action={profile.guardianConsentStatus === 'verified' ? undefined : <button type="button" onClick={() => setConsentInfoOpen((open) => !open)} className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary" data-testid="button-consent-info">{consentInfoOpen ? 'Hide' : 'How consent works'}</button>} />
-          {consentInfoOpen && (
-            <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-secondary/30 p-4 text-xs leading-relaxed text-muted-foreground" data-testid="consent-explainer">
-              <HelpCircle size={14} className="mt-0.5 shrink-0 text-primary" />
-              <p>PrepPulse has no separate guardian account yet. Consent is confirmed from this account's settings — when your guardian approves, the status flips from Pending to Verified automatically. No email or link is sent.</p>
-            </div>
-          )}
           <InfoRow icon={<UserRound size={17} />} title="Account" detail={`Signed in as ${profile.email}.`} status="Email verified" />
         </div>
         <div className="mt-4 flex flex-col gap-2 border-t border-border/70 pt-4 sm:flex-row">

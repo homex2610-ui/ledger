@@ -6,24 +6,24 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { SubjectScores } from './subjectScores';
-import type { TestAttemptInputExam } from './testAttemptInputExam';
+import type { TestAttemptUpdateInputExam } from './testAttemptUpdateInputExam';
 
-export interface TestAttemptInput {
+export interface TestAttemptUpdateInput {
   /** @minLength 1 */
-  name: string;
-  exam: TestAttemptInputExam;
+  name?: string;
+  exam?: TestAttemptUpdateInputExam;
   subject?: string | null;
   subjectScores?: SubjectScores | null;
   /** @minimum 0 */
-  score: number;
+  score?: number;
   /** @minimum 1 */
-  maxScore: number;
+  maxScore?: number;
   /** @minimum 0 */
-  attempted: number;
+  attempted?: number;
   /** @minimum 1 */
-  totalQuestions: number;
+  totalQuestions?: number;
   /** @minimum 1 */
-  timeMinutes: number;
+  timeMinutes?: number;
   /** @minimum 0 */
-  negativeMarksLost: number;
+  negativeMarksLost?: number;
 }

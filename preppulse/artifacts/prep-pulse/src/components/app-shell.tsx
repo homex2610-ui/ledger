@@ -3,6 +3,9 @@ import { BarChart3, BookOpen, BrainCircuit, Home, LogOut, MoreHorizontal, Settin
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetDashboard, useGetMe, useLogOut } from '@workspace/api-client-react';
+import { getExamConfig } from '@workspace/exam-config';
+import { Avatar } from '@/components/avatar';
+import { OnboardingModal } from '@/components/onboarding';
 import { browserTimeZone, initialsFor } from '@/lib/utils';
 
 const navigation = [
@@ -33,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const activeLabel = navigation.find((item) => item.href === location)?.label ?? 'PrepPulse';
   const handle = me?.profile.handle ?? 'Learner';
   const initials = initialsFor(handle);
-  const examLabel = me?.profile.examTrack === 'jee_main' ? 'JEE Main' : 'NEET';
+  const examLabel = getExamConfig(me?.profile.examTrack).label;
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const signal = SIGNALS[new Date().getDate() % SIGNALS.length];
   const signalProgress = dashboard
@@ -45,9 +48,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background">
-      <div className="main-grid mx-auto grid min-h-[100dvh] max-w-[1540px]">
-        <aside className="hidden border-r border-sidebar/30 bg-sidebar px-5 py-7 text-sidebar-foreground md:flex md:flex-col">
+    <div className="min-h-[100dvh] bg-background md:h-[100dvh] md:overflow-hidden">
+      <div className="main-grid mx-auto grid min-h-[100dvh] max-w-[1540px] md:h-full md:overflow-hidden">
+        <aside className="hidden border-r border-sidebar/30 bg-sidebar px-5 py-7 text-sidebar-foreground md:flex md:flex-col md:overflow-y-auto">
           <Link href="/" className="mb-12 flex items-center gap-3" data-testid="link-brand">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent font-display text-lg font-bold text-white shadow-sm">P</span>
             <span>
@@ -82,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </aside>
 
-        <div className="min-w-0">
+        <div className="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col md:overflow-hidden">
           <header className="sticky top-0 z-10 flex h-[72px] items-center justify-between border-b border-border/70 bg-background/90 px-5 backdrop-blur-md md:px-10">
             <div className="flex items-center gap-3">
               <button type="button" onClick={() => setMobileMenuOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary md:hidden" aria-label="Open navigation" data-testid="button-open-menu">
@@ -95,10 +98,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <Link href="/settings" data-testid="link-header-profile" className="flex items-center gap-3 rounded-full pl-2 transition-transform hover:scale-[1.02]">
               <span className="hidden text-right sm:block"><span className="block text-xs font-bold">{handle}</span><span className="font-mono-custom text-[10px] text-muted-foreground">{examLabel} · {me?.profile.targetYear ?? ''}</span></span>
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary font-display font-bold text-white">{initials}</span>
+              <Avatar src={me?.profile.avatarUrl} initials={initials} className="h-10 w-10 bg-primary text-xs text-white" title={handle} />
             </Link>
           </header>
-          <main className="page-enter px-5 pb-28 pt-7 md:px-10 md:pb-12 md:pt-10">{children}</main>
+          <main className="page-enter px-5 pb-28 pt-7 md:min-h-0 md:flex-1 md:overflow-y-auto md:px-10 md:pb-12 md:pt-10">{children}</main>
         </div>
       </div>
 
@@ -122,6 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
+      <OnboardingModal />
     </div>
   );
 }

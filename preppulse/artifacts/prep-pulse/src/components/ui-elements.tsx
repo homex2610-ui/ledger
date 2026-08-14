@@ -11,7 +11,7 @@ export function SectionTitle({ eyebrow, title, action }: { eyebrow?: string; tit
 }
 
 export function ProgressBar({ value, color = 'primary', locked = false, className = '' }: { value: number; color?: 'primary' | 'accent' | 'warm' | 'success'; locked?: boolean; className?: string }) {
-  const background = color === 'accent' ? 'bg-accent' : color === 'warm' ? 'bg-[#d89b55]' : color === 'success' ? 'bg-[#2e9e63]' : 'bg-primary';
+  const background = color === 'accent' ? 'bg-accent' : color === 'warm' ? 'bg-warm' : color === 'success' ? 'bg-success' : 'bg-primary';
   if (locked) return <div className={`h-2 overflow-hidden rounded-full bg-secondary ${className}`}><div className="h-full rounded-full bg-muted" /></div>;
   return <div className={`h-2 overflow-hidden rounded-full bg-secondary ${className}`}><div className={`progress-fill h-full rounded-full ${background}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>;
 }

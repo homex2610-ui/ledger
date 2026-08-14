@@ -340,6 +340,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestAttempt"
+  /tests/{id}:
+    patch:
+      operationId: updateTestAttempt
+      tags: [prep]
+      summary: Update a logged mock test attempt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestAttemptUpdateInput"
+      responses:
+        "200":
+          description: Updated mock test attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestAttempt"
+        "404":
+          description: Attempt not found
+    delete:
+      operationId: deleteTestAttempt
+      tags: [prep]
+      summary: Delete a logged mock test attempt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Attempt not found
   /tests/analyze:
     get:
       operationId: analyzeTestAttempts
@@ -719,8 +760,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CircleMember"
+        "400":
+          description: The code is your own code
         "404":
           description: No user with that code
+        "409":
+          description: Connection rejected because a circle is full (25-member limit)
   /circles/feed:
     get:
       operationId: getCircleFeed
@@ -1038,6 +1083,9 @@ components:
           type: string
         email:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         examTrack:
           type: string
           enum: [jee_main, neet]
@@ -1058,12 +1106,9 @@ components:
           type: boolean
         showOnLeaderboard:
           type: boolean
-        guardianConsentStatus:
-          type: string
-          enum: [pending, verified]
         profileCode:
           type: string
-      required: [handle, email, examTrack, stage, targetYear, examDate, dailyGoalMinutes, weeklyGoalMinutes, focusMode, showOnLeaderboard, guardianConsentStatus, profileCode]
+      required: [handle, email, avatarUrl, examTrack, stage, targetYear, examDate, dailyGoalMinutes, weeklyGoalMinutes, focusMode, showOnLeaderboard, profileCode]
 
     ExportGroup:
       type: object
@@ -1102,10 +1147,13 @@ components:
           type: string
         handle:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         connectedAt:
           type: string
           format: date-time
-      required: [userId, handle, connectedAt]
+      required: [userId, handle, avatarUrl, connectedAt]
     ExportMyData:
       type: object
       properties:
@@ -1179,9 +1227,41 @@ components:
           type: boolean
         showOnLeaderboard:
           type: boolean
-        guardianConsentStatus:
+
+    TestAttemptUpdateInput:
+      type: object
+      properties:
+        name:
           type: string
-          enum: [pending, verified]
+          minLength: 1
+        exam:
+          type: string
+          enum: [jee_main, jee_adv, neet]
+        subject:
+          type: string
+          nullable: true
+        subjectScores:
+          allOf:
+            - $ref: "#/components/schemas/SubjectScores"
+          nullable: true
+        score:
+          type: number
+          minimum: 0
+        maxScore:
+          type: number
+          minimum: 1
+        attempted:
+          type: number
+          minimum: 0
+        totalQuestions:
+          type: number
+          minimum: 1
+        timeMinutes:
+          type: number
+          minimum: 1
+        negativeMarksLost:
+          type: number
+          minimum: 0
 
     Topic:
       type: object
@@ -1251,6 +1331,22 @@ components:
             $ref: "#/components/schemas/SubjectCoverage"
       required: [totalTopics, masteredTopics, inProgressTopics, syllabusPercent, weightagePercent, bySubject]
 
+    SubjectScores:
+      type: object
+      additionalProperties: false
+      properties:
+        physics:
+          type: number
+          minimum: 0
+        chemistry:
+          type: number
+          minimum: 0
+        mathematics:
+          type: number
+          minimum: 0
+        biology:
+          type: number
+          minimum: 0
     TestAttempt:
       type: object
       properties:
@@ -1260,9 +1356,13 @@ components:
           type: string
         exam:
           type: string
-          enum: [jee_main, neet]
+          enum: [jee_main, jee_adv, neet]
         subject:
           type: string
+          nullable: true
+        subjectScores:
+          allOf:
+            - $ref: "#/components/schemas/SubjectScores"
           nullable: true
         date:
           type: string
@@ -1285,7 +1385,7 @@ components:
           type: array
           items:
             type: string
-      required: [id, name, exam, subject, date, score, maxScore, accuracy, attempted, totalQuestions, timeMinutes, negativeMarksLost, weakAreas]
+      required: [id, name, exam, subject, subjectScores, date, score, maxScore, accuracy, attempted, totalQuestions, timeMinutes, negativeMarksLost, weakAreas]
     TestAttemptInput:
       type: object
       properties:
@@ -1294,9 +1394,13 @@ components:
           minLength: 1
         exam:
           type: string
-          enum: [jee_main, neet]
+          enum: [jee_main, jee_adv, neet]
         subject:
           type: string
+          nullable: true
+        subjectScores:
+          allOf:
+            - $ref: "#/components/schemas/SubjectScores"
           nullable: true
         score:
           type: number
@@ -1589,6 +1693,9 @@ components:
           type: string
         initials:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         score:
           type: number
         hours:
@@ -1597,7 +1704,7 @@ components:
           type: number
         isCurrentUser:
           type: boolean
-      required: [rank, handle, initials, score, hours, topics, isCurrentUser]
+      required: [rank, handle, initials, avatarUrl, score, hours, topics, isCurrentUser]
     Leaderboard:
       type: object
       properties:
@@ -1620,23 +1727,36 @@ components:
           type: string
         initials:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         weeklyMinutes:
           type: number
         weeklyTopics:
           type: number
         streak:
           type: number
-      required: [userId, handle, initials, weeklyMinutes, weeklyTopics, streak]
+        isOwner:
+          type: boolean
+      required: [userId, handle, initials, avatarUrl, weeklyMinutes, weeklyTopics, streak, isOwner]
     CirclesResponse:
       type: object
       properties:
         profileCode:
           type: string
+        memberCount:
+          type: number
+          description: Total members in this circle, including the owner
+        capacity:
+          type: number
+          description: Maximum members per circle (25, owner included)
+        self:
+          $ref: "#/components/schemas/CircleMember"
         connections:
           type: array
           items:
             $ref: "#/components/schemas/CircleMember"
-      required: [profileCode, connections]
+      required: [profileCode, memberCount, capacity, self, connections]
     CircleConnectInput:
       type: object
       properties:
@@ -1651,6 +1771,9 @@ components:
           type: string
         handle:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         type:
           type: string
           enum: [session, test, topic]
@@ -1661,7 +1784,7 @@ components:
         date:
           type: string
           format: date-time
-      required: [userId, handle, type, subject, detail, date]
+      required: [userId, handle, avatarUrl, type, subject, detail, date]
 
     GroupSummary:
       type: object
@@ -1729,9 +1852,12 @@ components:
           type: string
         initials:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         role:
           type: string
-      required: [userId, handle, initials, role]
+      required: [userId, handle, initials, avatarUrl, role]
     GroupDetail:
       type: object
       properties:

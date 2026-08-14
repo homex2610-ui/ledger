@@ -9,5 +9,10 @@ import type { CircleMember } from './circleMember';
 
 export interface CirclesResponse {
   profileCode: string;
+  /** Total members in this circle, including the owner */
+  memberCount: number;
+  /** Maximum members per circle (25, owner included) */
+  capacity: number;
+  self: CircleMember;
   connections: CircleMember[];
 }

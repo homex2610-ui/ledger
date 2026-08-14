@@ -5,6 +5,13 @@ export interface DiscordIdentity {
   username: string;
   globalName: string | null;
   email: string | null;
+  avatar: string | null;
+}
+
+export function discordAvatarUrl(id: string, avatar: string | null): string | null {
+  if (!avatar) return null;
+  const extension = avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${id}/${avatar}.${extension}?size=128`;
 }
 
 export class DiscordOAuthError extends Error {
@@ -15,14 +22,15 @@ export class DiscordOAuthError extends Error {
 }
 
 export function getDiscordAuthorizeUrl(state: string, redirectUri: string, link: boolean): string {
-  const { discordClientId } = loadOAuthConfig();
+  const { discordClientId, discordGuildId } = loadOAuthConfig();
   if (!discordClientId) throw new DiscordOAuthError("Discord OAuth is not configured");
 
+  const scope = discordGuildId ? "identify email guilds.join" : "identify email";
   const params = new URLSearchParams({
     client_id: discordClientId,
     response_type: "code",
     redirect_uri: redirectUri,
-    scope: "identify email",
+    scope,
     state,
   });
   if (link) params.set("prompt", "consent");
@@ -65,6 +73,7 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordIden
     username?: string;
     global_name?: string | null;
     email?: string | null;
+    avatar?: string | null;
   };
   if (!json.id) throw new DiscordOAuthError("Discord identity is missing its id");
   return {
@@ -72,5 +81,24 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordIden
     username: json.username ?? "discord-user",
     globalName: json.global_name ?? null,
     email: json.email ?? null,
+    avatar: json.avatar ?? null,
   };
+}
+
+/**
+ * Adds the user to the configured Discord server. Only works when the user
+ * granted the `guilds.join` scope during authorization (the consent screen
+ * shows a "join <server>" checkbox) and the bot is a member of the server.
+ * Best-effort: failures never break the sign-in flow.
+ */
+export async function joinDiscordGuild(accessToken: string, userId: string): Promise<void> {
+  const { discordGuildId, discordApiUrl } = loadOAuthConfig();
+  if (!discordGuildId) return;
+  const res = await fetch(`${discordApiUrl}/guilds/${discordGuildId}/members/${userId}`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new DiscordOAuthError(`Failed to join Discord server (${res.status})`);
+  }
 }

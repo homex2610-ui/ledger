@@ -10,5 +10,6 @@ export interface GroupMemberRow {
   userId: string;
   handle: string;
   initials: string;
+  avatarUrl: string | null;
   role: string;
 }

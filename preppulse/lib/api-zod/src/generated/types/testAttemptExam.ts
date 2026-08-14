@@ -11,5 +11,6 @@ export type TestAttemptExam = typeof TestAttemptExam[keyof typeof TestAttemptExa
 
 export const TestAttemptExam = {
   jee_main: 'jee_main',
+  jee_adv: 'jee_adv',
   neet: 'neet',
 } as const;

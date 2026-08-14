@@ -20,10 +20,12 @@ import {
   useListGroups,
   useRemoveConnection,
   useUpdateGroup,
+  type CircleMember,
   type GroupSummary,
   type LeaderboardEntry,
 } from '@workspace/api-client-react';
 import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle } from '@/components/ui-elements';
+import { Avatar } from '@/components/avatar';
 import { browserTimeZone } from '@/lib/utils';
 
 type Tab = 'board' | 'groups';
@@ -70,12 +72,10 @@ export default function Compete() {
 function BoardTab() {
   return (
     <div className="space-y-6">
+      <PrivateCircleCard />
       <LeaderboardCard />
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <div className="space-y-6">
-          <PrivateConnectionsCard />
-          <CircleActivityCard />
-        </div>
+        <CircleActivityCard />
         <div className="space-y-6">
           <ThePointCard />
           <YourBoundaryCard />
@@ -88,11 +88,11 @@ function BoardTab() {
 function LeaderboardCard() {
   const query = useGetLeaderboard({ tz: browserTimeZone() });
   const circlesQuery = useGetCircles({ tz: browserTimeZone() });
-  const connectionCount = circlesQuery.data?.connections.length ?? 0;
+  const memberCount = circlesQuery.data?.memberCount ?? 1;
   if (query.isLoading) return <LeaderboardSkeleton />;
   if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
   const { entries, focused, weekLabel } = query.data;
-  const isAlone = entries.length <= 1 && connectionCount === 0;
+  const isAlone = entries.length <= 1 && memberCount <= 1;
   const podium = entries.slice(0, 3);
   const rest = entries.slice(3);
 
@@ -124,7 +124,7 @@ function LeaderboardCard() {
                 {rest.map((entry) => (
                   <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-4 py-3.5 first:pt-1 last:pb-1" data-testid={`row-leaderboard-${entry.handle}`}>
                     <span className="w-7 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-full font-display text-xs font-bold ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'}`}>{entry.initials}</span>
+                    <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-10 w-10 text-xs ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'}`} title={entry.handle} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
                     </div>
@@ -152,7 +152,7 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
     <div className={`relative rounded-2xl border p-5 text-center ${isFirst ? 'border-accent/40 bg-accent/10' : 'border-border/70 bg-card'}`} data-testid={`podium-${entry.rank}`}>
       {isFirst && <Trophy size={16} className="absolute right-4 top-4 text-accent" />}
       <p className="text-left font-mono-custom text-[10px] uppercase tracking-[.16em] text-muted-foreground">Rank {String(entry.rank).padStart(2, '0')}</p>
-      <span className={`mx-auto mt-4 flex h-14 w-14 items-center justify-center rounded-full font-display text-base font-bold ${isFirst ? 'bg-accent text-accent-foreground' : 'bg-primary/15 text-primary'}`}>{entry.initials}</span>
+      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-4 h-14 w-14 text-base ${isFirst ? 'bg-accent text-accent-foreground' : 'bg-primary/15 text-primary'}`} title={entry.handle} />
       <p className="mt-3 truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
       <p className="mt-1 font-display text-xl font-bold text-primary" title="Pulse = minutes studied + 30 × topics moved">{entry.score} <span className="text-sm font-semibold">pulse</span> <HelpCircle size={12} className="inline text-primary/50" /></p>
       <p className="mt-0.5 text-xs text-muted-foreground">{entry.hours}h · {entry.topics} topics</p>
@@ -172,13 +172,14 @@ function LeaderboardSkeleton() {
   );
 }
 
-function PrivateConnectionsCard() {
+function PrivateCircleCard() {
   const queryClient = useQueryClient();
   const circlesQuery = useGetCircles({ tz: browserTimeZone() });
   const connect = useConnectByCode();
   const remove = useRemoveConnection();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [joined, setJoined] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const refresh = () => {
@@ -192,7 +193,12 @@ function PrivateConnectionsCard() {
     connect.mutate(
       { data: { code } },
       {
-        onSuccess: () => { setCode(''); refresh(); },
+        onSuccess: () => {
+          setCode('');
+          setJoined(true);
+          window.setTimeout(() => setJoined(false), 2000);
+          refresh();
+        },
         onError: (err) => setError(err instanceof Error ? err.message : 'Could not add that code'),
       },
     );
@@ -203,21 +209,31 @@ function PrivateConnectionsCard() {
     try { await navigator.clipboard.writeText(`preppulse.app/join/${circlesQuery.data.profileCode}`); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ }
   };
 
-  if (circlesQuery.isLoading) return <Card className="p-6"><LoadingBlock className="h-64" /></Card>;
+  if (circlesQuery.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
   if (circlesQuery.isError || !circlesQuery.data) return <ErrorState onRetry={() => circlesQuery.refetch()} />;
 
-  const { profileCode, connections } = circlesQuery.data;
+  const { profileCode, memberCount, capacity, self, connections } = circlesQuery.data;
+  const members: CircleMember[] = [self, ...connections];
+  const isFull = memberCount >= capacity;
+  const compact = members.length > 8;
 
   return (
     <Card className="p-5 md:p-7" id="connections-card">
-      <SectionTitle eyebrow="Private connections" title="Friends, not discovery" action={<UserRoundPlus size={17} className="text-primary" />} />
-      <p className="text-sm leading-relaxed text-muted-foreground">Use a code shared directly by someone you trust. There is no public directory and no search by name.</p>
+      <SectionTitle eyebrow="Private circle" title="Study with people you trust" action={<UserRoundPlus size={17} className="text-primary" />} />
+      <p className="text-sm leading-relaxed text-muted-foreground">Your private circle is limited to {capacity} members. Invite only people you actually study with — there is no public directory and no search by name.</p>
 
-      <form onSubmit={submitConnect} className="mt-5 flex gap-2">
-        <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="6-character code" className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 font-mono-custom text-sm uppercase tracking-[.12em] outline-none focus:ring-3 focus:ring-primary/25" data-testid="input-circle-code" />
-        <button type="submit" disabled={connect.isPending || code.trim().length < 6} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-50" data-testid="button-connect-circle">{connect.isPending ? 'Adding…' : 'Add friend'}</button>
+      <div className="mt-5 flex items-center justify-between rounded-xl border border-border/70 bg-secondary/40 px-4 py-3">
+        <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-primary">Members</p>
+        <p className="font-display text-lg font-bold tabular-nums" data-testid="circle-member-count">{memberCount} / {capacity}</p>
+      </div>
+
+      <form onSubmit={submitConnect} className="mt-5 flex flex-col gap-2 sm:flex-row">
+        <input value={code} onChange={(event) => setCode(event.target.value)} disabled={isFull} placeholder={isFull ? 'Circle full' : 'e.g. 7K4M2X'} className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 font-mono-custom text-sm uppercase tracking-[.12em] outline-none focus:ring-3 focus:ring-primary/25 disabled:opacity-60" data-testid="input-circle-code" />
+        <button type="submit" disabled={isFull || connect.isPending || code.trim().length < 6} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-50" data-testid="button-connect-circle">{connect.isPending ? 'Adding…' : 'Add friend'}</button>
       </form>
       {error && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-connect-error">{error}</p>}
+      {joined && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-success" data-testid="circle-connect-success"><Check size={13} /> Member added to your circle.</p>}
+      {isFull && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-full-notice">Your circle is full — this private circle can have up to {capacity} members.</p>}
       <p className="mt-2 text-[11px] text-muted-foreground">Codes are 6 characters — like the one in your invite box below.</p>
 
       <div className="mt-5 rounded-2xl border border-border/70 bg-secondary/40 p-4">
@@ -233,23 +249,35 @@ function PrivateConnectionsCard() {
 
       <div className="mt-6 flex items-center justify-between">
         <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Your circle</p>
-        <p className="text-[11px] text-muted-foreground">No pressure — the only person pacing you is you.</p>
+        <p className="text-[11px] text-muted-foreground">{compact ? `${members.length} members · scroll` : 'Only members of your circle are shown.'}</p>
       </div>
-      <div className="mt-3 space-y-2.5">
-        {connections.length ? connections.map((connection) => (
-          <div key={connection.userId} className="flex items-center gap-3 rounded-xl border border-border/70 p-3" data-testid={`row-circle-${connection.handle}`}>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary font-display text-xs font-bold">{connection.initials}</span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold">{connection.handle}</p>
-              <p className="text-xs text-muted-foreground">{connection.weeklyMinutes}m this week · {connection.weeklyTopics} topics</p>
+
+      {members.length > 1 ? (
+        <div className={`mt-3 space-y-2 ${compact ? 'max-h-64 overflow-y-auto pr-1' : ''}`}>
+          {members.map((member) => (
+            <div key={member.userId} className={`flex items-center gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:border-primary/30 hover:bg-secondary/40 ${compact ? 'p-2.5' : ''}`} data-testid={`row-circle-${member.handle}`}>
+              <Avatar src={member.avatarUrl} initials={member.initials} className={`h-9 w-9 text-xs ${member.isOwner ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`} title={member.handle} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">
+                  {member.handle}
+                  {member.isOwner && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary" data-testid={`owner-badge-${member.handle}`}>Owner</span>}
+                </p>
+                <p className="text-xs text-muted-foreground">{member.weeklyMinutes}m this week · {member.weeklyTopics} topics</p>
+              </div>
+              {!member.isOwner && (
+                <span className="hidden font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground sm:inline">Member</span>
+              )}
+              {!member.isOwner && <button type="button" onClick={() => remove.mutate({ userId: member.userId }, { onSuccess: refresh })} className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-accent" aria-label={`Remove ${member.handle}`} data-testid={`button-remove-circle-${member.handle}`}><Trash2 size={14} /></button>}
             </div>
-            <span className="font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground">Accepted</span>
-            <button type="button" onClick={() => remove.mutate({ userId: connection.userId }, { onSuccess: refresh })} className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-accent" aria-label={`Remove ${connection.handle}`} data-testid={`button-remove-circle-${connection.handle}`}><Trash2 size={14} /></button>
-          </div>
-        )) : (
-          <EmptyState title="No connections yet" detail="Share your code with someone you trust — there's no directory to search." />
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-2xl border border-dashed border-border bg-secondary/30 p-6 text-center" data-testid="circle-empty-state">
+          <p className="font-display font-bold">Your circle is empty</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Invite people you actually study with. Your private circle can have up to {capacity} members.</p>
+          <button type="button" onClick={copyLink} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5" data-testid="button-empty-copy-code">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy your invite code'}</button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -264,7 +292,7 @@ function CircleActivityCard() {
         <div className="space-y-2.5">
           {feed.map((item, index) => (
             <div key={`${item.userId}-${item.date}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/70 p-3" data-testid={`feed-item-${index}`}>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary font-display text-[10px] font-bold">{item.handle.slice(0, 2).toUpperCase()}</span>
+              <Avatar src={item.avatarUrl} initials={item.handle.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-secondary text-[10px]" title={item.handle} />
               <div className="min-w-0"><p className="text-sm"><span className="font-bold">{item.handle}</span> <span className="text-muted-foreground">{item.detail}</span></p><p className="mt-0.5 font-mono-custom text-[10px] text-muted-foreground">{item.subject} · {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p></div>
             </div>
           ))}
@@ -453,7 +481,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
           <div className="mt-3 divide-y divide-border/70">
             {detail.members.map((member) => (
               <div key={member.userId} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary font-display text-xs font-bold">{member.initials}</span>
+                <Avatar src={member.avatarUrl} initials={member.initials} className="h-9 w-9 bg-secondary text-xs" title={member.handle} />
                 <p className="flex-1 text-sm font-bold">{member.handle}</p>
                 {member.role === 'owner' && <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary"><ShieldCheck size={11} /> Owner</span>}
               </div>
@@ -467,7 +495,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
               {leaderboardQuery.data.entries.map((entry) => (
                 <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
                   <span className="w-6 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-full font-display text-xs font-bold ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`}>{entry.initials}</span>
+                  <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`} title={entry.handle} />
                   <p className="min-w-0 flex-1 truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && ' (you)'}</p>
                   <p className="font-display font-bold">{entry.score}</p>
                 </div>

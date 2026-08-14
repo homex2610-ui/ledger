@@ -16,6 +16,9 @@
   },
   "references": [
     {
+      "path": "../../lib/exam-config"
+    },
+    {
       "path": "../../lib/api-client-react"
     }
   ]

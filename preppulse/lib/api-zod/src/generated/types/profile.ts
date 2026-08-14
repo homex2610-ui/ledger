@@ -6,12 +6,12 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { ProfileExamTrack } from './profileExamTrack';
-import type { ProfileGuardianConsentStatus } from './profileGuardianConsentStatus';
 import type { ProfileStage } from './profileStage';
 
 export interface Profile {
   handle: string;
   email: string;
+  avatarUrl: string | null;
   examTrack: ProfileExamTrack;
   stage: ProfileStage;
   targetYear: number;
@@ -20,6 +20,5 @@ export interface Profile {
   weeklyGoalMinutes: number;
   focusMode: boolean;
   showOnLeaderboard: boolean;
-  guardianConsentStatus: ProfileGuardianConsentStatus;
   profileCode: string;
 }

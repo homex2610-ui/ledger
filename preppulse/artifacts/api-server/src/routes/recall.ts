@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { cardsTable } from "@workspace/db/schema";
+import { cardsTable, profilesTable } from "@workspace/db/schema";
 import {
   CreateCardBody,
   CreateCardResponse,
@@ -15,6 +15,7 @@ import {
   UpdateCardParams,
   UpdateCardResponse,
 } from "@workspace/api-zod";
+import { subjectAllowedForTrack } from "@workspace/exam-config";
 import { requireAuth } from "../lib/auth";
 import { clamp, parseISODate, toISODate } from "../lib/utils";
 
@@ -89,6 +90,11 @@ router.get("/cards", async (req, res) => {
 
 router.post("/cards", async (req, res) => {
   const body = CreateCardBody.parse(req.body);
+  const profileRows = await db.select({ examTrack: profilesTable.examTrack }).from(profilesTable).where(eq(profilesTable.userId, req.userId)).limit(1);
+  if (!subjectAllowedForTrack(profileRows[0]?.examTrack, body.subject ?? "General", ["General"])) {
+    res.status(400).json({ error: "This subject is not part of your prep track", code: "subject_not_in_track" });
+    return;
+  }
   const today = new Date();
   const inserted = (
     await db
@@ -116,7 +122,14 @@ router.patch("/cards/:cardId", async (req, res) => {
   const next: Record<string, unknown> = {};
   if (body.front !== undefined) next.front = body.front;
   if (body.back !== undefined) next.back = body.back;
-  if (body.subject !== undefined) next.subject = body.subject;
+  if (body.subject !== undefined) {
+    const profileRows = await db.select({ examTrack: profilesTable.examTrack }).from(profilesTable).where(eq(profilesTable.userId, req.userId)).limit(1);
+    if (!subjectAllowedForTrack(profileRows[0]?.examTrack, body.subject, ["General"])) {
+      res.status(400).json({ error: "This subject is not part of your prep track", code: "subject_not_in_track" });
+      return;
+    }
+    next.subject = body.subject;
+  }
 
   const updated = (
     await db.update(cardsTable).set(next).where(and(eq(cardsTable.id, params.cardId), eq(cardsTable.userId, req.userId))).returning()

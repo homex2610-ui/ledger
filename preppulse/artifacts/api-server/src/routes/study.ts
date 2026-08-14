@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { focusSessionsTable, studySessionsTable, tasksTable } from "@workspace/db/schema";
+import { focusSessionsTable, profilesTable, studySessionsTable, tasksTable } from "@workspace/db/schema";
 import {
   CreateFocusSessionBody,
   CreateFocusSessionResponse,
@@ -17,6 +17,7 @@ import {
   UpdateTaskParams,
   UpdateTaskResponse,
 } from "@workspace/api-zod";
+import { subjectAllowedForTrack } from "@workspace/exam-config";
 import { requireAuth } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -137,6 +138,11 @@ router.get("/tasks", async (req, res) => {
 
 router.post("/tasks", async (req, res) => {
   const body = CreateTaskBody.parse(req.body);
+  const profileRows = await db.select({ examTrack: profilesTable.examTrack }).from(profilesTable).where(eq(profilesTable.userId, req.userId)).limit(1);
+  if (!subjectAllowedForTrack(profileRows[0]?.examTrack, body.subject ?? "Mixed revision", ["Mixed revision"])) {
+    res.status(400).json({ error: "This subject is not part of your prep track", code: "subject_not_in_track" });
+    return;
+  }
   const inserted = (
     await db
       .insert(tasksTable)
@@ -162,7 +168,14 @@ router.patch("/tasks/:taskId", async (req, res) => {
 
   const next: Record<string, unknown> = {};
   if (body.title !== undefined) next.title = body.title;
-  if (body.subject !== undefined) next.subject = body.subject;
+  if (body.subject !== undefined) {
+    const profileRows = await db.select({ examTrack: profilesTable.examTrack }).from(profilesTable).where(eq(profilesTable.userId, req.userId)).limit(1);
+    if (!subjectAllowedForTrack(profileRows[0]?.examTrack, body.subject, ["Mixed revision"])) {
+      res.status(400).json({ error: "This subject is not part of your prep track", code: "subject_not_in_track" });
+      return;
+    }
+    next.subject = body.subject;
+  }
   if (body.status !== undefined) {
     next.status = body.status;
     next.completedAt = body.status === "done" ? new Date() : null;

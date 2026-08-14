@@ -66,6 +66,7 @@ import type {
   TestAnalysis,
   TestAttempt,
   TestAttemptInput,
+  TestAttemptUpdateInput,
   Topic,
   TopicProgressInput
 } from './api.schemas';
@@ -1381,6 +1382,149 @@ export const useCreateTestAttempt = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateTestAttemptMutationOptions(options));
+    }
+
+export const getUpdateTestAttemptUrl = (id: string,) => {
+
+
+
+
+  return `/api/tests/${id}`
+}
+
+/**
+ * @summary Update a logged mock test attempt
+ */
+export const updateTestAttempt = async (id: string,
+    testAttemptUpdateInput: TestAttemptUpdateInput, options?: Parameters<typeof customFetch>[1]): Promise<TestAttempt> => {
+
+  return customFetch<TestAttempt>(getUpdateTestAttemptUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(testAttemptUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateTestAttemptMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTestAttempt>>, TError,{id: string;data: BodyType<TestAttemptUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTestAttempt>>, TError,{id: string;data: BodyType<TestAttemptUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateTestAttempt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTestAttempt>>, {id: string;data: BodyType<TestAttemptUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateTestAttempt(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTestAttemptMutationResult = NonNullable<Awaited<ReturnType<typeof updateTestAttempt>>>
+    export type UpdateTestAttemptMutationBody = BodyType<TestAttemptUpdateInput>
+    export type UpdateTestAttemptMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a logged mock test attempt
+ */
+export const useUpdateTestAttempt = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTestAttempt>>, TError,{id: string;data: BodyType<TestAttemptUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTestAttempt>>,
+        TError,
+        {id: string;data: BodyType<TestAttemptUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateTestAttemptMutationOptions(options));
+    }
+
+export const getDeleteTestAttemptUrl = (id: string,) => {
+
+
+
+
+  return `/api/tests/${id}`
+}
+
+/**
+ * @summary Delete a logged mock test attempt
+ */
+export const deleteTestAttempt = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteTestAttemptUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteTestAttemptMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTestAttempt>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTestAttempt>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteTestAttempt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTestAttempt>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteTestAttempt(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTestAttemptMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTestAttempt>>>
+
+    export type DeleteTestAttemptMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a logged mock test attempt
+ */
+export const useDeleteTestAttempt = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTestAttempt>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTestAttempt>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteTestAttemptMutationOptions(options));
     }
 
 export const getAnalyzeTestAttemptsUrl = () => {

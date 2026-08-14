@@ -54,6 +54,12 @@ sign-in buttons are disabled.
 | `GOOGLE_CLIENT_ID`       | OAuth client id (the only value the browser sees) | Google Cloud console → Credentials → OAuth 2.0 Client |
 | `DISCORD_CLIENT_ID`      | OAuth client id                                   | Discord Developer Portal → OAuth2             |
 | `DISCORD_CLIENT_SECRET`  | OAuth client secret (server-side only)            | Discord Developer Portal → OAuth2             |
+| `DISCORD_GUILD_ID`       | Auto-join server id (optional)                    | Discord → right-click your server → Copy Server ID |
+
+When `DISCORD_GUILD_ID` is set, Discord sign-ins are also added to that
+server via the `guilds.join` scope — the consent screen shows a "join
+<server>" checkbox the user can untick, and joining is best-effort (it never
+blocks sign-in). The bot must already be a member of the server.
 
 Google uses Identity Services: the rendered button returns an ID token that
 the server verifies against Google's signing certificates (audience,
@@ -100,12 +106,19 @@ $env:DATABASE_URL="postgres://preppulse:preppulse@localhost:5433/preppulse"
 pnpm run qa   # or: node ./qa-isolation.mjs
 ```
 
-Boots the API on port 5099 and runs 33 tests (56 checks) covering
+Boots the API on port 5099 and runs 39 tests (103 checks, 248 assertions) covering
 auth (password, Google and Discord OAuth), OAuth account linking and
 disconnect guards, cross-user isolation, ownership guards, rate limiting,
-locked topics, prerequisite scoping, leaderboard privacy, API error
-handling, study-session minute bounds, timezone handling, export ownership
-and account deletion.
+locked topics, prerequisite scoping, the topic status machine (forward-only
+progression with earned mastery, enforced identically for the JEE and NEET
+tracks including locked-topic protection on both), the official NMC/NTA NEET
+(UG) 2026 topic catalog (249 topics across 20 Physics, 20 Chemistry and 10
+Biology units), leaderboard privacy, API error
+handling, study-session minute bounds, timezone handling, test-log
+edit/validation/delete, exam-track switching (JEE/NEET) with track-scoped
+subjects, topics and labels, Discord-derived name and avatar, export ownership
+and account deletion. The suite prints the number of assertions executed
+(162+ and climbing) as a coverage sanity signal.
 
 ## Codegen
 
