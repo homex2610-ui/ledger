@@ -98,6 +98,73 @@ paths:
         "401":
           description: Not signed in
 
+  /auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password recovery email
+      description: Always returns success for a well-formed email to avoid leaking account existence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordInput"
+      responses:
+        "200":
+          description: Recovery email sent (or account not found)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Invalid email
+        "503":
+          description: Recovery service unavailable
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Set a new password using a recovery token
+      description: Verifies the recovery access token, provisions the account if needed and signs the user in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "200":
+          description: Password set and session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid or expired token, or weak password
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Set or change the signed-in user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Current password is incorrect
+        "401":
+          description: Not signed in
+
   /auth/oauth/providers:
     get:
       operationId: getAuthOauthProviders
@@ -998,6 +1065,8 @@ components:
           type: string
         handle:
           type: string
+        hasPassword:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1030,6 +1099,36 @@ components:
         password:
           type: string
       required: [email, password]
+    ForgotPasswordInput:
+      type: object
+      properties:
+        email:
+          type: string
+      required: [email]
+    ResetPasswordInput:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+      required: [accessToken, newPassword]
+    ChangePasswordInput:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+      required: [newPassword]
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
 
     OAuthProviderInfo:
       type: object

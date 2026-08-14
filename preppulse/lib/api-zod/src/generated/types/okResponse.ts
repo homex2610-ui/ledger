@@ -6,10 +6,6 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  handle: string;
-  hasPassword?: boolean;
-  createdAt: Date;
+export interface OkResponse {
+  ok: boolean;
 }

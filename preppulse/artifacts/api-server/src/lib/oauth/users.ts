@@ -34,6 +34,7 @@ export function defaultExamDate(targetYear: number): Date {
 }
 
 export async function createUserWithProfile(values: {
+  id?: string;
   email: string;
   handle: string;
   passwordHash?: string | null;
@@ -42,7 +43,13 @@ export async function createUserWithProfile(values: {
   const user = (
     await db
       .insert(usersTable)
-      .values({ email: values.email, handle: values.handle, passwordHash: values.passwordHash ?? null, avatarUrl: values.avatarUrl ?? null })
+      .values({
+        id: values.id ?? undefined,
+        email: values.email,
+        handle: values.handle,
+        passwordHash: values.passwordHash ?? null,
+        avatarUrl: values.avatarUrl ?? null,
+      })
       .returning()
   )[0];
 

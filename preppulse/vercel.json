@@ -5,6 +5,10 @@
   "outputDirectory": "artifacts/prep-pulse/dist/public",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/[...slug]?...slug=$1"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

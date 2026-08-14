@@ -32,3 +32,5 @@ replit.nix
 # Misc
 coverage/
 *.local
+.vercel
+.env*

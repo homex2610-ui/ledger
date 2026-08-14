@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Sun, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type ProfileUpdate } from '@workspace/api-client-react';
+import { exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
 import { EXAM_TRACKS, getExamConfig } from '@workspace/exam-config';
 import { Card, ErrorState, LoadingBlock, SavingLabel, SectionTitle } from '@/components/ui-elements';
 import { Select } from '@/components/ui/select';
@@ -26,6 +26,14 @@ export default function Settings() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNext, setPwNext] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSaved, setPwSaved] = useState(false);
+  const changePassword = useChangePassword();
+  const me = queryClient.getQueryData<AuthResponse>(getGetMeQueryKey());
+  const hasPassword = Boolean(me?.user?.hasPassword);
   const [theme, setTheme] = useState<AppTheme>(getStoredTheme());
   const [template, setTemplate] = useState<AppTemplate>(getStoredTemplate());
   useEffect(() => { if (profile) setValues({ focusMode: profile.focusMode, showOnLeaderboard: profile.showOnLeaderboard }); }, [profile]);
@@ -123,6 +131,48 @@ export default function Settings() {
     );
   };
 
+  const handlePasswordSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setPwError(null);
+    setPwSaved(false);
+    if (hasPassword && !pwCurrent) {
+      setPwError('Enter your current password');
+      return;
+    }
+    if (pwNext.length < 8) {
+      setPwError('Choose a password of at least 8 characters');
+      return;
+    }
+    if (pwNext !== pwConfirm) {
+      setPwError('Passwords do not match');
+      return;
+    }
+    changePassword.mutate(
+      { data: { currentPassword: hasPassword ? pwCurrent : undefined, newPassword: pwNext } },
+      {
+        onSuccess: () => {
+          setPwCurrent('');
+          setPwNext('');
+          setPwConfirm('');
+          setPwSaved(true);
+        },
+        onError: (err) => {
+          const message = err instanceof Error ? err.message : '';
+          try {
+            const parsed = JSON.parse(message) as { error?: unknown };
+            if (typeof parsed.error === 'string') {
+              setPwError(parsed.error);
+              return;
+            }
+          } catch {
+            /* not JSON */
+          }
+          setPwError('Could not update the password. Try again.');
+        },
+      },
+    );
+  };
+
   if (query.isLoading) return <div className="mx-auto max-w-4xl"><LoadingBlock className="h-28" /><div className="mt-6 space-y-4"><LoadingBlock className="h-32" /><LoadingBlock className="h-48" /></div></div>;
   if (query.isError || !profile) return <div className="mx-auto max-w-4xl"><ErrorState onRetry={() => query.refetch()} /></div>;
 
@@ -205,6 +255,59 @@ export default function Settings() {
           <ProviderRow label="Discord" connected={providers.data?.discord.connected ?? false} enabled={providers.data?.discord.enabled ?? false} pending={disconnectOAuth.isPending} onConnect={(enabled) => enabled ? <DiscordOAuthButton label="Connect Discord" onStart={handleDiscordLink} disabled={disconnectOAuth.isPending} /> : null} onDisconnect={() => handleDisconnect('discord')} />
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Connecting lets you sign in without a password. You can disconnect any provider as long as you keep at least one sign-in method.</p>
+      </Card>
+
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="Password" title={hasPassword ? 'Change your password' : 'Set a password'} />
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {hasPassword
+            ? 'Your password lets you sign in with email. Pick a new one anytime.'
+            : 'This account has no password yet — it was created before email sign-in existed. Set one to sign in with email.'}
+        </p>
+        <form onSubmit={handlePasswordSubmit} className="mt-4 space-y-3">
+          {hasPassword && (
+            <input
+              type="password"
+              value={pwCurrent}
+              onChange={(event) => setPwCurrent(event.target.value)}
+              placeholder="Current password"
+              autoComplete="current-password"
+              className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-3 focus:ring-accent/25"
+              data-testid="input-password-current"
+            />
+          )}
+          <input
+            type="password"
+            value={pwNext}
+            onChange={(event) => setPwNext(event.target.value)}
+            placeholder="New password (8+ characters)"
+            autoComplete="new-password"
+            className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-3 focus:ring-accent/25"
+            data-testid="input-password-new"
+          />
+          <input
+            type="password"
+            value={pwConfirm}
+            onChange={(event) => setPwConfirm(event.target.value)}
+            placeholder="Repeat new password"
+            autoComplete="new-password"
+            className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-3 focus:ring-accent/25"
+            data-testid="input-password-confirm"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={changePassword.isPending}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
+              data-testid="button-save-password"
+            >
+              {changePassword.isPending ? <LoaderCircle size={13} className="animate-spin" /> : null}
+              {hasPassword ? 'Change password' : 'Set password'}
+            </button>
+            {pwSaved && <span className="text-xs font-semibold text-primary" data-testid="password-saved">Password saved</span>}
+          </div>
+          {pwError && <div className="rounded-xl border border-accent/25 bg-accent/10 px-4 py-3 text-xs font-semibold text-accent" data-testid="password-error">{pwError}</div>}
+        </form>
       </Card>
 
       <Card className="p-5 md:p-7">

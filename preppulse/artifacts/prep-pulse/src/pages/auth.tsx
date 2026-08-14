@@ -1,10 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, type AuthResponse } from '@workspace/api-client-react';
+import { useLocation } from 'wouter';
+import { getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, useLogIn, useSignUp, type AuthResponse } from '@workspace/api-client-react';
 import { GoogleSignInButton, GoogleOAuthButton, DiscordOAuthButton } from '@/components/oauth-buttons';
 import { DashboardBackdrop } from '@/components/dashboard-backdrop';
 import { getGisCsrfToken } from '@/lib/utils';
+
+export function apiErrorMessage(err: unknown): string | null {
+  const message = err instanceof Error ? err.message : '';
+  try {
+    const parsed = JSON.parse(message) as { error?: unknown };
+    if (typeof parsed.error === 'string') return parsed.error;
+  } catch {
+    /* not JSON */
+  }
+  return null;
+}
 
 function useOauthQueryNotice(): string | null {
   const [notice, setNotice] = useState<string | null>(null);
@@ -15,7 +27,7 @@ function useOauthQueryNotice(): string | null {
     if (!oauth) return;
     const providerLabel = provider === 'google' ? 'Google' : provider === 'discord' ? 'Discord' : null;
     if (oauth === 'error') setNotice(`${providerLabel ? providerLabel + ' ' : ''}sign-in failed. Try again.`);
-    if (oauth === 'conflict') setNotice(`This email already belongs to an account. If it\u2019s your account, sign in with the provider that created it, then connect ${providerLabel ?? 'the provider'} in Settings.`);
+    if (oauth === 'conflict') setNotice(`This email already belongs to an account. If it\u2019s your account, sign in with your email and password, or use \u201cForgot password?\u201d to reset it \u2014 then connect ${providerLabel ?? 'the provider'} in Settings.`);
     if (oauth === 'success') setNotice('Signed in.');
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
@@ -24,19 +36,69 @@ function useOauthQueryNotice(): string | null {
 
 export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) => void }) {
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const providers = useGetAuthOauthProviders();
   const googleAuth = useGoogleAuth();
+  const logIn = useLogIn();
+  const signUp = useSignUp();
   const discordAuthorize = useGetAuthDiscordAuthorize({ link: false }, { query: { queryKey: getGetAuthDiscordAuthorizeQueryKey({ link: false }), enabled: false } });
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [handle, setHandle] = useState('');
+  const [formBusy, setFormBusy] = useState(false);
   const notice = useOauthQueryNotice();
 
   const googleEnabled = providers.data?.google.enabled ?? false;
   const discordEnabled = providers.data?.discord.enabled ?? false;
-  const pending = googleAuth.isPending;
+  const pending = googleAuth.isPending || formBusy;
 
   const complete = (auth: AuthResponse) => {
     queryClient.setQueryData(getGetMeQueryKey(), auth);
     onAuthed(auth);
+  };
+
+  const submitForm = (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    const normalized = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      setError('Enter a valid email address');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (mode === 'signup' && handle.trim().length < 2) {
+      setError('Choose a handle at least 2 characters long');
+      return;
+    }
+    setFormBusy(true);
+    if (mode === 'login') {
+      logIn.mutate(
+        { data: { email: normalized, password } },
+        {
+          onSuccess: (auth) => complete(auth),
+          onError: (err) => {
+            setFormBusy(false);
+            setError(apiErrorMessage(err) ?? 'Email or password is incorrect');
+          },
+        },
+      );
+      return;
+    }
+    signUp.mutate(
+      { data: { email: normalized, password, handle: handle.trim() || undefined } },
+      {
+        onSuccess: (auth) => complete(auth),
+        onError: (err) => {
+          setFormBusy(false);
+          setError(apiErrorMessage(err) ?? 'Could not create the account. Try again in a moment.');
+        },
+      },
+    );
   };
 
   const handleGoogleCredential = (credential: string) => {
@@ -54,7 +116,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
           const message = err instanceof Error ? err.message : '';
           const parsed = /"code":"([a-z_]+)"/.exec(message);
           if (parsed?.[1] === 'account_linking_required') {
-            setError('This email already belongs to an account. If it\u2019s yours, sign in with the provider that created it, then connect Google in Settings.');
+            setError('This email already belongs to an account. If it\u2019s yours, sign in with your email and password, then connect Google in Settings.');
           } else if (parsed?.[1] === 'invalid_credential' || parsed?.[1] === 'csrf_mismatch') {
             setError('Google sign-in failed — the credential was invalid or expired. Try again.');
           } else {
@@ -126,6 +188,76 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
                 <span className="h-px flex-1 bg-border" />
               </div>
               <DiscordOAuthButton label="Continue with Discord" onStart={discordEnabled ? handleDiscord : () => setError('Discord sign-in isn\u2019t configured yet.')} disabled={pending} />
+
+              <div className="flex items-center gap-3 py-1">
+                <span className="h-px flex-1 bg-border" />
+                <span className="font-mono-custom text-[9px] uppercase tracking-[.18em] text-muted-foreground">or</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <div className="flex rounded-xl border border-border bg-background/60 p-1 text-sm font-bold">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setError(null); }}
+                  className={`flex-1 rounded-lg px-3 py-1.5 transition-colors ${mode === 'login' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setError(null); }}
+                  className={`flex-1 rounded-lg px-3 py-1.5 transition-colors ${mode === 'signup' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Create account
+                </button>
+              </div>
+
+              <form onSubmit={submitForm} className="space-y-2.5">
+                {mode === 'signup' && (
+                  <input
+                    type="text"
+                    value={handle}
+                    onChange={(event) => setHandle(event.target.value)}
+                    placeholder="Choose a handle"
+                    autoComplete="username"
+                    className="w-full rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50"
+                  />
+                )}
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  className="w-full rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50"
+                />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder={mode === 'signup' ? 'Password (8+ characters)' : 'Password'}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  className="w-full rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50"
+                />
+                <button
+                  type="submit"
+                  disabled={formBusy}
+                  className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity disabled:opacity-60"
+                >
+                  {formBusy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account'}
+                </button>
+                {mode === 'login' && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/forgot-password')}
+                      className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
+              </form>
             </div>
 
             {pending && <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-muted-foreground"><LoaderCircle size={14} className="animate-spin" /> Signing you in…</div>}

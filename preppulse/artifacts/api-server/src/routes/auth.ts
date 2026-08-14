@@ -1,11 +1,24 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
-import { GetMeResponse, LogInBody, LogInResponse, SignUpBody, SignUpResponse } from "@workspace/api-zod";
-import { createSession, destroySession, hashPassword, requireAuth, setSessionCookie, verifyPassword, clearSessionCookie } from "../lib/auth.js";
+import { authSessionsTable, usersTable } from "@workspace/db/schema";
+import {
+  ChangePasswordBody,
+  ChangePasswordResponse,
+  ForgotPasswordBody,
+  ForgotPasswordResponse,
+  GetMeResponse,
+  LogInBody,
+  LogInResponse,
+  ResetPasswordBody,
+  ResetPasswordResponse,
+  SignUpBody,
+  SignUpResponse,
+} from "@workspace/api-zod";
+import { createSession, currentTokenHash, destroySession, hashPassword, requireAuth, setSessionCookie, verifyPassword, clearSessionCookie } from "../lib/auth.js";
 import { toProfileShape } from "../lib/prep-stats.js";
 import { createUserWithProfile } from "../lib/oauth/users.js";
+import { sendRecoveryEmail, supabaseAuthConfigured, verifyRecoveryToken } from "../lib/supabase-auth.js";
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
@@ -58,7 +71,7 @@ router.post("/signup", authRateLimit, async (req, res) => {
 
   res.status(201).json(
     SignUpResponse.parse({
-      user: { id: user.id, email: user.email, handle: user.handle, createdAt: user.createdAt },
+      user: { id: user.id, email: user.email, handle: user.handle, hasPassword: Boolean(user.passwordHash), createdAt: user.createdAt },
       profile: profileShape,
     }),
   );
@@ -80,7 +93,7 @@ router.post("/login", authRateLimit, async (req, res) => {
   const profileShape = await toProfileShape(user.id);
   res.json(
     LogInResponse.parse({
-      user: { id: user.id, email: user.email, handle: user.handle, createdAt: user.createdAt },
+      user: { id: user.id, email: user.email, handle: user.handle, hasPassword: Boolean(user.passwordHash), createdAt: user.createdAt },
       profile: profileShape,
     }),
   );
@@ -90,6 +103,98 @@ router.post("/logout", async (req, res) => {
   await destroySession(req);
   clearSessionCookie(res);
   res.status(204).end();
+});
+
+router.post("/forgot-password", authRateLimit, async (req, res) => {
+  const body = ForgotPasswordBody.parse(req.body);
+  const email = body.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+  if (!supabaseAuthConfigured()) {
+    res.status(503).json({ error: "Password recovery is temporarily unavailable" });
+    return;
+  }
+  const redirectTo = `${req.protocol}://${req.get("host") ?? "localhost"}/reset-password`;
+  try {
+    await sendRecoveryEmail(email, redirectTo);
+  } catch {
+    res.status(503).json({ error: "Password recovery is temporarily unavailable" });
+    return;
+  }
+  res.json(ForgotPasswordResponse.parse({ ok: true }));
+});
+
+router.post("/reset-password", authRateLimit, async (req, res) => {
+  const body = ResetPasswordBody.parse(req.body);
+  if (!supabaseAuthConfigured()) {
+    res.status(503).json({ error: "Password recovery is temporarily unavailable" });
+    return;
+  }
+  const verified = await verifyRecoveryToken(body.accessToken);
+  if (!verified) {
+    res.status(400).json({ error: "Reset link is invalid or has expired" });
+    return;
+  }
+
+  const email = verified.email.toLowerCase();
+  let rows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  let user = rows[0];
+  if (!user) {
+    let handle = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 24) || "learner";
+    for (let i = 2; ; i++) {
+      const clash = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.handle, handle)).limit(1);
+      if (!clash[0]) break;
+      handle = `${handle.slice(0, 20)}_${i}`;
+    }
+    user = await createUserWithProfile({ id: verified.id, email, handle, passwordHash: null });
+  }
+
+  const passwordHash = await hashPassword(body.newPassword);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+
+  const { token, expiresAt } = await createSession(user.id);
+  setSessionCookie(res, token, expiresAt);
+
+  const profileShape = await toProfileShape(user.id);
+  if (!profileShape) {
+    res.status(500).json({ error: "Failed to load profile" });
+    return;
+  }
+  res.json(
+    ResetPasswordResponse.parse({
+      user: { id: user.id, email: user.email, handle: user.handle, hasPassword: true, createdAt: user.createdAt },
+      profile: profileShape,
+    }),
+  );
+});
+
+router.post("/change-password", authRateLimit, requireAuth, async (req, res) => {
+  const body = ChangePasswordBody.parse(req.body);
+  const rows = await db.select().from(usersTable).where(eq(usersTable.id, req.userId)).limit(1);
+  const user = rows[0];
+  if (!user) {
+    res.status(401).json({ error: "Not signed in" });
+    return;
+  }
+  if (user.passwordHash) {
+    if (!body.currentPassword || !(await verifyPassword(body.currentPassword, user.passwordHash))) {
+      res.status(400).json({ error: "Current password is incorrect" });
+      return;
+    }
+  }
+
+  const passwordHash = await hashPassword(body.newPassword);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+
+  const currentHash = currentTokenHash(req);
+  if (currentHash) {
+    await db
+      .delete(authSessionsTable)
+      .where(and(eq(authSessionsTable.userId, user.id), ne(authSessionsTable.tokenHash, currentHash)));
+  }
+  res.json(ChangePasswordResponse.parse({ ok: true }));
 });
 
 router.get("/me", requireAuth, async (req, res) => {
@@ -102,7 +207,7 @@ router.get("/me", requireAuth, async (req, res) => {
   const profileShape = await toProfileShape(user.id);
   res.json(
     GetMeResponse.parse({
-      user: { id: user.id, email: user.email, handle: user.handle, createdAt: user.createdAt },
+      user: { id: user.id, email: user.email, handle: user.handle, hasPassword: Boolean(user.passwordHash), createdAt: user.createdAt },
       profile: profileShape,
     }),
   );

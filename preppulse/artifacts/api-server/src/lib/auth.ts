@@ -46,6 +46,11 @@ export async function destroySession(req: Request): Promise<void> {
   await db.delete(authSessionsTable).where(eq(authSessionsTable.tokenHash, hashToken(token)));
 }
 
+export function currentTokenHash(req: Request): string | null {
+  const token = req.cookies?.[SESSION_COOKIE];
+  return token ? hashToken(token) : null;
+}
+
 export function setSessionCookie(res: Response, token: string, expiresAt: Date): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,

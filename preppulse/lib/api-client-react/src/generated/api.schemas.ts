@@ -13,6 +13,7 @@ export interface AuthUser {
   id: string;
   email: string;
   handle: string;
+  hasPassword?: boolean;
   createdAt: string;
 }
 
@@ -64,6 +65,26 @@ export interface SignupInput {
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  accessToken: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword?: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
+export interface OkResponse {
+  ok: boolean;
 }
 
 export interface OAuthProviderInfo {

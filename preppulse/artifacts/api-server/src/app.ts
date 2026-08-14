@@ -10,6 +10,10 @@ import { logger } from "./lib/logger.js";
 
 const app: Express = express();
 
+// Vercel terminates TLS and forwards the original scheme via x-forwarded-proto;
+// without this req.protocol reports "http" and OAuth redirect URIs break.
+app.set("trust proxy", 1);
+
 const allowedOrigins = (process.env["CORS_ORIGIN"] ?? "")
   .split(",")
   .map((origin) => origin.trim())

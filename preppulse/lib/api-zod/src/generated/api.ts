@@ -37,6 +37,7 @@ export const SignUpResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "handle": zod.string(),
+  "hasPassword": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 }),
   "profile": zod.object({
@@ -69,6 +70,7 @@ export const LogInResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "handle": zod.string(),
+  "hasPassword": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 }),
   "profile": zod.object({
@@ -102,6 +104,7 @@ export const GetMeResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "handle": zod.string(),
+  "hasPassword": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 }),
   "profile": zod.object({
@@ -118,6 +121,74 @@ export const GetMeResponse = zod.object({
   "showOnLeaderboard": zod.boolean(),
   "profileCode": zod.string()
 })
+})
+
+
+/**
+ * Always returns success for a well-formed email to avoid leaking account existence.
+ * @summary Request a password recovery email
+ */
+export const ForgotPasswordBody = zod.object({
+  "email": zod.string()
+})
+
+export const ForgotPasswordResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Verifies the recovery access token, provisions the account if needed and signs the user in.
+ * @summary Set a new password using a recovery token
+ */
+export const resetPasswordBodyNewPasswordMin = 8;
+
+
+
+export const ResetPasswordBody = zod.object({
+  "accessToken": zod.string(),
+  "newPassword": zod.string().min(resetPasswordBodyNewPasswordMin)
+})
+
+export const ResetPasswordResponse = zod.object({
+  "user": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "handle": zod.string(),
+  "hasPassword": zod.boolean().optional(),
+  "createdAt": zod.coerce.date()
+}),
+  "profile": zod.object({
+  "handle": zod.string(),
+  "email": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "examTrack": zod.enum(['jee_main', 'neet']),
+  "stage": zod.enum(['class_11', 'class_12', 'dropper']),
+  "targetYear": zod.number(),
+  "examDate": zod.coerce.date().nullable(),
+  "dailyGoalMinutes": zod.number(),
+  "weeklyGoalMinutes": zod.number(),
+  "focusMode": zod.boolean(),
+  "showOnLeaderboard": zod.boolean(),
+  "profileCode": zod.string()
+})
+})
+
+
+/**
+ * @summary Set or change the signed-in user's password
+ */
+export const changePasswordBodyNewPasswordMin = 8;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string().optional(),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
+})
+
+export const ChangePasswordResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -152,6 +223,7 @@ export const GoogleAuthResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "handle": zod.string(),
+  "hasPassword": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 }),
   "profile": zod.object({
@@ -186,6 +258,7 @@ export const OauthLinkResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "handle": zod.string(),
+  "hasPassword": zod.boolean().optional(),
   "createdAt": zod.coerce.date()
 }),
   "profile": zod.object({

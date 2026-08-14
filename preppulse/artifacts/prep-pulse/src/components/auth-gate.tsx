@@ -1,9 +1,13 @@
 import { type ReactNode } from 'react';
+import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { getGetMeQueryKey, useGetMe, type AuthResponse } from '@workspace/api-client-react';
 import AuthPage from '@/pages/auth';
+import ForgotPasswordPage from '@/pages/forgot-password';
+import ResetPasswordPage from '@/pages/reset-password';
 
 export function AuthGate({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
   const queryClient = useQueryClient();
   const query = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false, staleTime: 30_000 } });
 
@@ -17,13 +21,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (query.isError || !query.data) {
-    return (
-      <AuthPage
-        onAuthed={(auth: AuthResponse) => {
-          queryClient.setQueryData(getGetMeQueryKey(), auth);
-        }}
-      />
-    );
+    const onAuthed = (auth: AuthResponse) => {
+      queryClient.setQueryData(getGetMeQueryKey(), auth);
+    };
+    if (location.startsWith('/forgot-password')) {
+      return <ForgotPasswordPage />;
+    }
+    if (location.startsWith('/reset-password')) {
+      return <ResetPasswordPage onAuthed={onAuthed} />;
+    }
+    return <AuthPage onAuthed={onAuthed} />;
   }
 
   return <>{children}</>;
