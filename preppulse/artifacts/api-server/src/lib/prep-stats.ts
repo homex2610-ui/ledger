@@ -11,7 +11,7 @@ import {
   topicsTable,
   usersTable,
 } from "@workspace/db/schema";
-import { startOfDay, startOfWeek, dayKeyIn, startOfDayIn } from "./utils";
+import { startOfDay, startOfWeek, dayKeyIn, startOfDayIn } from "./utils.js";
 import type { TopicStatus } from "@workspace/exam-config";
 
 export const STATUS_WEIGHT: Record<string, number> = {

@@ -8,6 +8,6 @@
 // Static SPA files are served by Vercel from the build output directory;
 // client-side routes fall through to `index.html` via `vercel.json`
 // rewrites, and the API keeps serving `/api/*` from this function.
-import app from "../artifacts/api-server/src/app";
+import app from "../artifacts/api-server/src/app.js";
 
 export default app;

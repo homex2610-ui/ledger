@@ -1,11 +1,11 @@
 import { Router, type IRouter } from "express";
-import authRouter from "./auth";
-import oauthRouter from "./oauth";
-import healthRouter from "./health";
-import prepRouter from "./prep";
-import studyRouter from "./study";
-import recallRouter from "./recall";
-import communityRouter from "./community";
+import authRouter from "./auth.js";
+import oauthRouter from "./oauth.js";
+import healthRouter from "./health.js";
+import prepRouter from "./prep.js";
+import studyRouter from "./study.js";
+import recallRouter from "./recall.js";
+import communityRouter from "./community.js";
 
 const router: IRouter = Router();
 

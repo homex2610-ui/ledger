@@ -18,7 +18,7 @@ import {
   UpdateTaskResponse,
 } from "@workspace/api-zod";
 import { subjectAllowedForTrack } from "@workspace/exam-config";
-import { requireAuth } from "../lib/auth";
+import { requireAuth } from "../lib/auth.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);

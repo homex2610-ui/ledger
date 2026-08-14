@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { oauthAccountsTable, profilesTable, usersTable, type User } from "@workspace/db/schema";
-import { generateProfileCode } from "../utils";
+import { generateProfileCode } from "../utils.js";
 
 export type OAuthProvider = "google" | "discord";
 

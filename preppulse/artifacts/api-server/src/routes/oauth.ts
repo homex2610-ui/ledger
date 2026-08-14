@@ -4,12 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { oauthAccountsTable, usersTable } from "@workspace/db/schema";
 import { GetAuthDiscordAuthorizeResponse, GetAuthOauthProvidersResponse, GoogleAuthBody, GoogleAuthResponse, OauthLinkBody, OauthLinkResponse } from "@workspace/api-zod";
-import { createSession, resolveSession, setSessionCookie, requireAuth } from "../lib/auth";
-import { authRateLimit } from "./auth";
-import { toProfileShape } from "../lib/prep-stats";
-import { GoogleVerificationError, verifyGoogleCredential } from "../lib/oauth/google";
-import { DiscordOAuthError, discordAvatarUrl, exchangeDiscordCode, fetchDiscordUser, getDiscordAuthorizeUrl, joinDiscordGuild } from "../lib/oauth/discord";
-import { loadOAuthConfig } from "../lib/oauth/config";
+import { createSession, resolveSession, setSessionCookie, requireAuth } from "../lib/auth.js";
+import { authRateLimit } from "./auth.js";
+import { toProfileShape } from "../lib/prep-stats.js";
+import { GoogleVerificationError, verifyGoogleCredential } from "../lib/oauth/google.js";
+import { DiscordOAuthError, discordAvatarUrl, exchangeDiscordCode, fetchDiscordUser, getDiscordAuthorizeUrl, joinDiscordGuild } from "../lib/oauth/discord.js";
+import { loadOAuthConfig } from "../lib/oauth/config.js";
 import {
   AlreadyLinkedError,
   countSignInMethods,
@@ -17,7 +17,7 @@ import {
   OAuthLinkConflictError,
   resolveOrCreateOAuthUser,
   type OAuthProvider,
-} from "../lib/oauth/users";
+} from "../lib/oauth/users.js";
 
 const OAUTH_STATE_COOKIE = "pp_oauth_state";
 const OAUTH_LINK_COOKIE = "pp_oauth_link";

@@ -36,7 +36,7 @@ import {
   UpdateGroupParams,
   UpdateGroupResponse,
 } from "@workspace/api-zod";
-import { requireAuth } from "../lib/auth";
+import { requireAuth } from "../lib/auth.js";
 import {
   computeStreak,
   connectionUserIds,
@@ -45,8 +45,8 @@ import {
   toProfileShape,
   userHandlesById,
   weeklyPulseForUsers,
-} from "../lib/prep-stats";
-import { generateInviteCode, safeTimeZone, startOfDay, toISODate, weekLabel } from "../lib/utils";
+} from "../lib/prep-stats.js";
+import { generateInviteCode, safeTimeZone, startOfDay, toISODate, weekLabel } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);

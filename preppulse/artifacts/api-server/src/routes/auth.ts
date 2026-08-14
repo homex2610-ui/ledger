@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { GetMeResponse, LogInBody, LogInResponse, SignUpBody, SignUpResponse } from "@workspace/api-zod";
-import { createSession, destroySession, hashPassword, requireAuth, setSessionCookie, verifyPassword, clearSessionCookie } from "../lib/auth";
-import { toProfileShape } from "../lib/prep-stats";
-import { createUserWithProfile } from "../lib/oauth/users";
+import { createSession, destroySession, hashPassword, requireAuth, setSessionCookie, verifyPassword, clearSessionCookie } from "../lib/auth.js";
+import { toProfileShape } from "../lib/prep-stats.js";
+import { createUserWithProfile } from "../lib/oauth/users.js";
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);

@@ -36,7 +36,7 @@ import {
   UpdateTopicProgressResponse,
 } from "@workspace/api-zod";
 import { allowedTopicTransitions, canTransitionTopic, getExamConfig, subjectAllowedForTrack, subjectLabel, type TopicStatus } from "@workspace/exam-config";
-import { clearSessionCookie, requireAuth } from "../lib/auth";
+import { clearSessionCookie, requireAuth } from "../lib/auth.js";
 import {
   activityForDays,
   computeStreak,
@@ -47,8 +47,8 @@ import {
   recentTestsForUser,
   toProfileShape,
   userHandlesById,
-} from "../lib/prep-stats";
-import { addDays, safeTimeZone, startOfDay, startOfWeek } from "../lib/utils";
+} from "../lib/prep-stats.js";
+import { addDays, safeTimeZone, startOfDay, startOfWeek } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);

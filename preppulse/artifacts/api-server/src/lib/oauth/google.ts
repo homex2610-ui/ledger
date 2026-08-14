@@ -1,5 +1,5 @@
 import { OAuth2Client } from "google-auth-library";
-import { loadOAuthConfig } from "./config";
+import { loadOAuthConfig } from "./config.js";
 
 export interface GoogleIdentity {
   sub: string;

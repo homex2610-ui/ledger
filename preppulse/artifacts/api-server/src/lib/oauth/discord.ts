@@ -1,4 +1,4 @@
-import { loadOAuthConfig } from "./config";
+import { loadOAuthConfig } from "./config.js";
 
 export interface DiscordIdentity {
   id: string;

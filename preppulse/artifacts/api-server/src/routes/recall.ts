@@ -16,8 +16,8 @@ import {
   UpdateCardResponse,
 } from "@workspace/api-zod";
 import { subjectAllowedForTrack } from "@workspace/exam-config";
-import { requireAuth } from "../lib/auth";
-import { clamp, parseISODate, toISODate } from "../lib/utils";
+import { requireAuth } from "../lib/auth.js";
+import { clamp, parseISODate, toISODate } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
