@@ -31,6 +31,7 @@ import type {
   CircleFeedItem,
   CircleMember,
   CirclesResponse,
+  CohortResponse,
   Dashboard,
   DiscordAuthCallbackParams,
   DiscoverGroupsParams,
@@ -41,6 +42,7 @@ import type {
   ForgotPasswordInput,
   GetAuthDiscordAuthorizeParams,
   GetCirclesParams,
+  GetCohortsParams,
   GetDashboardParams,
   GetLeaderboardParams,
   GoogleAuthInput,
@@ -3604,6 +3606,244 @@ export const useRemoveConnection = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRemoveConnectionMutationOptions(options));
     }
+
+export const getGetCohortsUrl = (params?: GetCohortsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/cohorts?${stringifiedParams}` : `/api/cohorts`
+}
+
+/**
+ * @summary Get my auto-assigned study cohort
+ */
+export const getCohorts = async (params?: GetCohortsParams, options?: Parameters<typeof customFetch>[1]): Promise<CohortResponse> => {
+
+  return customFetch<CohortResponse>(getGetCohortsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCohortsQueryKey = (params?: GetCohortsParams,) => {
+    return [
+    `/api/cohorts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCohortsQueryOptions = <TData = Awaited<ReturnType<typeof getCohorts>>, TError = ErrorType<void>>(params?: GetCohortsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohorts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohorts>>> = ({ signal }) => getCohorts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohorts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCohortsQueryResult = NonNullable<Awaited<ReturnType<typeof getCohorts>>>
+export type GetCohortsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get my auto-assigned study cohort
+ */
+
+export function useGetCohorts<TData = Awaited<ReturnType<typeof getCohorts>>, TError = ErrorType<void>>(
+ params?: GetCohortsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohorts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCohortsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCohortsLeaderboardUrl = () => {
+
+
+
+
+  return `/api/cohorts/leaderboard`
+}
+
+/**
+ * @summary Weekly pulse leaderboard for my study cohort
+ */
+export const getCohortsLeaderboard = async ( options?: Parameters<typeof customFetch>[1]): Promise<Leaderboard> => {
+
+  return customFetch<Leaderboard>(getGetCohortsLeaderboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCohortsLeaderboardQueryKey = () => {
+    return [
+    `/api/cohorts/leaderboard`
+    ] as const;
+    }
+
+
+export const getGetCohortsLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortsLeaderboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortsLeaderboard>>> = ({ signal }) => getCohortsLeaderboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCohortsLeaderboardQueryResult = NonNullable<Awaited<ReturnType<typeof getCohortsLeaderboard>>>
+export type GetCohortsLeaderboardQueryError = ErrorType<void>
+
+
+/**
+ * @summary Weekly pulse leaderboard for my study cohort
+ */
+
+export function useGetCohortsLeaderboard<TData = Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCohortsLeaderboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCohortsFeedUrl = () => {
+
+
+
+
+  return `/api/cohorts/feed`
+}
+
+/**
+ * @summary Recent activity from my study cohort
+ */
+export const getCohortsFeed = async ( options?: Parameters<typeof customFetch>[1]): Promise<CircleFeedItem[]> => {
+
+  return customFetch<CircleFeedItem[]>(getGetCohortsFeedUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCohortsFeedQueryKey = () => {
+    return [
+    `/api/cohorts/feed`
+    ] as const;
+    }
+
+
+export const getGetCohortsFeedQueryOptions = <TData = Awaited<ReturnType<typeof getCohortsFeed>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsFeed>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortsFeedQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortsFeed>>> = ({ signal }) => getCohortsFeed({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohortsFeed>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCohortsFeedQueryResult = NonNullable<Awaited<ReturnType<typeof getCohortsFeed>>>
+export type GetCohortsFeedQueryError = ErrorType<void>
+
+
+/**
+ * @summary Recent activity from my study cohort
+ */
+
+export function useGetCohortsFeed<TData = Awaited<ReturnType<typeof getCohortsFeed>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsFeed>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCohortsFeedQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListGroupsUrl = () => {
 

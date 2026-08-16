@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { oauthAccountsTable, profilesTable, usersTable, type User } from "@workspace/db/schema";
+import { assignUserToCohort } from "../cohorts.js";
 import { generateProfileCode } from "../utils.js";
 
 export type OAuthProvider = "google" | "discord";
@@ -40,27 +41,31 @@ export async function createUserWithProfile(values: {
   passwordHash?: string | null;
   avatarUrl?: string | null;
 }): Promise<User> {
-  const user = (
-    await db
-      .insert(usersTable)
-      .values({
-        id: values.id ?? undefined,
-        email: values.email,
-        handle: values.handle,
-        passwordHash: values.passwordHash ?? null,
-        avatarUrl: values.avatarUrl ?? null,
-      })
-      .returning()
-  )[0];
+  return db.transaction(async (tx) => {
+    const user = (
+      await tx
+        .insert(usersTable)
+        .values({
+          id: values.id ?? undefined,
+          email: values.email,
+          handle: values.handle,
+          passwordHash: values.passwordHash ?? null,
+          avatarUrl: values.avatarUrl ?? null,
+        })
+        .returning()
+    )[0];
 
-  const targetYear = new Date().getFullYear() + 1;
-  await db.insert(profilesTable).values({
-    userId: user.id,
-    targetYear,
-    examDate: defaultExamDate(targetYear),
-    profileCode: generateProfileCode(),
+    const targetYear = new Date().getFullYear() + 1;
+    await tx.insert(profilesTable).values({
+      userId: user.id,
+      targetYear,
+      examDate: defaultExamDate(targetYear),
+      profileCode: generateProfileCode(),
+    });
+
+    await assignUserToCohort(tx, user.id);
+    return user;
   });
-  return user;
 }
 
 async function uniqueHandle(base: string): Promise<string> {

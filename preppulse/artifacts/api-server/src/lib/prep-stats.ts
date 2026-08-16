@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   circleConnectionsTable,
+  cohortMembersTable,
   groupMembersTable,
   groupsTable,
   profilesTable,
@@ -251,6 +252,20 @@ export async function groupUserIds(groupId: string): Promise<string[]> {
     .select({ userId: groupMembersTable.userId })
     .from(groupMembersTable)
     .where(eq(groupMembersTable.groupId, groupId));
+  return rows.map((row) => row.userId);
+}
+
+export async function cohortUserIdsFor(userId: string): Promise<string[] | null> {
+  const membership = await db
+    .select({ cohortId: cohortMembersTable.cohortId })
+    .from(cohortMembersTable)
+    .where(eq(cohortMembersTable.userId, userId))
+    .limit(1);
+  if (!membership[0]) return null;
+  const rows = await db
+    .select({ userId: cohortMembersTable.userId })
+    .from(cohortMembersTable)
+    .where(eq(cohortMembersTable.cohortId, membership[0].cohortId));
   return rows.map((row) => row.userId);
 }
 

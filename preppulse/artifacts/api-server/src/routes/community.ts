@@ -3,6 +3,7 @@ import { and, desc, eq, gte, gt, ilike, inArray, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   circleConnectionsTable,
+  cohortMembersTable,
   groupMembersTable,
   groupsTable,
   profilesTable,
@@ -20,6 +21,9 @@ import {
   DiscoverGroupsResponse,
   GetCircleFeedResponse,
   GetCirclesResponse,
+  GetCohortsFeedResponse,
+  GetCohortsLeaderboardResponse,
+  GetCohortsResponse,
   GetGroupActivityParams,
   GetGroupActivityResponse,
   GetGroupLeaderboardParams,
@@ -37,7 +41,9 @@ import {
   UpdateGroupResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth.js";
+import { COHORT_CAPACITY } from "../lib/cohorts.js";
 import {
+  cohortUserIdsFor,
   computeStreak,
   connectionUserIds,
   groupUserIds,
@@ -109,6 +115,81 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
   return { entries, focused: Boolean(myProfile?.focusMode) };
+}
+
+interface FeedItem {
+  userId: string;
+  handle: string;
+  avatarUrl: string | null;
+  type: "session" | "test" | "topic";
+  subject: string;
+  detail: string;
+  date: Date;
+}
+
+async function feedForUsers(userIds: string[]): Promise<FeedItem[]> {
+  const handles = await userHandlesById(userIds);
+  const items: FeedItem[] = [];
+
+  const since = new Date(Date.now() - 7 * 86_400_000);
+
+  const sessions = await db
+    .select()
+    .from(studySessionsTable)
+    .where(and(inArray(studySessionsTable.userId, userIds), gt(studySessionsTable.createdAt, since)))
+    .orderBy(desc(studySessionsTable.createdAt))
+    .limit(50);
+  for (const session of sessions) {
+    items.push({
+      userId: session.userId,
+      handle: handles.get(session.userId)?.handle ?? "unknown",
+      avatarUrl: handles.get(session.userId)?.avatarUrl ?? null,
+      type: "session",
+      subject: session.subject,
+      detail: `studied ${session.subject} for ${session.minutes} minutes`,
+      date: session.createdAt,
+    });
+  }
+
+  const tests = await db
+    .select()
+    .from(testAttemptsTable)
+    .where(and(inArray(testAttemptsTable.userId, userIds), gt(testAttemptsTable.date, since)))
+    .orderBy(desc(testAttemptsTable.date))
+    .limit(30);
+  for (const test of tests) {
+    items.push({
+      userId: test.userId,
+      handle: handles.get(test.userId)?.handle ?? "unknown",
+      avatarUrl: handles.get(test.userId)?.avatarUrl ?? null,
+      type: "test",
+      subject: test.subject ?? "Full syllabus",
+      detail: `logged ${test.name} at ${test.accuracy}% accuracy`,
+      date: test.date,
+    });
+  }
+
+  const topicUpdates = await db
+    .select({ progress: topicProgressTable, topic: topicsTable })
+    .from(topicProgressTable)
+    .innerJoin(topicsTable, eq(topicProgressTable.topicId, topicsTable.id))
+    .where(and(inArray(topicProgressTable.userId, userIds), gt(topicProgressTable.updatedAt, since)))
+    .orderBy(desc(topicProgressTable.updatedAt))
+    .limit(30);
+  for (const { progress, topic } of topicUpdates) {
+    items.push({
+      userId: progress.userId,
+      handle: handles.get(progress.userId)?.handle ?? "unknown",
+      avatarUrl: handles.get(progress.userId)?.avatarUrl ?? null,
+      type: "topic",
+      subject: topic.subject,
+      detail: `moved ${topic.name} to ${progress.status.replace("_", " ")}`,
+      date: progress.updatedAt,
+    });
+  }
+
+  items.sort((a, b) => b.date.getTime() - a.date.getTime());
+  return items.slice(0, 20);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,68 +337,68 @@ router.delete("/circles/:userId", async (req, res) => {
 
 router.get("/circles/feed", async (req, res) => {
   const connectionIds = await connectionUserIds(req.userId);
-  const handles = await userHandlesById(connectionIds);
-  const items: Array<{ userId: string; handle: string; avatarUrl: string | null; type: "session" | "test" | "topic"; subject: string; detail: string; date: Date }> = [];
+  res.json(GetCircleFeedResponse.parse(await feedForUsers(connectionIds)));
+});
 
-  const since = new Date(Date.now() - 7 * 86_400_000);
+// ---------------------------------------------------------------------------
+// Cohorts — auto-assigned groups of up to 25. No discovery, no search.
+// ---------------------------------------------------------------------------
 
-  const sessions = await db
-    .select()
-    .from(studySessionsTable)
-    .where(and(inArray(studySessionsTable.userId, connectionIds), gt(studySessionsTable.createdAt, since)))
-    .orderBy(desc(studySessionsTable.createdAt))
-    .limit(50);
-  for (const session of sessions) {
-    items.push({
-      userId: session.userId,
-      handle: handles.get(session.userId)?.handle ?? "unknown",
-      avatarUrl: handles.get(session.userId)?.avatarUrl ?? null,
-      type: "session",
-      subject: session.subject,
-      detail: `studied ${session.subject} for ${session.minutes} minutes`,
-      date: session.createdAt,
-    });
+router.get("/cohorts", async (req, res) => {
+  const timeZone = safeTimeZone(req.query.tz);
+  const membership = await db
+    .select({ cohortId: cohortMembersTable.cohortId })
+    .from(cohortMembersTable)
+    .where(eq(cohortMembersTable.userId, req.userId))
+    .limit(1);
+  if (!membership[0]) {
+    res.status(404).json({ error: "No study cohort assigned yet" });
+    return;
   }
 
-  const tests = await db
-    .select()
-    .from(testAttemptsTable)
-    .where(and(inArray(testAttemptsTable.userId, connectionIds), gt(testAttemptsTable.date, since)))
-    .orderBy(desc(testAttemptsTable.date))
-    .limit(30);
-  for (const test of tests) {
-    items.push({
-      userId: test.userId,
-      handle: handles.get(test.userId)?.handle ?? "unknown",
-      avatarUrl: handles.get(test.userId)?.avatarUrl ?? null,
-      type: "test",
-      subject: test.subject ?? "Full syllabus",
-      detail: `logged ${test.name} at ${test.accuracy}% accuracy`,
-      date: test.date,
-    });
-  }
+  const cohortId = membership[0].cohortId;
+  const memberRows = await db.select().from(cohortMembersTable).where(eq(cohortMembersTable.cohortId, cohortId));
+  const memberIds = memberRows.map((row) => row.userId);
+  const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(memberIds);
+  const handles = await userHandlesById(memberIds);
 
-  const topicUpdates = await db
-    .select({ progress: topicProgressTable, topic: topicsTable })
-    .from(topicProgressTable)
-    .innerJoin(topicsTable, eq(topicProgressTable.topicId, topicsTable.id))
-    .where(and(inArray(topicProgressTable.userId, connectionIds), gt(topicProgressTable.updatedAt, since)))
-    .orderBy(desc(topicProgressTable.updatedAt))
-    .limit(30);
-  for (const { progress, topic } of topicUpdates) {
-    items.push({
-      userId: progress.userId,
-      handle: handles.get(progress.userId)?.handle ?? "unknown",
-      avatarUrl: handles.get(progress.userId)?.avatarUrl ?? null,
-      type: "topic",
-      subject: topic.subject,
-      detail: `moved ${topic.name} to ${progress.status.replace("_", " ")}`,
-      date: progress.updatedAt,
-    });
-  }
+  const members = await Promise.all(
+    [...memberRows]
+      .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())
+      .map(async (row) => {
+        const info = handles.get(row.userId) ?? { handle: "unknown", initials: "??", avatarUrl: null };
+        return {
+          userId: row.userId,
+          handle: info.handle,
+          initials: info.initials,
+          avatarUrl: info.avatarUrl,
+          weeklyMinutes: minutesByUser.get(row.userId) ?? 0,
+          weeklyTopics: topicsByUser.get(row.userId) ?? 0,
+          streak: await computeStreak(row.userId, timeZone),
+        };
+      }),
+  );
 
-  items.sort((a, b) => b.date.getTime() - a.date.getTime());
-  res.json(GetCircleFeedResponse.parse(items.slice(0, 20)));
+  res.json(GetCohortsResponse.parse({ cohortId, memberCount: members.length, capacity: COHORT_CAPACITY, members }));
+});
+
+router.get("/cohorts/leaderboard", async (req, res) => {
+  const memberIds = await cohortUserIdsFor(req.userId);
+  if (!memberIds) {
+    res.status(404).json({ error: "No study cohort assigned yet" });
+    return;
+  }
+  const { entries, focused } = await leaderboardFor(memberIds, req.userId);
+  res.json(GetCohortsLeaderboardResponse.parse({ weekLabel: weekLabel(), entries, focused }));
+});
+
+router.get("/cohorts/feed", async (req, res) => {
+  const memberIds = await cohortUserIdsFor(req.userId);
+  if (!memberIds) {
+    res.status(404).json({ error: "No study cohort assigned yet" });
+    return;
+  }
+  res.json(GetCohortsFeedResponse.parse(await feedForUsers(memberIds)));
 });
 
 // ---------------------------------------------------------------------------

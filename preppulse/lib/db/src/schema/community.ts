@@ -38,6 +38,29 @@ export const groupsTable = pgTable(
   (table) => [uniqueIndex("groups_invite_code_unique").on(table.inviteCode)],
 );
 
+export const cohortsTable = pgTable("cohorts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const cohortMembersTable = pgTable(
+  "cohort_members",
+  {
+    cohortId: uuid("cohort_id")
+      .notNull()
+      .references(() => cohortsTable.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.cohortId, table.userId] }),
+    index("cohort_members_user_idx").on(table.userId),
+    index("cohort_members_cohort_idx").on(table.cohortId),
+  ],
+);
+
 export const groupMembersTable = pgTable(
   "group_members",
   {
@@ -59,6 +82,10 @@ export const groupMembersTable = pgTable(
 
 export type CircleConnection = typeof circleConnectionsTable.$inferSelect;
 export type NewCircleConnection = typeof circleConnectionsTable.$inferInsert;
+export type Cohort = typeof cohortsTable.$inferSelect;
+export type NewCohort = typeof cohortsTable.$inferInsert;
+export type CohortMember = typeof cohortMembersTable.$inferSelect;
+export type NewCohortMember = typeof cohortMembersTable.$inferInsert;
 export type Group = typeof groupsTable.$inferSelect;
 export type NewGroup = typeof groupsTable.$inferInsert;
 export type GroupMember = typeof groupMembersTable.$inferSelect;

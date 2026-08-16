@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Check, Copy, EyeOff, HelpCircle, Link2, Lock, Search, ShieldCheck, Trash2, Trophy, UserRoundPlus } from 'lucide-react';
+import { Check, Copy, EyeOff, HelpCircle, Link2, Lock, Search, ShieldCheck, Trash2, Trophy, UserRoundPlus, Users } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ApiError,
   discoverGroups,
   getListGroupsQueryKey,
   getGetLeaderboardQueryKey,
@@ -11,6 +12,9 @@ import {
   useDeleteGroup,
   useGetCircleFeed,
   useGetCircles,
+  useGetCohorts,
+  useGetCohortsFeed,
+  useGetCohortsLeaderboard,
   useGetGroup,
   useGetGroupActivity,
   useGetGroupLeaderboard,
@@ -20,7 +24,9 @@ import {
   useListGroups,
   useRemoveConnection,
   useUpdateGroup,
+  type CircleFeedItem,
   type CircleMember,
+  type CohortMember as CohortMemberRow,
   type GroupSummary,
   type LeaderboardEntry,
 } from '@workspace/api-client-react';
@@ -73,6 +79,7 @@ function BoardTab() {
   return (
     <div className="space-y-6">
       <PrivateCircleCard />
+      <CohortSection />
       <LeaderboardCard />
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <CircleActivityCard />
@@ -85,6 +92,57 @@ function BoardTab() {
   );
 }
 
+function CohortSection() {
+  return (
+    <section className="space-y-6 pt-2" data-testid="cohort-section">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Auto-assigned · not searchable</p>
+          <h2 className="mt-1 font-display text-2xl font-bold tracking-tight md:text-3xl">Your study cohort</h2>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">A small group of up to 25 members, grouped by when you signed up. No directory, no search by name — just the weekly board.</p>
+        </div>
+        <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-4 py-2 text-xs font-bold"><Users size={13} className="text-primary" /> Joined automatically</span>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        <StudyCohortCard />
+        <CohortBoardCard />
+      </div>
+      <CohortActivityCard />
+    </section>
+  );
+}
+
+function isNotAssigned(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
+function LeaderboardEntries({ entries }: { entries: LeaderboardEntry[] }) {
+  const podium = entries.slice(0, 3);
+  const rest = entries.slice(3);
+  return (
+    <>
+      <div className="mt-7 grid gap-4 sm:grid-cols-3">
+        {podium.map((entry) => <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} />)}
+      </div>
+      {rest.length > 0 && (
+        <div className="mt-6 divide-y divide-border/70">
+          {rest.map((entry) => (
+            <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-4 py-3.5 first:pt-1 last:pb-1" data-testid={`row-leaderboard-${entry.handle}`}>
+              <span className="w-7 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
+              <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-10 w-10 text-xs ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'}`} title={entry.handle} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
+              </div>
+              <p className="hidden text-xs text-muted-foreground sm:block">{entry.hours}h · {entry.topics} topics</p>
+              <p className="w-20 text-right font-display text-lg font-bold text-primary" title="Pulse = minutes studied + 30 × topics moved">{entry.score} <span className="inline-flex align-middle"><HelpCircle size={12} className="text-primary/60" /></span></p>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function LeaderboardCard() {
   const query = useGetLeaderboard({ tz: browserTimeZone() });
   const circlesQuery = useGetCircles({ tz: browserTimeZone() });
@@ -93,8 +151,6 @@ function LeaderboardCard() {
   if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
   const { entries, focused, weekLabel } = query.data;
   const isAlone = entries.length <= 1 && memberCount <= 1;
-  const podium = entries.slice(0, 3);
-  const rest = entries.slice(3);
 
   return (
     <div className="space-y-6">
@@ -115,26 +171,7 @@ function LeaderboardCard() {
             <EmptyState title="You're the only one here" detail="The board fills when you add a friend with your invite code — no one to compare against yet, just you showing up." action={<button type="button" onClick={() => document.getElementById('connections-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-go-to-connections">Add a friend</button>} />
           </div>
         ) : entries.length ? (
-          <>
-            <div className="mt-7 grid gap-4 sm:grid-cols-3">
-              {podium.map((entry) => <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} />)}
-            </div>
-            {rest.length > 0 && (
-              <div className="mt-6 divide-y divide-border/70">
-                {rest.map((entry) => (
-                  <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-4 py-3.5 first:pt-1 last:pb-1" data-testid={`row-leaderboard-${entry.handle}`}>
-                    <span className="w-7 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
-                    <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-10 w-10 text-xs ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'}`} title={entry.handle} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
-                    </div>
-                    <p className="hidden text-xs text-muted-foreground sm:block">{entry.hours}h · {entry.topics} topics</p>
-                    <p className="w-20 text-right font-display text-lg font-bold text-primary" title="Pulse = minutes studied + 30 × topics moved">{entry.score} <span className="inline-flex align-middle"><HelpCircle size={12} className="text-primary/60" /></span></p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
+          <LeaderboardEntries entries={entries} />
         ) : (
           <div className="mt-7">
             <EmptyState title="No one on the board yet" detail="Your weekly minutes and topic moves decide the score. Invite a friend to fill the board." />
@@ -294,24 +331,107 @@ function PrivateCircleCard() {
   );
 }
 
-function CircleActivityCard() {
-  const feedQuery = useGetCircleFeed();
-  const feed = feedQuery.data ?? [];
+function StudyCohortCard() {
+  const query = useGetCohorts({ tz: browserTimeZone() });
+  if (query.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
+  if (query.isError && isNotAssigned(query.error)) {
+    return (
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="Study cohort" title="You're not in a cohort yet" action={<Users size={17} className="text-primary" />} />
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">New members are placed into a study cohort automatically. Check back in a moment.</p>
+        <button type="button" onClick={() => query.refetch()} className="mt-4 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-retry-cohort">Check again</button>
+      </Card>
+    );
+  }
+  if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
+
+  const { memberCount, capacity, members } = query.data;
+  const compact = members.length > 8;
+
+  return (
+    <Card className="p-5 md:p-7" data-testid="cohort-card">
+      <SectionTitle eyebrow="Study cohort" title="Your auto-assigned group" action={<Users size={17} className="text-primary" />} />
+      <p className="text-sm leading-relaxed text-muted-foreground">A study cohort is a group of up to {capacity} members who signed up around the same time. It's assigned automatically — there is no directory, no search, and no way to look up members by name. You can't message them; you only see each other's weekly board and activity.</p>
+
+      <div className="mt-5 flex items-center justify-between rounded-xl border border-border/70 bg-secondary/40 px-4 py-3">
+        <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-primary">Members</p>
+        <p className="font-display text-lg font-bold tabular-nums" data-testid="cohort-member-count">{memberCount} / {capacity}</p>
+      </div>
+
+      <div className={`mt-3 space-y-2 ${compact ? 'max-h-64 overflow-y-auto pr-1' : ''}`}>
+        {members.map((member: CohortMemberRow) => (
+          <div key={member.userId} className="flex items-center gap-3 rounded-xl border border-border/70 p-3" data-testid={`row-cohort-${member.handle}`}>
+            <Avatar src={member.avatarUrl} initials={member.initials} className="h-9 w-9 bg-secondary text-xs" title={member.handle} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">{member.handle}</p>
+              <p className="text-xs text-muted-foreground">{member.weeklyMinutes}m this week · {member.weeklyTopics} topics</p>
+            </div>
+            <span className="hidden font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground sm:inline">{member.streak} day{member.streak === 1 ? '' : 's'} streak</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function CohortBoardCard() {
+  const query = useGetCohortsLeaderboard();
+  if (query.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
+  if (query.isError && isNotAssigned(query.error)) {
+    return (
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="This week" title="Cohort board" action={<Trophy size={17} className="text-primary" />} />
+        <p className="mt-1 text-sm text-muted-foreground">The board appears once you're placed in a study cohort.</p>
+      </Card>
+    );
+  }
+  if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
+
+  const { entries, weekLabel, focused } = query.data;
   return (
     <Card className="p-5 md:p-7">
-      <SectionTitle eyebrow="Last 7 days" title="Circle activity" />
-      {feed.length ? (
+      <SectionTitle eyebrow={weekRange(weekLabel)} title="Cohort board" action={<Trophy size={17} className="text-primary" />} />
+      {focused && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-accent" data-testid="cohort-focus-notice"><EyeOff size={13} /> Focus mode is on — your rank and pulse are hidden from the cohort board.</p>
+      )}
+      {entries.length ? (
+        <LeaderboardEntries entries={entries} />
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">The board fills as your cohort studies.</p>
+      )}
+    </Card>
+  );
+}
+
+function FeedCard({ eyebrow, title, items, emptyText }: { eyebrow: string; title: string; items: CircleFeedItem[]; emptyText: string }) {
+  return (
+    <Card className="p-5 md:p-7">
+      <SectionTitle eyebrow={eyebrow} title={title} />
+      {items.length ? (
         <div className="space-y-2.5">
-          {feed.map((item, index) => (
+          {items.map((item, index) => (
             <div key={`${item.userId}-${item.date}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/70 p-3" data-testid={`feed-item-${index}`}>
               <Avatar src={item.avatarUrl} initials={item.handle.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-secondary text-[10px]" title={item.handle} />
               <div className="min-w-0"><p className="text-sm"><span className="font-bold">{item.handle}</span> <span className="text-muted-foreground">{item.detail}</span></p><p className="mt-0.5 font-mono-custom text-[10px] text-muted-foreground">{item.subject} · {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p></div>
             </div>
           ))}
         </div>
-      ) : <p className="mt-1 text-sm text-muted-foreground">Activity from your circle will appear here.</p>}
+      ) : <p className="mt-1 text-sm text-muted-foreground">{emptyText}</p>}
     </Card>
   );
+}
+
+function CircleActivityCard() {
+  const feedQuery = useGetCircleFeed();
+  return <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />;
+}
+
+function CohortActivityCard() {
+  const feedQuery = useGetCohortsFeed();
+  if (feedQuery.isError && isNotAssigned(feedQuery.error)) {
+    return <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={[]} emptyText="Activity from your cohort will appear once you're placed in one." />;
+  }
+  return <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={feedQuery.data ?? []} emptyText="Activity from your cohort will appear here." />;
 }
 
 function ThePointCard() {

@@ -862,6 +862,58 @@ paths:
         "204":
           description: Removed
 
+  /cohorts:
+    get:
+      operationId: getCohorts
+      tags: [community]
+      summary: Get my auto-assigned study cohort
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA timezone used for member streaks
+          schema:
+            type: string
+      responses:
+        "200":
+          description: My study cohort
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CohortResponse"
+        "404":
+          description: No cohort assigned yet
+  /cohorts/leaderboard:
+    get:
+      operationId: getCohortsLeaderboard
+      tags: [community]
+      summary: Weekly pulse leaderboard for my study cohort
+      responses:
+        "200":
+          description: Cohort leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leaderboard"
+        "404":
+          description: No cohort assigned yet
+  /cohorts/feed:
+    get:
+      operationId: getCohortsFeed
+      tags: [community]
+      summary: Recent activity from my study cohort
+      responses:
+        "200":
+          description: Cohort activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CircleFeedItem"
+        "404":
+          description: No cohort assigned yet
+
   /groups:
     get:
       operationId: listGroups
@@ -1863,6 +1915,39 @@ components:
           type: string
           minLength: 4
       required: [code]
+    CohortMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        initials:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        weeklyMinutes:
+          type: number
+        weeklyTopics:
+          type: number
+        streak:
+          type: number
+      required: [userId, handle, initials, avatarUrl, weeklyMinutes, weeklyTopics, streak]
+    CohortResponse:
+      type: object
+      properties:
+        cohortId:
+          type: string
+        memberCount:
+          type: number
+        capacity:
+          type: number
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/CohortMember"
+      required: [cohortId, memberCount, capacity, members]
     CircleFeedItem:
       type: object
       properties:

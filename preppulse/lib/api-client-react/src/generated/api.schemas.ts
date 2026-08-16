@@ -593,6 +593,23 @@ export interface CircleConnectInput {
   code: string;
 }
 
+export interface CohortMember {
+  userId: string;
+  handle: string;
+  initials: string;
+  avatarUrl: string | null;
+  weeklyMinutes: number;
+  weeklyTopics: number;
+  streak: number;
+}
+
+export interface CohortResponse {
+  cohortId: string;
+  memberCount: number;
+  capacity: number;
+  members: CohortMember[];
+}
+
 export type CircleFeedItemType = typeof CircleFeedItemType[keyof typeof CircleFeedItemType];
 
 
@@ -728,6 +745,13 @@ tz?: string;
 export type GetCirclesParams = {
 /**
  * IANA timezone used for connection streaks
+ */
+tz?: string;
+};
+
+export type GetCohortsParams = {
+/**
+ * IANA timezone used for member streaks
  */
 tz?: string;
 };

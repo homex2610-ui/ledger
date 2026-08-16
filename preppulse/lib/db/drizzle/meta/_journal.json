@@ -15,6 +15,13 @@
       "when": 1786715387051,
       "tag": "0001_numerous_stark_industries",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786882993532,
+      "tag": "0002_funny_mandroid",
+      "breakpoints": true
     }
   ]
 }

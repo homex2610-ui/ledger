@@ -1241,6 +1241,63 @@ export const RemoveConnectionResponse = zod.void()
 
 
 /**
+ * @summary Get my auto-assigned study cohort
+ */
+export const GetCohortsQueryParams = zod.object({
+  "tz": zod.coerce.string().optional().describe('IANA timezone used for member streaks')
+})
+
+export const GetCohortsResponse = zod.object({
+  "cohortId": zod.string(),
+  "memberCount": zod.number(),
+  "capacity": zod.number(),
+  "members": zod.array(zod.object({
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "weeklyMinutes": zod.number(),
+  "weeklyTopics": zod.number(),
+  "streak": zod.number()
+}))
+})
+
+
+/**
+ * @summary Weekly pulse leaderboard for my study cohort
+ */
+export const GetCohortsLeaderboardResponse = zod.object({
+  "weekLabel": zod.string(),
+  "entries": zod.array(zod.object({
+  "rank": zod.number(),
+  "handle": zod.string(),
+  "initials": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "score": zod.number(),
+  "hours": zod.number(),
+  "topics": zod.number(),
+  "isCurrentUser": zod.boolean()
+})),
+  "focused": zod.boolean()
+})
+
+
+/**
+ * @summary Recent activity from my study cohort
+ */
+export const GetCohortsFeedResponseItem = zod.object({
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "type": zod.enum(['session', 'test', 'topic']),
+  "subject": zod.string(),
+  "detail": zod.string(),
+  "date": zod.coerce.date()
+})
+export const GetCohortsFeedResponse = zod.array(GetCohortsFeedResponseItem)
+
+
+/**
  * @summary List the groups I belong to
  */
 export const ListGroupsResponseItem = zod.object({
