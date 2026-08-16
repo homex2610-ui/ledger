@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
+import { ensureGisCsrfToken } from '@/lib/utils';
 
 declare global {
   interface Window {
@@ -59,6 +60,7 @@ export function GoogleSignInButton({ clientId, onCredential, disabled }: { clien
 
   useEffect(() => {
     if (!clientId) return;
+    ensureGisCsrfToken();
     let cancelled = false;
     loadGisScript()
       .then(() => {

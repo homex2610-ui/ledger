@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Sun, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
+import { ApiError, exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
 import { EXAM_TRACKS, getExamConfig } from '@workspace/exam-config';
 import { Card, ErrorState, LoadingBlock, SavingLabel, SectionTitle } from '@/components/ui-elements';
 import { Select } from '@/components/ui/select';
@@ -92,11 +92,15 @@ export default function Settings() {
       {
         onSuccess: () => { providers.refetch(); },
         onError: (err) => {
-          const message = err instanceof Error ? err.message : '';
-          const parsed = /"code":"([a-z_]+)"/.exec(message);
-          if (parsed?.[1] === 'already_linked') setOauthError('This Google account is already linked to another PrepPulse account.');
-          else if (parsed?.[1] === 'invalid_credential' || parsed?.[1] === 'csrf_mismatch') setOauthError('Google credential was invalid or expired. Try again.');
-          else setOauthError('Could not connect Google. Try again.');
+          const data = err instanceof ApiError ? (err.data as { error?: string; code?: string } | null) : null;
+          const code = data?.code;
+          if (code === 'already_linked') setOauthError('This Google account is already linked to another PrepPulse account.');
+          else if (code === 'invalid_credential' || code === 'csrf_mismatch') setOauthError('Google credential was invalid or expired. Try again.');
+          else if (code === 'rate_limited') setOauthError('Too many sign-in attempts. Wait a few minutes and try again.');
+          else {
+            console.error('Google link error:', err);
+            setOauthError(data?.error ?? 'Could not connect Google. Try again.');
+          }
         },
       },
     );

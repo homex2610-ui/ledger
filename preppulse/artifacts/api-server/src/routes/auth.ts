@@ -23,6 +23,16 @@ import { sendRecoveryEmail, supabaseAuthConfigured, verifyRecoveryToken } from "
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
 
+// PARTIAL FIX (documented limitation): the bucket store is an in-memory Map
+// on globalThis. This app runs on Vercel as a serverless function
+// (`λ api/[...slug]`): state is NOT shared across instances and is lost on
+// cold starts, so a distributed client can exceed the per-IP budget by
+// spreading requests across warm instances. With `trust proxy` configured
+// (see app.ts), each real client gets its own bucket and the original bug
+// (all users sharing one bucket via the edge-node IP) is gone. If a hard
+// per-IP limit is required, move this store to a persistent one (e.g.
+// Upstash Redis / Vercel KV keyed by `rate:<ip>`) — until then this is a
+// best-effort limiter.
 export function authRateLimit(req: Request, res: Response, next: NextFunction): void {
   const now = Date.now();
   const windowStart = now - AUTH_WINDOW_MS;
@@ -30,7 +40,7 @@ export function authRateLimit(req: Request, res: Response, next: NextFunction): 
   const ip = req.ip ?? req.socket?.remoteAddress ?? "unknown";
   const bucket = (buckets.get(ip) ?? []).filter((timestamp) => timestamp > windowStart);
   if (bucket.length >= AUTH_MAX_REQUESTS) {
-    res.status(429).json({ error: "Too many attempts. Wait a few minutes and try again." });
+    res.status(429).json({ error: "Too many attempts. Wait a few minutes and try again.", code: "rate_limited" });
     return;
   }
   bucket.push(now);

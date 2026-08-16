@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, useLogIn, useSignUp, type AuthResponse } from '@workspace/api-client-react';
+import { ApiError, getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, useLogIn, useSignUp, type AuthResponse } from '@workspace/api-client-react';
 import { GoogleSignInButton, GoogleOAuthButton, DiscordOAuthButton } from '@/components/oauth-buttons';
 import { DashboardBackdrop } from '@/components/dashboard-backdrop';
 import { getGisCsrfToken } from '@/lib/utils';
@@ -113,14 +113,17 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
       {
         onSuccess: (auth) => complete(auth),
         onError: (err) => {
-          const message = err instanceof Error ? err.message : '';
-          const parsed = /"code":"([a-z_]+)"/.exec(message);
-          if (parsed?.[1] === 'account_linking_required') {
+          const data = err instanceof ApiError ? (err.data as { error?: string; code?: string } | null) : null;
+          const code = data?.code;
+          if (code === 'account_linking_required') {
             setError('This email already belongs to an account. If it\u2019s yours, sign in with your email and password, then connect Google in Settings.');
-          } else if (parsed?.[1] === 'invalid_credential' || parsed?.[1] === 'csrf_mismatch') {
+          } else if (code === 'invalid_credential' || code === 'csrf_mismatch') {
             setError('Google sign-in failed — the credential was invalid or expired. Try again.');
+          } else if (code === 'rate_limited') {
+            setError('Too many sign-in attempts. Wait a few minutes and try again.');
           } else {
-            setError('Google sign-in is unavailable right now. Try again in a moment.');
+            console.error('Google sign-in error:', err);
+            setError(data?.error ?? 'Google sign-in is unavailable right now. Try again in a moment.');
           }
         },
       },

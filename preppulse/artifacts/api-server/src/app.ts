@@ -101,7 +101,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     return;
   }
   logger.error(err instanceof Error ? err.message : String(err));
-  res.status(500).json({ error: "Something went wrong" });
+  res.status(500).json({ error: "Something went wrong", code: "internal_error" });
 });
 
 export default app;
