@@ -20,7 +20,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (query.isError || !query.data) {
+  if (!query.data) {
     const onAuthed = (auth: AuthResponse) => {
       queryClient.setQueryData(getGetMeQueryKey(), auth);
     };

@@ -8,6 +8,7 @@ import { Card, ProgressBar, SectionTitle } from '@/components/ui-elements';
 import { Select } from '@/components/ui/select';
 import { closePipWindow, openPipWindow, pipSupported, type PipState } from '@/lib/pip-timer';
 import { playReward, playTick, unlockAudio } from '@/lib/focus-audio';
+import { clearFocusSession, focusSessionSeconds, loadFocusSession, saveFocusSession } from '@/lib/focus-session';
 
 export default function Study() {
   const queryClient = useQueryClient();
@@ -22,24 +23,26 @@ export default function Study() {
   const subjects = [...getExamConfig(track).subjects, 'Mixed revision'];
   const [subject, setSubject] = useState(subjects[0]);
   const [manualMinutes, setManualMinutes] = useState('45');
-  const [seconds, setSeconds] = useState(25 * 60);
-  const [running, setRunning] = useState(false);
-  const [timerSubject, setTimerSubject] = useState(subjects[0]);
+  const [restoredSession] = useState(() => loadFocusSession());
+  const [seconds, setSeconds] = useState(() => (restoredSession ? focusSessionSeconds(restoredSession) : 25 * 60));
+  const [running, setRunning] = useState(() => restoredSession?.running ?? false);
+  const [timerSubject, setTimerSubject] = useState(() => restoredSession?.subject ?? subjects[0]);
   const [logged, setLogged] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskSubject, setTaskSubject] = useState('Mixed revision');
-  const [mode, setMode] = useState<'pomodoro' | 'flow'>(() => (localStorage.getItem('pp-focus-mode') === 'flow' ? 'flow' : 'pomodoro'));
-  const [phase, setPhase] = useState<'focus' | 'short_break' | 'long_break'>('focus');
-  const [pomoCycle, setPomoCycle] = useState(1);
+  const [mode, setMode] = useState<'pomodoro' | 'flow'>(() => restoredSession?.mode ?? (localStorage.getItem('pp-focus-mode') === 'flow' ? 'flow' : 'pomodoro'));
+  const [phase, setPhase] = useState<'focus' | 'short_break' | 'long_break'>(() => restoredSession?.phase ?? 'focus');
+  const [pomoCycle, setPomoCycle] = useState(() => restoredSession?.cycle ?? 1);
   const [pipOpen, setPipOpen] = useState(false);
   const [timerTaskId, setTimerTaskId] = useState('');
   const [fullscreen, setFullscreen] = useState(false);
 
-  const phaseRef = useRef(phase);
-  const cycleRef = useRef(pomoCycle);
-  const anchorRef = useRef({ epoch: 0, base: 25 * 60 });
+  const phaseRef = useRef(restoredSession?.phase ?? phase);
+  const cycleRef = useRef(restoredSession?.cycle ?? pomoCycle);
+  const anchorRef = useRef(restoredSession ? (restoredSession.running ? { epoch: restoredSession.epoch, base: restoredSession.base } : { epoch: Date.now(), base: restoredSession.base }) : { epoch: 0, base: 25 * 60 });
   const pipStateRef = useRef<PipState | null>(null);
   const taskIdRef = useRef('');
+  const intervalRef = useRef<number | null>(null);
   const secondsRef = useRef(seconds);
   const modeRef = useRef(mode);
   const subjectRef = useRef(timerSubject);
@@ -51,12 +54,17 @@ export default function Study() {
   subjectRef.current = timerSubject;
   pipStateRef.current = { running, mode, phase, seconds, subject: timerSubject };
 
+  const persistSession = (isRunning: boolean) => {
+    const { epoch, base } = anchorRef.current;
+    saveFocusSession({ epoch, base, running: isRunning, mode: modeRef.current, phase: phaseRef.current, cycle: cycleRef.current, subject: subjectRef.current });
+  };
+
   useEffect(() => {
     if (!running) return;
     const tick = () => {
       const { epoch, base } = anchorRef.current;
       const delta = Math.floor((Date.now() - epoch) / 1000);
-      if (mode === 'flow') {
+      if (modeRef.current === 'flow') {
         setSeconds(base + delta);
         return;
       }
@@ -76,27 +84,36 @@ export default function Study() {
         setPhase(nextPhase);
         anchorRef.current = { epoch: Date.now(), base: target };
         setSeconds(target);
+        persistSession(true);
         logBlock();
       } else {
         phaseRef.current = 'focus';
         setPhase('focus');
         anchorRef.current = { epoch: Date.now(), base: 25 * 60 };
         setSeconds(25 * 60);
+        persistSession(true);
         playReward();
       }
-    };    const interval = window.setInterval(() => {
-      if (mode === 'flow' || phaseRef.current === 'focus') playTick();
+    };
+    if (intervalRef.current !== null) {
+      console.warn('[focus-timer] stray interval detected; clearing before re-arm');
+      window.clearInterval(intervalRef.current);
+    }
+    const interval = window.setInterval(() => {
+      if (modeRef.current === 'flow' || phaseRef.current === 'focus') playTick();
       tick();
     }, 1000);
+    intervalRef.current = interval;
     const snap = () => tick();
     document.addEventListener('visibilitychange', snap);
     window.addEventListener('focus', snap);
     return () => {
       window.clearInterval(interval);
+      intervalRef.current = null;
       document.removeEventListener('visibilitychange', snap);
       window.removeEventListener('focus', snap);
     };
-  }, [running, mode, timerSubject]);
+  }, [running]);
 
   useEffect(() => { localStorage.setItem('pp-focus-mode', mode); }, [mode]);
 
@@ -132,6 +149,7 @@ export default function Study() {
     setLogged(false);
     anchorRef.current = { epoch: Date.now(), base: secondsRef.current };
     setRunning(true);
+    persistSession(true);
     unlockAudio();
     maybeRequestNotify();
     if (taskIdRef.current) {
@@ -148,9 +166,11 @@ export default function Study() {
   const pauseTimer = () => {
     const { epoch, base } = anchorRef.current;
     const delta = Math.floor((Date.now() - epoch) / 1000);
-    if (modeRef.current === 'flow') setSeconds(base + delta);
-    else setSeconds(Math.max(0, base - delta));
+    const current = modeRef.current === 'flow' ? base + delta : Math.max(0, base - delta);
+    setSeconds(current);
+    anchorRef.current = { epoch: Date.now(), base: current };
     setRunning(false);
+    persistSession(false);
   };
   const abandonTask = () => {
     if (!taskIdRef.current) return;
@@ -160,6 +180,10 @@ export default function Study() {
     setTimerTaskId('');
   };
   const resetTimer = () => {
+    const hadProgress = running || (modeRef.current === 'flow' ? secondsRef.current > 0 : phaseRef.current !== 'focus' || cycleRef.current > 1 || secondsRef.current < 25 * 60);
+    if (hadProgress) {
+      console.warn('[focus-timer] reset discarded an in-flight session', { mode: modeRef.current, phase: phaseRef.current, seconds: secondsRef.current, cycle: cycleRef.current, running });
+    }
     setRunning(false);
     setLogged(false);
     if (pipOpen) {
@@ -171,6 +195,7 @@ export default function Study() {
     setPomoCycle(1);
     setPhase('focus');
     setSeconds(modeRef.current === 'pomodoro' ? 25 * 60 : 0);
+    clearFocusSession();
     abandonTask();
   };
   const finishTimer = () => {
@@ -195,6 +220,7 @@ export default function Study() {
     setPomoCycle(1);
     setPhase('focus');
     setSeconds(next === 'pomodoro' ? 25 * 60 : 0);
+    clearFocusSession();
     unlockAudio();
   };
   const togglePip = () => {
@@ -274,7 +300,7 @@ export default function Study() {
     <div><p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Attention is a practice</p><h1 className="mt-2 font-display text-4xl font-bold tracking-[-.04em] md:text-5xl">Study room</h1><p className="mt-3 max-w-xl text-sm text-muted-foreground">Choose the smallest useful block. Leave with proof, not pressure.</p></div>
     {logged && <div className="mt-6 flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary" data-testid="status-session-saved"><Check size={16} /> Session saved to your pulse.</div>}
     <div className="mt-7 grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
-      <Card className="relative overflow-hidden bg-sidebar p-6 text-sidebar-foreground md:p-10"><div className="absolute right-[-40px] top-[-55px] h-48 w-48 rounded-full border border-accent/20" /><div className="absolute right-[-15px] top-[-30px] h-32 w-32 rounded-full border border-accent/20" /><div className="relative"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-mono-custom text-[10px] uppercase tracking-[.17em] text-accent">Focus timer</p><h2 className="mt-2 font-display text-2xl font-bold">One clean block</h2></div><div className="flex items-center gap-2"><Timer className="text-accent" size={20} /><div className="flex items-center gap-1 rounded-xl border border-sidebar-foreground/15 p-1">{(['pomodoro', 'flow'] as const).map((key) => <button key={key} type="button" disabled={running} onClick={() => selectMode(key)} className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${mode === key ? 'bg-sidebar-foreground/15 text-sidebar-foreground' : 'text-sidebar-foreground/55 hover:text-sidebar-foreground'}`} data-testid={`tab-focus-mode-${key}`}>{key === 'pomodoro' ? 'Pomodoro' : 'Flow'}</button>)}</div></div></div>  <div className="my-10 text-center"><p className={`font-mono-custom text-7xl tracking-[-.08em] tabular-nums md:text-8xl ${mode === 'pomodoro' && phase !== 'focus' ? 'text-sidebar-foreground/75' : 'text-sidebar-foreground'}`} data-testid="text-timer">{minutes}:{remaining}</p><p className="mt-3 text-xs text-sidebar-foreground/55">{phaseNote}</p>{mode === 'pomodoro' && phase !== 'focus' && <p className="mt-3 inline-block rounded-full bg-warm/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-warm">Break</p>}{mode === 'pomodoro' && phase === 'focus' && <div className="mt-3 flex items-center justify-center gap-1.5">{[1, 2, 3, 4].map((dot) => <span key={dot} className={`h-1.5 w-1.5 rounded-full transition-colors ${dot <= cycleProgress ? 'bg-accent' : 'bg-sidebar-foreground/20'}`} />)}</div>}</div><div className="mx-auto max-w-xs space-y-3"><label className="block"><span className="mb-2 block font-mono-custom text-[10px] uppercase tracking-[.15em] text-sidebar-foreground/55">Focus on</span><Select value={timerSubject} onChange={(event) => setTimerSubject(event.target.value)} className="border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground" icon={<ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sidebar-foreground/55" />} data-testid="select-timer-subject">{subjects.map((value) => <option className="text-foreground" key={value}>{value}</option>)}</Select></label><label className="block"><span className="mb-2 block font-mono-custom text-[10px] uppercase tracking-[.15em] text-sidebar-foreground/55">Attached task</span><Select value={timerTaskId} disabled={running} onChange={(event) => setTimerTaskId(event.target.value)} className="border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground" icon={<ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sidebar-foreground/55" />} data-testid="select-timer-task"><option className="text-foreground" value="">No task</option>{openTasks.map((task) => <option className="text-foreground" key={task.id} value={task.id}>{task.title}</option>)}</Select></label></div><div className="mt-6 flex flex-wrap items-center justify-center gap-2"><button type="button" onClick={running ? pauseTimer : startTimer} className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-bold text-accent-foreground" data-testid="button-toggle-timer">{running ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}{running ? 'Pause' : seconds > 0 ? 'Resume' : mode === 'flow' ? 'Start flow' : 'Start focus'}</button>{seconds > 0 && !running && (mode === 'flow' || (mode === 'pomodoro' && phase === 'focus' && seconds < 25 * 60)) && <button type="button" onClick={finishTimer} disabled={createSession.isPending} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60" data-testid="button-finish-timer">{createSession.isPending ? 'Saving…' : 'Finish & log'}</button>}<button type="button" onClick={resetTimer} className="rounded-xl border border-sidebar-foreground/15 p-3 text-sidebar-foreground/70 hover:bg-sidebar-foreground/10" aria-label="Reset timer" data-testid="button-reset-timer"><RotateCcw size={16} /></button>{pipSupported() && <button type="button" onClick={togglePip} className={`rounded-xl border p-3 transition-colors ${pipOpen ? 'border-accent/40 bg-accent/15 text-accent' : 'border-sidebar-foreground/15 text-sidebar-foreground/70 hover:bg-sidebar-foreground/10'}`} aria-label="Float timer" title="Float timer over other windows" data-testid="button-float-timer"><PictureInPicture2 size={16} /></button>}<button type="button" onClick={fullscreen ? closeFullscreen : openFullscreen} className="rounded-xl border border-sidebar-foreground/15 p-3 text-sidebar-foreground/70 hover:bg-sidebar-foreground/10" aria-label="Fullscreen focus" title="Fullscreen focus view" data-testid="button-fullscreen-timer"><Maximize2 size={16} /></button></div></div></Card>
+      <Card className="relative overflow-hidden bg-sidebar p-6 text-sidebar-foreground md:p-10"><div className="absolute right-[-40px] top-[-55px] h-48 w-48 rounded-full border border-accent/20" /><div className="absolute right-[-15px] top-[-30px] h-32 w-32 rounded-full border border-accent/20" /><div className="relative"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-mono-custom text-[10px] uppercase tracking-[.17em] text-accent">Focus timer</p><h2 className="mt-2 font-display text-2xl font-bold">One clean block</h2></div><div className="flex items-center gap-2"><Timer className="text-accent" size={20} /><div className="flex items-center gap-1 rounded-xl border border-sidebar-foreground/15 p-1">{(['pomodoro', 'flow'] as const).map((key) => <button key={key} type="button" disabled={running} onClick={() => selectMode(key)} className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${mode === key ? 'bg-sidebar-foreground/15 text-sidebar-foreground' : 'text-sidebar-foreground/55 hover:text-sidebar-foreground'}`} data-testid={`tab-focus-mode-${key}`}>{key === 'pomodoro' ? 'Pomodoro' : 'Flow'}</button>)}</div></div></div>  <div className="my-10 text-center"><p className={`font-mono-custom text-7xl tracking-[-.08em] tabular-nums md:text-8xl ${mode === 'pomodoro' && phase !== 'focus' ? 'text-sidebar-foreground/75' : 'text-sidebar-foreground'}`} data-testid="text-timer">{minutes}:{remaining}</p><p className="mt-3 text-xs text-sidebar-foreground/55">{phaseNote}</p>{mode === 'pomodoro' && phase !== 'focus' && <p className="mt-3 inline-block rounded-full bg-warm/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-warm">Break</p>}{mode === 'pomodoro' && phase === 'focus' && <div className="mt-3 flex items-center justify-center gap-1.5">{[1, 2, 3, 4].map((dot) => <span key={dot} className={`h-1.5 w-1.5 rounded-full transition-colors ${dot <= cycleProgress ? 'bg-accent' : 'bg-sidebar-foreground/20'}`} />)}</div>}</div><div className="mx-auto max-w-xs space-y-3"><label className="block"><span className="mb-2 block font-mono-custom text-[10px] uppercase tracking-[.15em] text-sidebar-foreground/55">Focus on</span><Select value={timerSubject} onChange={(event) => { setTimerSubject(event.target.value); if (running) persistSession(true); }} className="border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground" icon={<ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sidebar-foreground/55" />} data-testid="select-timer-subject">{subjects.map((value) => <option className="text-foreground" key={value}>{value}</option>)}</Select></label><label className="block"><span className="mb-2 block font-mono-custom text-[10px] uppercase tracking-[.15em] text-sidebar-foreground/55">Attached task</span><Select value={timerTaskId} disabled={running} onChange={(event) => setTimerTaskId(event.target.value)} className="border-sidebar-foreground/15 bg-sidebar-foreground/10 text-sidebar-foreground" icon={<ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sidebar-foreground/55" />} data-testid="select-timer-task"><option className="text-foreground" value="">No task</option>{openTasks.map((task) => <option className="text-foreground" key={task.id} value={task.id}>{task.title}</option>)}</Select></label></div><div className="mt-6 flex flex-wrap items-center justify-center gap-2"><button type="button" onClick={running ? pauseTimer : startTimer} className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-bold text-accent-foreground" data-testid="button-toggle-timer">{running ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}{running ? 'Pause' : seconds > 0 ? 'Resume' : mode === 'flow' ? 'Start flow' : 'Start focus'}</button>{seconds > 0 && !running && (mode === 'flow' || (mode === 'pomodoro' && phase === 'focus' && seconds < 25 * 60)) && <button type="button" onClick={finishTimer} disabled={createSession.isPending} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60" data-testid="button-finish-timer">{createSession.isPending ? 'Saving…' : 'Finish & log'}</button>}<button type="button" onClick={resetTimer} className="rounded-xl border border-sidebar-foreground/15 p-3 text-sidebar-foreground/70 hover:bg-sidebar-foreground/10" aria-label="Reset timer" data-testid="button-reset-timer"><RotateCcw size={16} /></button>{pipSupported() && <button type="button" onClick={togglePip} className={`rounded-xl border p-3 transition-colors ${pipOpen ? 'border-accent/40 bg-accent/15 text-accent' : 'border-sidebar-foreground/15 text-sidebar-foreground/70 hover:bg-sidebar-foreground/10'}`} aria-label="Float timer" title="Float timer over other windows" data-testid="button-float-timer"><PictureInPicture2 size={16} /></button>}<button type="button" onClick={fullscreen ? closeFullscreen : openFullscreen} className="rounded-xl border border-sidebar-foreground/15 p-3 text-sidebar-foreground/70 hover:bg-sidebar-foreground/10" aria-label="Fullscreen focus" title="Fullscreen focus view" data-testid="button-fullscreen-timer"><Maximize2 size={16} /></button></div></div></Card>
       <div className="space-y-6"><Card className="p-5 md:p-7"><SectionTitle eyebrow="Manual entry" title="Already studied?" action={<Clock3 size={18} className="text-primary" />} /><p className="text-sm leading-relaxed text-muted-foreground">Log the work that happened away from the timer. It counts just as much.</p><div className="mt-5 space-y-3"><label className="block"><span className="mb-1.5 block text-xs font-bold">Subject</span><Select value={subject} onChange={(event) => setSubject(event.target.value)} data-testid="select-manual-subject">{subjects.map((value) => <option key={value}>{value}</option>)}</Select></label><label className="block"><span className="mb-1.5 block text-xs font-bold">Minutes studied</span><input type="number" min="1" max="600" value={manualMinutes} onChange={(event) => setManualMinutes(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid="input-manual-minutes" />{Number(manualMinutes) < 1 || Number(manualMinutes) > 600 ? <span className="mt-1 block text-[11px] font-semibold text-accent">Keep it between 1 and 600 minutes.</span> : <span className="mt-1 block text-[11px] text-muted-foreground">Between 1 and 600 minutes.</span>}</label><button type="button" disabled={createSession.isPending || Number(manualMinutes) < 1 || Number(manualMinutes) > 600} onClick={() => logSession(Number(manualMinutes), 'manual', subject, () => setManualMinutes('45'))} className="mt-2 w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50" data-testid="button-log-manual">{createSession.isPending ? 'Saving...' : 'Add to today'}</button></div></Card><Card className="p-5 md:p-7"><SectionTitle eyebrow="A small ritual" title="Before you begin" /><div className="space-y-3 text-sm">{['Put the phone somewhere inconvenient.', 'Name the one thing this block is for.', 'When the timer ends, write one sentence about what moved.']}</div></Card></div>
     </div>
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
