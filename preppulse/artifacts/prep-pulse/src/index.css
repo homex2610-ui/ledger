@@ -790,6 +790,15 @@ body::before {
 .skeleton { background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--secondary)) 50%, hsl(var(--muted)) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .progress-fill { transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.pp-tab-fade { animation: pp-tab-fade .12s ease-out both; }
+@keyframes pp-tab-fade { from { opacity: 0; } to { opacity: 1; } }
+.pp-feed-flash { animation: pp-feed-flash .8s ease-out both; }
+@keyframes pp-feed-flash { from { background-color: hsl(var(--accent) / .1); } to { background-color: transparent; } }
+.flame-breathe { animation: flame-breathe 2.5s ease-in-out infinite; }
+@keyframes flame-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .95; } }
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 @utility ring-3 { --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentColor); box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow); }
 .nav-link { transition: color .2s ease, background-color .2s ease, transform .2s ease; }
 .nav-link:active { transform: scale(.97); }

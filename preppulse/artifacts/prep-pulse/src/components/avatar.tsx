@@ -5,3 +5,17 @@ export function Avatar({ src, initials, className = '', title }: { src: string |
   }
   return <span className={base} title={title} aria-hidden="true">{initials}</span>;
 }
+
+const AVATAR_HUES = [
+  'bg-accent/15 text-accent',
+  'bg-warm/15 text-warm',
+  'bg-success/15 text-success',
+  'bg-primary/15 text-primary',
+  'bg-destructive/15 text-destructive',
+];
+
+export function avatarColorFor(userId: string): string {
+  let hash = 5381;
+  for (let i = 0; i < userId.length; i += 1) hash = ((hash << 5) + hash) ^ userId.charCodeAt(i);
+  return AVATAR_HUES[Math.abs(hash) % AVATAR_HUES.length];
+}

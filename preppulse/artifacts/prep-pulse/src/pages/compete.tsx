@@ -1,12 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Check, Copy, EyeOff, HelpCircle, Link2, Lock, Search, ShieldCheck, Trash2, Trophy, UserRoundPlus, Users } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { Check, ChevronDown, Clock, Copy, EyeOff, Flame, Link2, Lock, Search, ShieldCheck, Sparkles, Trash2, Trophy, UserRoundPlus, Users } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
   discoverGroups,
-  getListGroupsQueryKey,
-  getGetLeaderboardQueryKey,
   getGetCirclesQueryKey,
+  getGetLeaderboardQueryKey,
+  getListGroupsQueryKey,
   useConnectByCode,
   useCreateGroup,
   useDeleteGroup,
@@ -31,10 +31,22 @@ import {
   type LeaderboardEntry,
 } from '@workspace/api-client-react';
 import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle } from '@/components/ui-elements';
-import { Avatar } from '@/components/avatar';
+import { Avatar, avatarColorFor } from '@/components/avatar';
 import { browserTimeZone } from '@/lib/utils';
 
 type Tab = 'board' | 'groups';
+type Scope = 'private' | 'cohort';
+
+const SESSION_TAB_KEY = 'pp-compete-tab';
+const PREV_RANK_KEY = 'pp-prev-rank';
+
+let podiumStagedOnce = false;
+let pinnedDrawnOnce = false;
+const seenFeedIds = new Set<string>();
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function weekRange(label: string): string {
   const match = /^([A-Z][a-z]+) (\d+) - ([A-Z][a-z]+) (\d+)$/.exec(label);
@@ -76,39 +88,77 @@ export default function Compete() {
 // ---------------------------------------------------------------------------
 
 function BoardTab() {
+  return <div className="mx-auto max-w-[600px] space-y-6"><CompetePanel /></div>;
+}
+
+function CompetePanel() {
+  const circlesQuery = useGetCircles({ tz: browserTimeZone() });
+  const [scope, setScope] = useState<Scope | null>(() => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_TAB_KEY);
+      if (stored === 'private' || stored === 'cohort') return stored;
+    } catch { /* storage unavailable */ }
+    return null;
+  });
+
+  useEffect(() => {
+    if (scope) return;
+    if (circlesQuery.isLoading || circlesQuery.isPending) return;
+    setScope(circlesQuery.data && circlesQuery.data.connections.length === 0 ? 'cohort' : 'private');
+  }, [scope, circlesQuery.data, circlesQuery.isLoading, circlesQuery.isPending]);
+
+  const changeScope = (next: Scope) => {
+    setScope(next);
+    try { sessionStorage.setItem(SESSION_TAB_KEY, next); } catch { /* storage unavailable */ }
+  };
+
+  if (!scope) return <LoadingBlock className="h-80" />;
+
   return (
     <div className="space-y-6">
-      <PrivateCircleCard />
-      <CohortSection />
-      <LeaderboardCard />
-      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <CircleActivityCard />
-        <div className="space-y-6">
-          <ThePointCard />
-          <YourBoundaryCard />
+      <section className="rounded-2xl border border-border/80 bg-card p-4">
+        <SegmentedToggle scope={scope} onChange={changeScope} />
+        <div className="pp-tab-fade mt-4" key={scope}>
+          {scope === 'private' ? <PrivateTab /> : <CohortTab />}
         </div>
-      </div>
+      </section>
+      <ThePointCard scope={scope} />
+      <YourBoundaryCard scope={scope} />
     </div>
   );
 }
 
-function CohortSection() {
+function SegmentedToggle({ scope, onChange }: { scope: Scope; onChange: (scope: Scope) => void }) {
+  const privateRef = useRef<HTMLButtonElement>(null);
+  const cohortRef = useRef<HTMLButtonElement>(null);
+  const refs: Record<Scope, { current: HTMLButtonElement | null }> = { private: privateRef, cohort: cohortRef };
+  const options: { id: Scope; label: string; icon: ReactNode }[] = [
+    { id: 'private', label: 'Private', icon: <Lock size={14} /> },
+    { id: 'cohort', label: 'Cohort', icon: <Users size={14} /> },
+  ];
+  const activeIndex = scope === 'private' ? 0 : 1;
+
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const count = options.length;
+    let next: number | null = null;
+    if (event.key === 'ArrowRight') next = (index + 1) % count;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + count) % count;
+    else return;
+    event.preventDefault();
+    const target = options[next].id;
+    refs[target].current?.focus();
+    onChange(target);
+  };
+
   return (
-    <section className="space-y-6 pt-2" data-testid="cohort-section">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Auto-assigned · not searchable</p>
-          <h2 className="mt-1 font-display text-2xl font-bold tracking-tight md:text-3xl">Your study cohort</h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">A small group of up to 25 members, grouped by when you signed up. No directory, no search by name — just the weekly board.</p>
-        </div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-4 py-2 text-xs font-bold"><Users size={13} className="text-primary" /> Joined automatically</span>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <StudyCohortCard />
-        <CohortBoardCard />
-      </div>
-      <CohortActivityCard />
-    </section>
+    <div role="tablist" aria-label="Board scope" className="relative grid grid-cols-2 rounded-full border border-border/80 bg-background p-1">
+      <span aria-hidden className={`absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-primary/10 transition-transform duration-150 ease-out ${activeIndex === 1 ? 'translate-x-full' : ''}`} />
+      {options.map((option, index) => (
+        <button key={option.id} type="button" role="tab" id={`tab-${option.id}`} aria-selected={scope === option.id} aria-controls={`panel-${option.id}`} tabIndex={scope === option.id ? 0 : -1} ref={refs[option.id]} onKeyDown={(event) => onKeyDown(event, index)} onClick={() => onChange(option.id)} className={`relative z-10 flex items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${scope === option.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+          {option.icon}{option.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -116,102 +166,282 @@ function isNotAssigned(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
 }
 
-function LeaderboardEntries({ entries }: { entries: LeaderboardEntry[] }) {
-  const podium = entries.slice(0, 3);
-  const rest = entries.slice(3);
+function StreakChip({ streak }: { streak?: number }) {
+  if (!streak) return null;
   return (
-    <>
-      <div className="mt-7 grid gap-4 sm:grid-cols-3">
-        {podium.map((entry) => <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} />)}
-      </div>
-      {rest.length > 0 && (
-        <div className="mt-6 divide-y divide-border/70">
-          {rest.map((entry) => (
-            <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-4 py-3.5 first:pt-1 last:pb-1" data-testid={`row-leaderboard-${entry.handle}`}>
-              <span className="w-7 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
-              <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-10 w-10 text-xs ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'}`} title={entry.handle} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
-              </div>
-              <p className="hidden text-xs text-muted-foreground sm:block">{entry.hours}h · {entry.topics} topics</p>
-              <p className="w-20 text-right font-display text-lg font-bold text-primary" title="Pulse = minutes studied + 30 × topics moved">{entry.score} <span className="inline-flex align-middle"><HelpCircle size={12} className="text-primary/60" /></span></p>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-bold text-foreground" title={`${streak}-day streak`}>
+      <Flame size={10} fill="currentColor" />{streak}
+    </span>
   );
 }
 
-function LeaderboardCard() {
-  const query = useGetLeaderboard({ tz: browserTimeZone() });
-  const circlesQuery = useGetCircles({ tz: browserTimeZone() });
-  const memberCount = circlesQuery.data?.memberCount ?? 1;
-  if (query.isLoading) return <LeaderboardSkeleton />;
-  if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
-  const { entries, focused, weekLabel } = query.data;
-  const isAlone = entries.length <= 1 && memberCount <= 1;
+function useRankDelta(handle: string | undefined, rank: number | undefined): number | null {
+  const [delta, setDelta] = useState<number | null>(null);
+  useEffect(() => {
+    if (!handle || !rank) return;
+    try {
+      const raw = localStorage.getItem(PREV_RANK_KEY);
+      const prev = raw ? JSON.parse(raw) as { handle?: string; rank?: number } : null;
+      let next: number | null = null;
+      if (prev && prev.handle === handle && typeof prev.rank === 'number' && prev.rank !== rank) next = rank - prev.rank;
+      localStorage.setItem(PREV_RANK_KEY, JSON.stringify({ handle, rank }));
+      setDelta(next);
+    } catch { /* storage unavailable */ }
+  }, [handle, rank]);
+  return delta;
+}
 
+function useCountUp(value: number, animate: boolean): number {
+  const [display, setDisplay] = useState(animate ? 0 : value);
+  const first = useRef(true);
+  useEffect(() => {
+    if (!first.current) { setDisplay(value); return; }
+    first.current = false;
+    if (!animate) { setDisplay(value); return; }
+    let raf = 0;
+    const start = performance.now();
+    const duration = 400;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(value * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [animate, value]);
+  return display;
+}
+
+function RankedBoard({ entries, weekLabel, focused, streakByHandle, avatarColorByHandle, loading, error, onRetry, removableByHandle, onRemove, ownerHandle, emptyTitle, emptyDetail }: {
+  entries: LeaderboardEntry[];
+  weekLabel?: string;
+  focused: boolean;
+  streakByHandle: Map<string, number>;
+  avatarColorByHandle: Map<string, string>;
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
+  removableByHandle?: Map<string, { userId: string }>;
+  onRemove?: (userId: string) => void;
+  ownerHandle?: string | null;
+  emptyTitle: string;
+  emptyDetail: string;
+}) {
+  if (loading) return <BoardSkeleton />;
+  if (error) return <ErrorState onRetry={onRetry} />;
   return (
-    <div className="space-y-6">
-      {focused && (
-        <div className="flex items-center gap-3 rounded-xl border border-accent/25 bg-accent/10 px-4 py-3 text-sm font-semibold text-accent" data-testid="notice-focus-mode"><EyeOff size={15} /> Focus mode is on — your rank and pulse are hidden from this list.</div>
-      )}
-      <Card className="overflow-hidden p-5 md:p-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">This week</p>
-            <h2 className="mt-1.5 font-display text-2xl font-bold tracking-tight md:text-3xl">{weekRange(weekLabel)}</h2>
-          </div>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><EyeOff size={13} /> Everyone is pacing themselves.</p>
+    <section className="rounded-xl border border-border/70 bg-background/60 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-extrabold text-foreground">Leaderboard</h2>
+          {weekLabel && <p className="mt-0.5 text-xs font-medium text-muted-foreground">{weekRange(weekLabel)}</p>}
         </div>
-
-        {isAlone ? (
-          <div className="mt-7">
-            <EmptyState title="You're the only one here" detail="The board fills when you add a friend with your invite code — no one to compare against yet, just you showing up." action={<button type="button" onClick={() => document.getElementById('connections-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-go-to-connections">Add a friend</button>} />
-          </div>
-        ) : entries.length ? (
-          <LeaderboardEntries entries={entries} />
-        ) : (
-          <div className="mt-7">
-            <EmptyState title="No one on the board yet" detail="Your weekly minutes and topic moves decide the score. Invite a friend to fill the board." />
-          </div>
+        {focused && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-bold text-accent" data-testid="notice-focus-mode"><EyeOff size={12} /> Focus mode on</span>
         )}
-      </Card>
-      <p className="text-center text-xs text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week. Circle only — no strangers.</p>
-    </div>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week.</p>
+      {entries.length ? (
+        <>
+          <Podium entries={entries.slice(0, 3)} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} />
+          <RankedList entries={entries} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removableByHandle={removableByHandle} onRemove={onRemove} ownerHandle={ownerHandle} />
+        </>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-border/80 px-4 py-8 text-center">
+          <p className="text-sm font-bold text-foreground">{emptyTitle}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{emptyDetail}</p>
+        </div>
+      )}
+    </section>
   );
 }
 
-function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
+const PODIUM_TIERS: Record<number, { card: string; flame: string }> = {
+  1: { card: 'border-amber-400/60 bg-amber-400/10', flame: 'text-amber-500' },
+  2: { card: 'border-slate-300/70 bg-slate-300/10', flame: 'text-slate-400' },
+  3: { card: 'border-orange-300/70 bg-orange-300/10', flame: 'text-orange-500' },
+};
+
+const PODIUM_DELAY: Record<number, number> = { 3: 0, 2: 60, 1: 120 };
+
+function Podium({ entries, streakByHandle, avatarColorByHandle }: { entries: LeaderboardEntry[]; streakByHandle: Map<string, number>; avatarColorByHandle: Map<string, string> }) {
+  const animate = !podiumStagedOnce && !prefersReducedMotion();
+  useEffect(() => { podiumStagedOnce = true; }, []);
+  const byRank = new Map(entries.map((entry) => [entry.rank, entry]));
+  const present = [2, 1, 3].filter((rank) => byRank.has(rank)).map((rank) => byRank.get(rank) as LeaderboardEntry);
+  if (!present.length) return null;
+  const grid = present.length === 1 ? 'grid-cols-1 max-w-xs' : present.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
+  return (
+    <ol aria-label="Top 3" className={`mx-auto mt-4 grid ${grid} gap-2`}>
+      {present.map((entry) => (
+        <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} tier={PODIUM_TIERS[entry.rank] ?? PODIUM_TIERS[1]} streak={streakByHandle.get(entry.handle) ?? 0} avatarClass={avatarColorByHandle.get(entry.handle)} animate={animate} delay={PODIUM_DELAY[entry.rank] ?? 0} />
+      ))}
+    </ol>
+  );
+}
+
+function PodiumCard({ entry, tier, streak, avatarClass, animate, delay }: { entry: LeaderboardEntry; tier: { card: string; flame: string }; streak: number; avatarClass?: string; animate: boolean; delay: number }) {
+  const [staged, setStaged] = useState(() => !animate);
+  useEffect(() => {
+    if (!animate) return;
+    const raf = requestAnimationFrame(() => setStaged(true));
+    return () => cancelAnimationFrame(raf);
+  }, [animate]);
+  const score = useCountUp(entry.score, animate);
   const isFirst = entry.rank === 1;
   return (
-    <div className={`relative rounded-2xl border p-5 text-center ${isFirst ? 'border-accent/40 bg-accent/10' : 'border-border/70 bg-card'}`} data-testid={`podium-${entry.rank}`}>
-      {isFirst && <Trophy size={16} className="absolute right-4 top-4 text-accent" />}
-      <p className="text-left font-mono-custom text-[10px] uppercase tracking-[.16em] text-muted-foreground">Rank {String(entry.rank).padStart(2, '0')}</p>
-      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-4 h-14 w-14 text-base ${isFirst ? 'bg-accent text-accent-foreground' : 'bg-primary/15 text-primary'}`} title={entry.handle} />
-      <p className="mt-3 truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
-      <p className="mt-1 font-display text-xl font-bold text-primary" title="Pulse = minutes studied + 30 × topics moved">{entry.score} <span className="text-sm font-semibold">pulse</span> <HelpCircle size={12} className="inline text-primary/50" /></p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{entry.hours}h · {entry.topics} topics</p>
-    </div>
+    <li className={`relative rounded-2xl border p-4 text-center ${tier.card}`} style={{ opacity: staged ? 1 : 0, transform: staged ? 'none' : 'translateY(8px)', transition: 'opacity 200ms ease-out, transform 200ms ease-out', transitionDelay: `${delay}ms` }} data-testid={`podium-${entry.rank}`}>
+      {isFirst && <Trophy size={15} className="absolute right-3 top-3 text-amber-500" />}
+      <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-muted-foreground">Rank {String(entry.rank).padStart(2, '0')}</p>
+      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-3 h-14 w-14 text-base ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
+      <p className="mt-2.5 truncate text-sm font-bold text-foreground">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
+      <p className="mt-0.5 text-lg font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{score}</p>
+      <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        {streak > 0 && <span className={`inline-flex items-center gap-0.5 ${tier.flame} ${isFirst ? 'flame-breathe' : ''}`} title={`${streak}-day streak`}><Flame size={11} fill="currentColor" />{streak}</span>}
+        <span>{entry.hours}h · {entry.topics} topics</span>
+      </p>
+    </li>
   );
 }
 
-function LeaderboardSkeleton() {
+function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByHandle, onRemove, ownerHandle }: {
+  entries: LeaderboardEntry[];
+  streakByHandle: Map<string, number>;
+  avatarColorByHandle: Map<string, string>;
+  removableByHandle?: Map<string, { userId: string }>;
+  onRemove?: (userId: string) => void;
+  ownerHandle?: string | null;
+}) {
+  const ranked = entries.slice(3);
+  const self = ranked.find((entry) => entry.isCurrentUser);
+  const [expanded, setExpanded] = useState(false);
+  const visibleTop = ranked.slice(0, 2);
+  const extras = ranked.slice(2);
+  const pinSelf = !expanded && self !== undefined && !visibleTop.includes(self);
+  const lastRank = ranked.length ? ranked[ranked.length - 1].rank : 0;
+  const nextRank = extras.length ? extras[0].rank : 0;
+  const delta = useRankDelta(self?.handle, self?.rank);
+  const toggleClass = 'mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/60 px-4 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
+
   return (
-    <div className="space-y-6" aria-label="Loading leaderboard" data-testid="loading-block">
-      <div className="skeleton h-24 rounded-2xl" />
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="skeleton h-52 rounded-2xl" /><div className="skeleton h-52 rounded-2xl" /><div className="skeleton h-52 rounded-2xl" />
+    <ol className="mt-3" aria-label="Ranked leaderboard">
+      {visibleTop.map((entry) => (
+        <li key={`${entry.rank}-${entry.handle}`}>
+          <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
+        </li>
+      ))}
+      {extras.length > 0 && (
+        <li>
+          {expanded ? (
+            <button type="button" onClick={() => setExpanded(false)} className={toggleClass}>
+              Show fewer <ChevronDown size={13} className="rotate-180" />
+            </button>
+          ) : (
+            <button type="button" onClick={() => setExpanded(true)} className={toggleClass}>
+              Show ranks {nextRank}–{lastRank} <ChevronDown size={13} />
+            </button>
+          )}
+        </li>
+      )}
+      <li>
+        <div className="grid transition-[grid-template-rows] duration-200 ease-out" style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}>
+          <ol aria-label="Remaining ranks" className={`min-h-0 overflow-hidden ${expanded ? '' : 'invisible'}`} aria-hidden={!expanded}>
+            {extras.map((entry) => (
+              <li key={`${entry.rank}-${entry.handle}`}>
+                <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
+              </li>
+            ))}
+          </ol>
+        </div>
+      </li>
+      {pinSelf && self && (
+        <li>
+          <PinnedRow entry={self} streak={streakByHandle.get(self.handle)} delta={delta} avatarClass={avatarColorByHandle.get(self.handle)} />
+        </li>
+      )}
+    </ol>
+  );
+}
+
+function RankedRow({ entry, streakByHandle, avatarColorByHandle, removable, onRemove, isOwner, delta }: {
+  entry: LeaderboardEntry;
+  streakByHandle: Map<string, number>;
+  avatarColorByHandle: Map<string, string>;
+  removable?: { userId: string };
+  onRemove?: (userId: string) => void;
+  isOwner: boolean;
+  delta?: number | null;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-2.5" data-testid={`row-leaderboard-${entry.handle}`}>
+      <span className="w-6 shrink-0 text-right font-mono-custom text-sm font-bold text-muted-foreground">{entry.rank}</span>
+      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarColorByHandle.get(entry.handle) ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-foreground">
+          {entry.handle}
+          {entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}
+          {isOwner && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary" data-testid={`owner-badge-${entry.handle}`}>Owner</span>}
+        </p>
+        <p className="text-[11px] text-muted-foreground">{entry.hours}h · {entry.topics} topics</p>
       </div>
-      <div className="skeleton h-24 rounded-2xl" />
+      {delta !== undefined && delta !== null && delta !== 0 && (
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
+      )}
+      <StreakChip streak={streakByHandle.get(entry.handle)} />
+      {removable && onRemove && (
+        <button type="button" onClick={() => onRemove(removable.userId)} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label={`Remove ${entry.handle}`} data-testid={`button-remove-circle-${entry.handle}`}><Trash2 size={14} /></button>
+      )}
+      <span className="text-sm font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{entry.score}</span>
     </div>
   );
 }
 
-function PrivateCircleCard() {
+function PinnedRow({ entry, streak, delta, avatarClass }: { entry: LeaderboardEntry; streak?: number; delta?: number | null; avatarClass?: string }) {
+  const animate = !pinnedDrawnOnce && !prefersReducedMotion();
+  const [drawn, setDrawn] = useState(() => !animate);
+  useEffect(() => {
+    pinnedDrawnOnce = true;
+    if (!animate) return;
+    const raf = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(raf);
+  }, [animate]);
+  return (
+    <div className="relative mt-1 flex items-center gap-3 py-2.5 pl-3.5" data-testid={`row-leaderboard-${entry.handle}`}>
+      <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-accent" style={{ transform: drawn ? 'scaleY(1)' : 'scaleY(0)', transformOrigin: 'top', transition: 'transform 200ms ease-out' }} />
+      <span className="w-6 shrink-0 text-right font-mono-custom text-sm font-bold text-foreground">{entry.rank}</span>
+      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-foreground">{entry.handle}</p>
+        <p className="text-[11px] font-semibold text-accent">Your rank</p>
+      </div>
+      {delta !== undefined && delta !== null && delta !== 0 && (
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
+      )}
+      <StreakChip streak={streak} />
+      <span className="text-sm font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{entry.score}</span>
+    </div>
+  );
+}
+
+function BoardSkeleton() {
+  return (
+    <div className="space-y-4" aria-label="Loading board" data-testid="loading-block">
+      <div className="skeleton h-16 rounded-xl" />
+      <div className="grid grid-cols-3 gap-2">
+        <div className="skeleton h-40 rounded-2xl" /><div className="skeleton h-40 rounded-2xl" /><div className="skeleton h-40 rounded-2xl" />
+      </div>
+      <div className="skeleton h-24 rounded-xl" />
+      <div className="skeleton h-24 rounded-xl" />
+    </div>
+  );
+}
+
+function PrivateTab() {
   const queryClient = useQueryClient();
   const circlesQuery = useGetCircles({ tz: browserTimeZone() });
+  const leaderboardQuery = useGetLeaderboard({ tz: browserTimeZone() });
+  const feedQuery = useGetCircleFeed();
   const connect = useConnectByCode();
   const remove = useRemoveConnection();
   const [code, setCode] = useState('');
@@ -258,196 +488,260 @@ function PrivateCircleCard() {
     try { await navigator.clipboard.writeText(`${inviteBase}/join/${circlesQuery.data.profileCode}`); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ }
   };
 
-  if (circlesQuery.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
+  const copyCode = async () => {
+    if (!circlesQuery.data) return;
+    try { await navigator.clipboard.writeText(circlesQuery.data.profileCode); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ }
+  };
+
+  if (circlesQuery.isLoading) return <LoadingBlock className="h-80" />;
   if (circlesQuery.isError || !circlesQuery.data) return <ErrorState onRetry={() => circlesQuery.refetch()} />;
 
   const { profileCode, memberCount, capacity, self, connections } = circlesQuery.data;
   const members: CircleMember[] = [self, ...connections];
+  const streakByHandle = new Map(members.map((member) => [member.handle, member.streak ?? 0]));
+  const avatarColorByHandle = new Map(members.map((member) => [member.handle, avatarColorFor(member.userId)]));
+  const removableByHandle = new Map(connections.map((member) => [member.handle, { userId: member.userId }]));
+  const ownerHandle = self.isOwner ? self.handle : (connections.find((member) => member.isOwner)?.handle ?? null);
   const isFull = memberCount >= capacity;
-  const compact = members.length > 8;
+  const alone = connections.length === 0;
+  const board = leaderboardQuery.data;
 
   return (
-    <Card className="p-5 md:p-7" id="connections-card">
-      <SectionTitle eyebrow="Private circle" title="Study with people you trust" action={<UserRoundPlus size={17} className="text-primary" />} />
-      <p className="text-sm leading-relaxed text-muted-foreground">Your private circle is limited to {capacity} members. Invite only people you actually study with — there is no public directory and no search by name.</p>
-
-      <div className="mt-5 flex items-center justify-between rounded-xl border border-border/70 bg-secondary/40 px-4 py-3">
-        <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-primary">Members</p>
-        <p className="font-display text-lg font-bold tabular-nums" data-testid="circle-member-count">{memberCount} / {capacity}</p>
-      </div>
-
-      <form onSubmit={submitConnect} className="mt-5 flex flex-col gap-2 sm:flex-row">
-        <input value={code} onChange={(event) => setCode(event.target.value)} disabled={isFull} placeholder={isFull ? 'Circle full' : 'e.g. 7K4M2X'} className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 font-mono-custom text-sm uppercase tracking-[.12em] outline-none focus:ring-3 focus:ring-primary/25 disabled:opacity-60" data-testid="input-circle-code" />
-        <button type="submit" disabled={isFull || connect.isPending || code.trim().length < 6} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-50" data-testid="button-connect-circle">{connect.isPending ? 'Adding…' : 'Add friend'}</button>
-      </form>
-      {error && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-connect-error">{error}</p>}
-      {joined && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-success" data-testid="circle-connect-success"><Check size={13} /> Member added to your circle.</p>}
-      {isFull && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-full-notice">Your circle is full — this private circle can have up to {capacity} members.</p>}
-      <p className="mt-2 text-[11px] text-muted-foreground">Codes are 6 characters — like the one in your invite box below.</p>
-
-      <div className="mt-5 rounded-2xl border border-border/70 bg-secondary/40 p-4">
-        <div className="flex items-start gap-3">
-          <Link2 size={16} className="mt-0.5 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold">Share your invite link</p>
-            <p className="mt-1 truncate font-mono-custom text-xs text-muted-foreground" data-testid="text-invite-link">{inviteBase}/join/{profileCode}</p>
-            <button type="button" onClick={copyLink} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-copy-link">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy link'}</button>
-          </div>
+    <div role="tabpanel" id="panel-private" aria-labelledby="tab-private" className="space-y-3">
+      <section className="rounded-xl border border-border/70 bg-background/60 p-4" id="connections-card">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-extrabold text-foreground">Your private circle</h2>
+          <p className="font-mono-custom text-xs font-bold tabular-nums text-muted-foreground" data-testid="circle-member-count">{memberCount} / {capacity}</p>
         </div>
-      </div>
-
-      <div className="mt-6 flex items-center justify-between">
-        <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Your circle</p>
-        <p className="text-[11px] text-muted-foreground">{compact ? `${members.length} members · scroll` : 'Only members of your circle are shown.'}</p>
-      </div>
-
-      {members.length > 1 ? (
-        <div className={`mt-3 space-y-2 ${compact ? 'max-h-64 overflow-y-auto pr-1' : ''}`}>
-          {members.map((member) => (
-            <div key={member.userId} className={`flex items-center gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:border-primary/30 hover:bg-secondary/40 ${compact ? 'p-2.5' : ''}`} data-testid={`row-circle-${member.handle}`}>
-              <Avatar src={member.avatarUrl} initials={member.initials} className={`h-9 w-9 text-xs ${member.isOwner ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`} title={member.handle} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">
-                  {member.handle}
-                  {member.isOwner && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary" data-testid={`owner-badge-${member.handle}`}>Owner</span>}
-                </p>
-                <p className="text-xs text-muted-foreground">{member.weeklyMinutes}m this week · {member.weeklyTopics} topics</p>
-              </div>
-              {!member.isOwner && (
-                <span className="hidden font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground sm:inline">Member</span>
-              )}
-              {!member.isOwner && <button type="button" onClick={() => remove.mutate({ userId: member.userId }, { onSuccess: refresh })} className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-accent" aria-label={`Remove ${member.handle}`} data-testid={`button-remove-circle-${member.handle}`}><Trash2 size={14} /></button>}
-            </div>
-          ))}
+        <p className="mt-1 text-xs font-medium leading-relaxed text-muted-foreground">There's no public directory and no search by name — only people you connect with directly see your profile.</p>
+        <form onSubmit={submitConnect} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input value={code} onChange={(event) => setCode(event.target.value)} disabled={isFull} placeholder={isFull ? 'Circle full' : 'e.g. 7K4M2X'} className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 font-mono-custom text-sm uppercase tracking-[.12em] outline-none focus:ring-3 focus:ring-primary/25 disabled:opacity-60" data-testid="input-circle-code" />
+          <button type="submit" disabled={isFull || connect.isPending || code.trim().length < 6} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50" data-testid="button-connect-circle">{connect.isPending ? 'Adding…' : 'Add friend'}</button>
+        </form>
+        {error && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-connect-error">{error}</p>}
+        {joined && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-success" data-testid="circle-connect-success"><Check size={13} /> Member added to your circle.</p>}
+        {isFull && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-full-notice">Your circle is full — this private circle can have up to {capacity} members.</p>}
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2">
+          <Link2 size={13} className="shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate font-mono-custom text-xs text-muted-foreground" data-testid="text-invite-link">{inviteBase}/join/{profileCode}</span>
+          <button type="button" onClick={copyLink} className="inline-flex shrink-0 items-center gap-1 rounded-lg text-xs font-bold text-primary transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-copy-link">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy link'}</button>
         </div>
+      </section>
+
+      {alone ? (
+        <section className="flex flex-col items-center rounded-xl border border-dashed border-border/80 px-6 py-8 text-center" data-testid="circle-empty-state">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-accent/10 text-accent"><Users size={18} /></div>
+          <p className="mt-3 text-sm font-bold text-foreground">Your circle is empty</p>
+          <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">Invite up to {capacity} people you actually study with. No public directory, no search — just people you add by code or link.</p>
+          <button type="button" onClick={copyCode} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-empty-copy-code">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy your invite code'}</button>
+        </section>
       ) : (
-        <div className="mt-3 rounded-2xl border border-dashed border-border bg-secondary/30 p-6 text-center" data-testid="circle-empty-state">
-          <p className="font-display font-bold">Your circle is empty</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Invite people you actually study with. Your private circle can have up to {capacity} members.</p>
-          <button type="button" onClick={copyLink} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5" data-testid="button-empty-copy-code">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy your invite code'}</button>
-        </div>
+        <>
+          <RankedBoard
+            entries={board?.entries ?? []}
+            weekLabel={board?.weekLabel}
+            focused={board?.focused ?? false}
+            streakByHandle={streakByHandle}
+            avatarColorByHandle={avatarColorByHandle}
+            loading={leaderboardQuery.isLoading}
+            error={leaderboardQuery.isError}
+            onRetry={() => leaderboardQuery.refetch()}
+            removableByHandle={removableByHandle}
+            onRemove={(userId) => remove.mutate({ userId }, { onSuccess: refresh })}
+            ownerHandle={ownerHandle}
+            emptyTitle="No one on the board yet"
+            emptyDetail="Your weekly minutes and topic moves decide the score. Invite a friend to fill the board."
+          />
+          <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />
+        </>
       )}
-    </Card>
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week. Circle only — no strangers.</p>
+    </div>
   );
 }
 
-function StudyCohortCard() {
+function CohortTab() {
   const query = useGetCohorts({ tz: browserTimeZone() });
-  if (query.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
+  const leaderboardQuery = useGetCohortsLeaderboard();
+  const feedQuery = useGetCohortsFeed();
+
+  if (query.isLoading) return <LoadingBlock className="h-80" />;
   if (query.isError && isNotAssigned(query.error)) {
     return (
-      <Card className="p-5 md:p-7">
-        <SectionTitle eyebrow="Study cohort" title="You're not in a cohort yet" action={<Users size={17} className="text-primary" />} />
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">New members are placed into a study cohort automatically. Check back in a moment.</p>
-        <button type="button" onClick={() => query.refetch()} className="mt-4 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-retry-cohort">Check again</button>
-      </Card>
+      <div role="tabpanel" id="panel-cohort" aria-labelledby="tab-cohort" className="space-y-3" data-testid="cohort-section">
+        <section className="flex flex-col items-center rounded-xl border border-border/70 bg-background/60 px-6 py-10 text-center" data-testid="cohort-card">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary"><Clock size={18} /></div>
+          <p className="mt-3 text-sm font-bold text-foreground">You're not in a cohort yet</p>
+          <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">New members are placed into a study cohort automatically. Check back in a moment.</p>
+          <button type="button" onClick={() => query.refetch()} className="mt-4 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-retry-cohort">Check again</button>
+        </section>
+        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Not searchable, no name lookup — you'll see your cohort's weekly board and activity once you're placed.</p>
+      </div>
     );
   }
   if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
 
   const { memberCount, capacity, members } = query.data;
-  const compact = members.length > 8;
+  const streakByHandle = new Map(members.map((member: CohortMemberRow) => [member.handle, member.streak ?? 0]));
+  const avatarColorByHandle = new Map(members.map((member: CohortMemberRow) => [member.handle, avatarColorFor(member.userId)]));
+  const board = leaderboardQuery.data;
+  const alone = memberCount <= 1;
 
   return (
-    <Card className="p-5 md:p-7" data-testid="cohort-card">
-      <SectionTitle eyebrow="Study cohort" title="Your auto-assigned group" action={<Users size={17} className="text-primary" />} />
-      <p className="text-sm leading-relaxed text-muted-foreground">A study cohort is a group of up to {capacity} members who signed up around the same time. It's assigned automatically — there is no directory, no search, and no way to look up members by name. You can't message them; you only see each other's weekly board and activity.</p>
+    <div role="tabpanel" id="panel-cohort" aria-labelledby="tab-cohort" className="space-y-3" data-testid="cohort-section">
+      <section className="rounded-xl border border-border/70 bg-background/60 p-4" data-testid="cohort-card">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-extrabold text-foreground"><Users size={14} className="text-primary" /> Cohort size</h2>
+          <p className="font-mono-custom text-xs font-bold tabular-nums text-muted-foreground" data-testid="cohort-member-count">{memberCount} of {capacity}</p>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/60">
+          <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${Math.min(100, Math.round((memberCount / capacity) * 100))}%` }} />
+        </div>
+      </section>
 
-      <div className="mt-5 flex items-center justify-between rounded-xl border border-border/70 bg-secondary/40 px-4 py-3">
-        <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-primary">Members</p>
-        <p className="font-display text-lg font-bold tabular-nums" data-testid="cohort-member-count">{memberCount} / {capacity}</p>
-      </div>
-
-      <div className={`mt-3 space-y-2 ${compact ? 'max-h-64 overflow-y-auto pr-1' : ''}`}>
-        {members.map((member: CohortMemberRow) => (
-          <div key={member.userId} className="flex items-center gap-3 rounded-xl border border-border/70 p-3" data-testid={`row-cohort-${member.handle}`}>
-            <Avatar src={member.avatarUrl} initials={member.initials} className="h-9 w-9 bg-secondary text-xs" title={member.handle} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold">{member.handle}</p>
-              <p className="text-xs text-muted-foreground">{member.weeklyMinutes}m this week · {member.weeklyTopics} topics</p>
-            </div>
-            <span className="hidden font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground sm:inline">{member.streak} day{member.streak === 1 ? '' : 's'} streak</span>
-          </div>
-        ))}
-      </div>
-    </Card>
+      {alone ? (
+        <section className="flex flex-col items-center rounded-xl border border-dashed border-border/80 px-6 py-8 text-center">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary"><Sparkles size={18} /></div>
+          <p className="mt-3 text-sm font-bold text-foreground">You're the first in your cohort</p>
+          <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">Others who joined around the same time will appear here. Your board and activity stay private until then.</p>
+        </section>
+      ) : (
+        <>
+          <RankedBoard
+            entries={board?.entries ?? []}
+            weekLabel={board?.weekLabel}
+            focused={board?.focused ?? false}
+            streakByHandle={streakByHandle}
+            avatarColorByHandle={avatarColorByHandle}
+            loading={leaderboardQuery.isLoading}
+            error={leaderboardQuery.isError}
+            onRetry={() => leaderboardQuery.refetch()}
+            emptyTitle="No one on the board yet"
+            emptyDetail="The board fills as your cohort studies."
+          />
+          <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={feedQuery.data ?? []} emptyText="Activity from your cohort will appear here." />
+        </>
+      )}
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">You're grouped with others who joined around the same time. Not searchable, no name lookup — it's view-only: you see each other's weekly board and activity, nothing else.</p>
+    </div>
   );
 }
 
-function CohortBoardCard() {
-  const query = useGetCohortsLeaderboard();
-  if (query.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
-  if (query.isError && isNotAssigned(query.error)) {
+function groupFeed(items: CircleFeedItem[]): { handle: string; items: CircleFeedItem[] }[] {
+  const groups: { handle: string; items: CircleFeedItem[] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.handle === item.handle) last.items.push(item);
+    else groups.push({ handle: item.handle, items: [item] });
+  }
+  return groups;
+}
+
+function feedItemKey(item: CircleFeedItem): string {
+  return `${item.userId}|${item.date}|${item.detail}`;
+}
+
+function FeedRow({ group, index, fresh }: { group: { handle: string; items: CircleFeedItem[] }; index: number; fresh: boolean }) {
+  const [open, setOpen] = useState(false);
+  const grouped = group.items.length > 1;
+  const first = group.items[0];
+  const last = group.items[group.items.length - 1];
+  const sameDay = new Date(first.date).toDateString() === new Date(last.date).toDateString();
+  const subjects = [...new Set(group.items.map((item) => item.subject).filter(Boolean))].join(' · ');
+  const summary = `${group.items.length} update${group.items.length === 1 ? '' : 's'}${sameDay ? ' today' : ' this week'}${subjects ? ` · ${subjects}` : ''}${grouped ? ` · latest: ${last.detail}` : ''}`;
+  const avatarClass = avatarColorFor(first.userId);
+  const inner = (
+    <>
+      <Avatar src={first.avatarUrl} initials={first.handle.slice(0, 2).toUpperCase()} className={`h-8 w-8 shrink-0 text-[10px] ${avatarClass}`} title={first.handle} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold text-foreground">{first.handle}</span>
+        <span className="block truncate text-xs font-medium text-muted-foreground">{summary}</span>
+      </span>
+    </>
+  );
+
+  if (!grouped) {
     return (
-      <Card className="p-5 md:p-7">
-        <SectionTitle eyebrow="This week" title="Cohort board" action={<Trophy size={17} className="text-primary" />} />
-        <p className="mt-1 text-sm text-muted-foreground">The board appears once you're placed in a study cohort.</p>
-      </Card>
+      <li className={`flex items-center gap-3 py-3 ${fresh ? 'pp-feed-flash' : ''}`} data-testid={`feed-item-${index}`}>
+        {inner}
+        <time className="shrink-0 text-[10px] font-medium text-muted-foreground" dateTime={first.date}>{new Date(first.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</time>
+      </li>
     );
   }
-  if (query.isError || !query.data) return <ErrorState onRetry={() => query.refetch()} />;
 
-  const { entries, weekLabel, focused } = query.data;
+  const groupId = `feed-group-${first.date}-${index}`;
   return (
-    <Card className="p-5 md:p-7">
-      <SectionTitle eyebrow={weekRange(weekLabel)} title="Cohort board" action={<Trophy size={17} className="text-primary" />} />
-      {focused && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-accent" data-testid="cohort-focus-notice"><EyeOff size={13} /> Focus mode is on — your rank and pulse are hidden from the cohort board.</p>
-      )}
-      {entries.length ? (
-        <LeaderboardEntries entries={entries} />
-      ) : (
-        <p className="mt-3 text-sm text-muted-foreground">The board fills as your cohort studies.</p>
-      )}
-    </Card>
+    <li className={`py-3 ${fresh ? 'pp-feed-flash' : ''}`} data-testid={`feed-item-${index}`}>
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={groupId} className="flex w-full items-center gap-3 rounded-lg text-left transition-colors hover:bg-background/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+        {inner}
+        <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <div className="grid transition-[grid-template-rows] duration-200 ease-out" style={{ gridTemplateRows: open ? '1fr' : '0fr' }}>
+        <ol id={groupId} className={`min-h-0 overflow-hidden ${open ? '' : 'invisible'}`} aria-hidden={!open}>
+          {group.items.map((item, itemIndex) => (
+            <li key={`${item.userId}-${item.date}-${itemIndex}`} className="flex items-center gap-2.5 py-1.5 pl-10 text-xs">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+              <span className="min-w-0 flex-1 text-muted-foreground">{item.subject ? `${item.subject} · ` : ''}{item.detail}</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">{new Date(item.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </li>
   );
 }
 
 function FeedCard({ eyebrow, title, items, emptyText }: { eyebrow: string; title: string; items: CircleFeedItem[]; emptyText: string }) {
+  const groups = groupFeed(items);
+  const [freshKeys, setFreshKeys] = useState<Set<string>>(() => new Set());
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (!items.length) return;
+    if (firstRun.current) {
+      firstRun.current = false;
+      for (const item of items) seenFeedIds.add(feedItemKey(item));
+      return;
+    }
+    const newly = new Set<string>();
+    for (const item of items) {
+      const key = feedItemKey(item);
+      if (!seenFeedIds.has(key)) { seenFeedIds.add(key); newly.add(key); }
+    }
+    if (newly.size) setFreshKeys(newly);
+  }, [items]);
   return (
-    <Card className="p-5 md:p-7">
-      <SectionTitle eyebrow={eyebrow} title={title} />
-      {items.length ? (
-        <div className="space-y-2.5">
-          {items.map((item, index) => (
-            <div key={`${item.userId}-${item.date}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/70 p-3" data-testid={`feed-item-${index}`}>
-              <Avatar src={item.avatarUrl} initials={item.handle.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-secondary text-[10px]" title={item.handle} />
-              <div className="min-w-0"><p className="text-sm"><span className="font-bold">{item.handle}</span> <span className="text-muted-foreground">{item.detail}</span></p><p className="mt-0.5 font-mono-custom text-[10px] text-muted-foreground">{item.subject} · {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p></div>
-            </div>
-          ))}
+    <section className="rounded-xl border border-border/70 bg-background/60 p-4">
+      <h2 className="text-sm font-extrabold text-foreground">{title}</h2>
+      <p className="mt-0.5 text-xs font-medium text-muted-foreground">{eyebrow}</p>
+      {groups.length ? (
+        <ol className="mt-1 divide-y divide-border/50" aria-label="Activity feed">
+          {groups.map((group, index) => <FeedRow key={`${group.handle}-${group.items[0].date}-${index}`} group={group} index={index} fresh={freshKeys.has(feedItemKey(group.items[0]))} />)}
+        </ol>
+      ) : (
+        <div className="mt-2 flex flex-col items-center rounded-xl border border-dashed border-border/80 px-4 py-8 text-center">
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-border/40 text-muted-foreground"><Clock size={15} /></div>
+          <p className="mt-2 text-sm font-bold text-foreground">No activity yet</p>
+          <p className="mt-0.5 max-w-[32ch] text-xs text-muted-foreground">{emptyText}</p>
         </div>
-      ) : <p className="mt-1 text-sm text-muted-foreground">{emptyText}</p>}
-    </Card>
+      )}
+    </section>
   );
 }
 
-function CircleActivityCard() {
-  const feedQuery = useGetCircleFeed();
-  return <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />;
-}
-
-function CohortActivityCard() {
-  const feedQuery = useGetCohortsFeed();
-  if (feedQuery.isError && isNotAssigned(feedQuery.error)) {
-    return <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={[]} emptyText="Activity from your cohort will appear once you're placed in one." />;
-  }
-  return <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={feedQuery.data ?? []} emptyText="Activity from your cohort will appear here." />;
-}
-
-function ThePointCard() {
+function ThePointCard({ scope }: { scope: Scope }) {
   return (
     <Card className="p-5 md:p-7">
       <SectionTitle eyebrow="The point" title="Effort is the scoreboard" action={<Trophy size={17} className="text-primary" />} />
-      <p className="text-sm leading-relaxed text-muted-foreground">Pulse combines focused minutes and topics moved forward. It rewards the repeatable work that compounds.</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? "Pulse combines focused minutes and topics moved forward. Only the people in your private circle can see it — there's no public scoreboard." : "Pulse combines focused minutes and topics moved forward. Your cohort only ever sees your weekly board — no profiles, no messages, nothing else."}</p>
     </Card>
   );
 }
 
-function YourBoundaryCard() {
+function YourBoundaryCard({ scope }: { scope: Scope }) {
   return (
     <Card className="p-5 md:p-7">
       <SectionTitle eyebrow="Your boundary" title="Change visibility in settings" />
-      <p className="text-sm leading-relaxed text-muted-foreground">Focus mode hides comparison UI while keeping your own progress private and intact. Leaderboard visibility is opt-in.</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? 'Focus mode hides comparison UI while keeping your own progress private and intact. Leaderboard visibility is opt-in — even within your circle.' : 'Focus mode hides your rank and pulse from the cohort board too. Comparison stays opt-in everywhere, no exceptions.'}</p>
     </Card>
   );
 }
@@ -588,6 +882,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
 
   const detail = detailQuery.data;
   const isOwner = group.myRole === 'owner';
+  const avatarColorByHandle = new Map(detail.members.map((member) => [member.handle, avatarColorFor(member.userId)]));
 
   const toggleDiscoverable = () => {
     updateGroup.mutate({ groupId: group.id, data: { name: group.name, isDiscoverable: !group.isDiscoverable } }, { onSuccess: refresh });
@@ -613,7 +908,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
           <div className="mt-3 divide-y divide-border/70">
             {detail.members.map((member) => (
               <div key={member.userId} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
-                <Avatar src={member.avatarUrl} initials={member.initials} className="h-9 w-9 bg-secondary text-xs" title={member.handle} />
+                <Avatar src={member.avatarUrl} initials={member.initials} className={`h-9 w-9 text-xs ${avatarColorByHandle.get(member.handle) ?? 'bg-secondary'}`} title={member.handle} />
                 <p className="flex-1 text-sm font-bold">{member.handle}</p>
                 {member.role === 'owner' && <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary"><ShieldCheck size={11} /> Owner</span>}
               </div>
@@ -627,7 +922,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
               {leaderboardQuery.data.entries.map((entry) => (
                 <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
                   <span className="w-6 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
-                  <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${entry.isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`} title={entry.handle} />
+                  <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarColorByHandle.get(entry.handle) ?? 'bg-secondary'}`} title={entry.handle} />
                   <p className="min-w-0 flex-1 truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && ' (you)'}</p>
                   <p className="font-display font-bold">{entry.score}</p>
                 </div>
