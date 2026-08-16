@@ -182,6 +182,16 @@ function PrivateCircleCard() {
   const [joined, setJoined] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    try {
+      const pendingError = sessionStorage.getItem('pp-join-error');
+      if (pendingError) {
+        sessionStorage.removeItem('pp-join-error');
+        setError(pendingError);
+      }
+    } catch { /* storage unavailable */ }
+  }, []);
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: getGetCirclesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetLeaderboardQueryKey() });
@@ -204,9 +214,11 @@ function PrivateCircleCard() {
     );
   };
 
+  const inviteBase = typeof window === 'undefined' ? '' : window.location.origin;
+
   const copyLink = async () => {
     if (!circlesQuery.data) return;
-    try { await navigator.clipboard.writeText(`preppulse.app/join/${circlesQuery.data.profileCode}`); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ }
+    try { await navigator.clipboard.writeText(`${inviteBase}/join/${circlesQuery.data.profileCode}`); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ }
   };
 
   if (circlesQuery.isLoading) return <Card className="p-6"><LoadingBlock className="h-80" /></Card>;
@@ -241,7 +253,7 @@ function PrivateCircleCard() {
           <Link2 size={16} className="mt-0.5 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold">Share your invite link</p>
-            <p className="mt-1 truncate font-mono-custom text-xs text-muted-foreground" data-testid="text-invite-link">preppulse.app/join/{profileCode}</p>
+            <p className="mt-1 truncate font-mono-custom text-xs text-muted-foreground" data-testid="text-invite-link">{inviteBase}/join/{profileCode}</p>
             <button type="button" onClick={copyLink} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-copy-link">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy link'}</button>
           </div>
         </div>

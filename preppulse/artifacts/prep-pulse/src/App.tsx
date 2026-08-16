@@ -11,6 +11,7 @@ import Tests from '@/pages/tests';
 import Study from '@/pages/study';
 import Recall from '@/pages/recall';
 import Compete from '@/pages/compete';
+import JoinByLink from '@/pages/join-by-link';
 import Settings from '@/pages/settings';
 import NotFound from '@/pages/not-found';
 import {
@@ -35,6 +36,7 @@ function Router() {
           <Route path="/study" component={Study} />
           <Route path="/recall" component={Recall} />
           <Route path="/compete" component={Compete} />
+          <Route path="/join/:code" component={JoinByLink} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
         </Switch>
