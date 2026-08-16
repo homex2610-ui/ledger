@@ -37,6 +37,7 @@ import {
 } from "@workspace/api-zod";
 import { allowedTopicTransitions, canTransitionTopic, getExamConfig, subjectAllowedForTrack, subjectLabel, type TopicStatus } from "@workspace/exam-config";
 import { clearSessionCookie, requireAuth } from "../lib/auth.js";
+import { deleteSupabaseUser } from "../lib/supabase-auth.js";
 import {
   activityForDays,
   computeStreak,
@@ -679,9 +680,11 @@ router.get("/me/export", async (req, res) => {
 });
 
 router.delete("/me", async (req, res) => {
+  const userId = req.userId;
   await db.transaction(async (tx) => {
-    await tx.delete(usersTable).where(eq(usersTable.id, req.userId));
+    await tx.delete(usersTable).where(eq(usersTable.id, userId));
   });
+  await deleteSupabaseUser(userId);
   clearSessionCookie(res);
   res.status(204).end();
 });
