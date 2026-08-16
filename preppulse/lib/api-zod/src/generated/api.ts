@@ -52,6 +52,7 @@ export const SignUpResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 })
@@ -85,6 +86,7 @@ export const LogInResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 })
@@ -119,6 +121,7 @@ export const GetMeResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 })
@@ -170,6 +173,7 @@ export const ResetPasswordResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 })
@@ -238,6 +242,7 @@ export const GoogleAuthResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 })
@@ -273,6 +278,7 @@ export const OauthLinkResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 })
@@ -965,6 +971,7 @@ export const GetProfileResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 
@@ -1002,6 +1009,7 @@ export const UpdateProfileResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 })
 
@@ -1033,6 +1041,7 @@ export const ExportMyDataResponse = zod.object({
   "weeklyGoalMinutes": zod.number(),
   "focusMode": zod.boolean(),
   "showOnLeaderboard": zod.boolean(),
+  "isAdmin": zod.boolean(),
   "profileCode": zod.string()
 }),
   "topics": zod.array(zod.object({
@@ -1515,5 +1524,286 @@ export const GetGroupActivityResponseItem = zod.object({
   "minutes": zod.number()
 })
 export const GetGroupActivityResponse = zod.array(GetGroupActivityResponseItem)
+
+
+/**
+ * @summary Aggregated study stats for the Stats page
+ */
+export const GetStatsQueryParams = zod.object({
+  "tz": zod.coerce.string().optional().describe('IANA timezone used for calendar-day bucketing'),
+  "weekStart": zod.date().optional().describe('Monday (YYYY-MM-DD) of the week to show in Study trends'),
+  "month": zod.coerce.string().optional().describe('YYYY-MM month to show in the focus heatmap'),
+  "subjectsPeriod": zod.enum(['week', 'all']).optional().describe('Period for the subject breakdown')
+})
+
+export const GetStatsResponse = zod.object({
+  "streak": zod.number(),
+  "todayMinutes": zod.number(),
+  "avg7": zod.number(),
+  "peak7": zod.number(),
+  "consistency30": zod.number(),
+  "avgSessionMinutes30": zod.number(),
+  "chronotype": zod.object({
+  "label": zod.string(),
+  "bucket": zod.string()
+}).nullable(),
+  "weekendMinutes30": zod.number(),
+  "weekdayMinutes30": zod.number(),
+  "peakFocus": zod.string().nullable(),
+  "mostProductiveDay": zod.string().nullable(),
+  "week": zod.object({
+  "weekStart": zod.coerce.date(),
+  "weekLabel": zod.string(),
+  "days": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "minutes": zod.number()
+}))
+}),
+  "subjects": zod.object({
+  "period": zod.enum(['week', 'all']),
+  "items": zod.array(zod.object({
+  "subject": zod.string(),
+  "minutes": zod.number()
+}))
+}),
+  "momentum": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "minutes": zod.number()
+})),
+  "heatmap": zod.object({
+  "month": zod.string(),
+  "monthLabel": zod.string(),
+  "days": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "minutes": zod.number()
+}))
+})
+})
+
+
+/**
+ * @summary The currently active announcement for the signed-in user, or null when none or dismissed
+ */
+export const GetActiveAnnouncementResponse = zod.object({
+  "announcement": zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "link": zod.string().nullable(),
+  "icon": zod.string()
+}).nullable()
+})
+
+
+/**
+ * @summary Dismiss an announcement for the current user (stored server-side, applies across devices)
+ */
+export const DismissAnnouncementParams = zod.object({
+  "announcementId": zod.coerce.string()
+})
+
+export const DismissAnnouncementResponse = zod.void()
+
+
+/**
+ * @summary Read-only admin dashboard aggregates
+ */
+export const GetAdminStatsResponse = zod.object({
+  "totalUsers": zod.number(),
+  "totalCohorts": zod.number(),
+  "nearCapacityCohorts": zod.number(),
+  "activeAnnouncement": zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "icon": zod.string()
+}).nullable(),
+  "recentAudit": zod.array(zod.object({
+  "id": zod.string(),
+  "adminId": zod.string().nullable(),
+  "action": zod.string(),
+  "targetType": zod.string(),
+  "targetId": zod.string().nullable(),
+  "beforeState": zod.record(zod.string(), zod.unknown()).nullable(),
+  "afterState": zod.record(zod.string(), zod.unknown()).nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary All announcements including disabled ones
+ */
+export const ListAdminAnnouncementsResponseItem = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "link": zod.string().nullable(),
+  "icon": zod.string(),
+  "isEnabled": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListAdminAnnouncementsResponse = zod.array(ListAdminAnnouncementsResponseItem)
+
+
+/**
+ * @summary Create an announcement (starts disabled)
+ */
+export const CreateAnnouncementBody = zod.object({
+  "title": zod.string(),
+  "body": zod.string(),
+  "link": zod.string().nullish(),
+  "icon": zod.string().optional()
+})
+
+export const CreateAnnouncementResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "link": zod.string().nullable(),
+  "icon": zod.string(),
+  "isEnabled": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Edit an announcement's fields
+ */
+export const UpdateAnnouncementParams = zod.object({
+  "announcementId": zod.coerce.string()
+})
+
+export const UpdateAnnouncementBody = zod.object({
+  "title": zod.string().optional(),
+  "body": zod.string().optional(),
+  "link": zod.string().nullish(),
+  "icon": zod.string().optional()
+})
+
+export const UpdateAnnouncementResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "link": zod.string().nullable(),
+  "icon": zod.string(),
+  "isEnabled": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Enable or disable an announcement (enabling swaps the active one in one transaction)
+ */
+export const ToggleAnnouncementParams = zod.object({
+  "announcementId": zod.coerce.string()
+})
+
+export const ToggleAnnouncementBody = zod.object({
+  "enabled": zod.boolean()
+})
+
+export const ToggleAnnouncementResponse = zod.void()
+
+
+/**
+ * @summary All cohorts with member counts
+ */
+export const ListAdminCohortsResponseItem = zod.object({
+  "id": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "memberCount": zod.number(),
+  "capacity": zod.number()
+})
+export const ListAdminCohortsResponse = zod.array(ListAdminCohortsResponseItem)
+
+
+/**
+ * @summary A cohort with its members
+ */
+export const GetAdminCohortParams = zod.object({
+  "cohortId": zod.coerce.string()
+})
+
+export const GetAdminCohortResponse = zod.object({
+  "id": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "memberCount": zod.number(),
+  "capacity": zod.number(),
+  "members": zod.array(zod.object({
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "email": zod.string(),
+  "joinedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Move a user to another cohort (admin-only, capacity-checked)
+ */
+export const MoveCohortMemberParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const MoveCohortMemberBody = zod.object({
+  "toCohortId": zod.string()
+})
+
+export const MoveCohortMemberResponse = zod.void()
+
+
+/**
+ * @summary Search users by handle or email
+ */
+export const ListAdminUsersQueryParams = zod.object({
+  "q": zod.coerce.string().optional()
+})
+
+export const ListAdminUsersResponseItem = zod.object({
+  "id": zod.string(),
+  "handle": zod.string(),
+  "email": zod.string(),
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
+
+
+/**
+ * @summary Full detail for one user
+ */
+export const GetAdminUserParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const GetAdminUserResponse = zod.object({
+  "id": zod.string(),
+  "handle": zod.string(),
+  "email": zod.string(),
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "cohortId": zod.string().nullable(),
+  "cohortJoinedAt": zod.coerce.date().nullable(),
+  "sessionCount": zod.number(),
+  "totalMinutes": zod.number(),
+  "focusSessionsCompleted": zod.number()
+})
+
+
+/**
+ * @summary Promote or demote a user (last-admin demotion is blocked in the database)
+ */
+export const SetAdminParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const SetAdminBody = zod.object({
+  "isAdmin": zod.boolean()
+})
+
+export const SetAdminResponse = zod.void()
 
 

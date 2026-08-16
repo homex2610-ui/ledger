@@ -1098,6 +1098,321 @@ paths:
         "404":
           description: Group not found or not a member
 
+  /stats:
+    get:
+      operationId: getStats
+      tags: [prep]
+      summary: Aggregated study stats for the Stats page
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: IANA timezone used for calendar-day bucketing
+          schema:
+            type: string
+        - name: weekStart
+          in: query
+          required: false
+          description: Monday (YYYY-MM-DD) of the week to show in Study trends
+          schema:
+            type: string
+            format: date
+        - name: month
+          in: query
+          required: false
+          description: YYYY-MM month to show in the focus heatmap
+          schema:
+            type: string
+        - name: subjectsPeriod
+          in: query
+          required: false
+          description: Period for the subject breakdown
+          schema:
+            type: string
+            enum: [week, all]
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  /announcements/active:
+    get:
+      operationId: getActiveAnnouncement
+      tags: [announcements]
+      summary: The currently active announcement for the signed-in user, or null when none or dismissed
+      responses:
+        "200":
+          description: Active announcement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveAnnouncementResponse"
+
+  /announcements/{announcementId}/dismiss:
+    post:
+      operationId: dismissAnnouncement
+      tags: [announcements]
+      summary: Dismiss an announcement for the current user (stored server-side, applies across devices)
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Dismissed
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Read-only admin dashboard aggregates
+      responses:
+        "200":
+          description: Admin stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStatsResponse"
+        "404":
+          description: Not an admin
+
+  /admin/announcements:
+    get:
+      operationId: listAdminAnnouncements
+      tags: [admin]
+      summary: All announcements including disabled ones
+      responses:
+        "200":
+          description: Announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+        "404":
+          description: Not an admin
+    post:
+      operationId: createAnnouncement
+      tags: [admin]
+      summary: Create an announcement (starts disabled)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "404":
+          description: Not an admin
+
+  /admin/announcements/{announcementId}:
+    patch:
+      operationId: updateAnnouncement
+      tags: [admin]
+      summary: Edit an announcement's fields
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "404":
+          description: Not an admin or not found
+
+  /admin/announcements/{announcementId}/toggle:
+    post:
+      operationId: toggleAnnouncement
+      tags: [admin]
+      summary: Enable or disable an announcement (enabling swaps the active one in one transaction)
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementToggle"
+      responses:
+        "204":
+          description: Toggled
+        "404":
+          description: Not an admin or not found
+        "409":
+          description: Concurrent change detected - someone else enabled another announcement, refresh and retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/cohorts:
+    get:
+      operationId: listAdminCohorts
+      tags: [admin]
+      summary: All cohorts with member counts
+      responses:
+        "200":
+          description: Cohorts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminCohortSummary"
+        "404":
+          description: Not an admin
+
+  /admin/cohorts/{cohortId}:
+    get:
+      operationId: getAdminCohort
+      tags: [admin]
+      summary: A cohort with its members
+      parameters:
+        - name: cohortId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cohort
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCohortDetail"
+        "404":
+          description: Not an admin or not found
+
+  /admin/cohorts/members/{userId}/move:
+    post:
+      operationId: moveCohortMember
+      tags: [admin]
+      summary: Move a user to another cohort (admin-only, capacity-checked)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CohortMemberMove"
+      responses:
+        "204":
+          description: Moved
+        "404":
+          description: Not an admin, user not in a cohort, or cohort not found
+        "409":
+          description: Target cohort is full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: Search users by handle or email
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUserSummary"
+        "404":
+          description: Not an admin
+
+  /admin/users/{userId}:
+    get:
+      operationId: getAdminUser
+      tags: [admin]
+      summary: Full detail for one user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserDetail"
+        "404":
+          description: Not an admin or not found
+
+  /admin/users/{userId}/set-admin:
+    post:
+      operationId: setAdmin
+      tags: [admin]
+      summary: Promote or demote a user (last-admin demotion is blocked in the database)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSet"
+      responses:
+        "204":
+          description: Updated
+        "404":
+          description: Not an admin or not found
+        "409":
+          description: Cannot remove the last admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -1257,9 +1572,11 @@ components:
           type: boolean
         showOnLeaderboard:
           type: boolean
+        isAdmin:
+          type: boolean
         profileCode:
           type: string
-      required: [handle, email, avatarUrl, examTrack, stage, targetYear, examDate, dailyGoalMinutes, weeklyGoalMinutes, focusMode, showOnLeaderboard, profileCode]
+      required: [handle, email, avatarUrl, examTrack, stage, targetYear, examDate, dailyGoalMinutes, weeklyGoalMinutes, focusMode, showOnLeaderboard, isAdmin, profileCode]
 
     ExportGroup:
       type: object
@@ -2135,3 +2452,358 @@ components:
         minutes:
           type: number
       required: [day, minutes]
+
+    DayMinutes:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        minutes:
+          type: number
+      required: [date, minutes]
+
+    ChronotypeInfo:
+      type: object
+      properties:
+        label:
+          type: string
+        bucket:
+          type: string
+      required: [label, bucket]
+
+    WeekStat:
+      type: object
+      properties:
+        weekStart:
+          type: string
+          format: date
+        weekLabel:
+          type: string
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DayMinutes"
+      required: [weekStart, weekLabel, days]
+
+    SubjectMinutes:
+      type: object
+      properties:
+        period:
+          type: string
+          enum: [week, all]
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              subject:
+                type: string
+              minutes:
+                type: number
+            required: [subject, minutes]
+      required: [period, items]
+
+    MonthHeatmap:
+      type: object
+      properties:
+        month:
+          type: string
+        monthLabel:
+          type: string
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DayMinutes"
+      required: [month, monthLabel, days]
+
+    StatsResponse:
+      type: object
+      properties:
+        streak:
+          type: number
+        todayMinutes:
+          type: number
+        avg7:
+          type: number
+        peak7:
+          type: number
+        consistency30:
+          type: number
+        avgSessionMinutes30:
+          type: number
+        chronotype:
+          type: object
+          nullable: true
+          properties:
+            label:
+              type: string
+            bucket:
+              type: string
+          required: [label, bucket]
+        weekendMinutes30:
+          type: number
+        weekdayMinutes30:
+          type: number
+        peakFocus:
+          type: string
+          nullable: true
+        mostProductiveDay:
+          type: string
+          nullable: true
+        week:
+          $ref: "#/components/schemas/WeekStat"
+        subjects:
+          $ref: "#/components/schemas/SubjectMinutes"
+        momentum:
+          type: array
+          items:
+            $ref: "#/components/schemas/DayMinutes"
+        heatmap:
+          $ref: "#/components/schemas/MonthHeatmap"
+      required: [streak, todayMinutes, avg7, peak7, consistency30, avgSessionMinutes30, chronotype, weekendMinutes30, weekdayMinutes30, peakFocus, mostProductiveDay, week, subjects, momentum, heatmap]
+
+    ActiveAnnouncementResponse:
+      type: object
+      properties:
+        announcement:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            body:
+              type: string
+            link:
+              type: string
+              nullable: true
+            icon:
+              type: string
+          required: [id, title, body, link, icon]
+      required: [announcement]
+
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        link:
+          type: string
+          nullable: true
+        icon:
+          type: string
+        isEnabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, body, link, icon, isEnabled, createdAt, updatedAt]
+
+    AnnouncementCreate:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        link:
+          type: string
+          nullable: true
+        icon:
+          type: string
+      required: [title, body]
+
+    AnnouncementUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        link:
+          type: string
+          nullable: true
+        icon:
+          type: string
+
+    AnnouncementToggle:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+
+    AdminAuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        adminId:
+          type: string
+          nullable: true
+        action:
+          type: string
+        targetType:
+          type: string
+        targetId:
+          type: string
+          nullable: true
+        beforeState:
+          type: object
+          additionalProperties: true
+          nullable: true
+        afterState:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, adminId, action, targetType, targetId, beforeState, afterState, createdAt]
+
+    AdminStatsResponse:
+      type: object
+      properties:
+        totalUsers:
+          type: number
+        totalCohorts:
+          type: number
+        nearCapacityCohorts:
+          type: number
+        activeAnnouncement:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            icon:
+              type: string
+          required: [id, title, icon]
+        recentAudit:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditEntry"
+      required: [totalUsers, totalCohorts, nearCapacityCohorts, activeAnnouncement, recentAudit]
+
+    AdminCohortSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        memberCount:
+          type: number
+        capacity:
+          type: number
+      required: [id, createdAt, memberCount, capacity]
+
+    AdminCohortMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        email:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+      required: [userId, handle, email, joinedAt]
+
+    AdminCohortDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        memberCount:
+          type: number
+        capacity:
+          type: number
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCohortMember"
+      required: [id, createdAt, memberCount, capacity, members]
+
+    CohortMemberMove:
+      type: object
+      properties:
+        toCohortId:
+          type: string
+      required: [toCohortId]
+
+    AdminUserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        handle:
+          type: string
+        email:
+          type: string
+        isAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, handle, email, isAdmin, createdAt]
+
+    AdminUserDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        handle:
+          type: string
+        email:
+          type: string
+        isAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        cohortId:
+          type: string
+          nullable: true
+        cohortJoinedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sessionCount:
+          type: number
+        totalMinutes:
+          type: number
+        focusSessionsCompleted:
+          type: number
+      required: [id, handle, email, isAdmin, createdAt, cohortId, cohortJoinedAt, sessionCount, totalMinutes, focusSessionsCompleted]
+
+    AdminSet:
+      type: object
+      properties:
+        isAdmin:
+          type: boolean
+      required: [isAdmin]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]

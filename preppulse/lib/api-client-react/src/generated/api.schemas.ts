@@ -46,6 +46,7 @@ export interface Profile {
   weeklyGoalMinutes: number;
   focusMode: boolean;
   showOnLeaderboard: boolean;
+  isAdmin: boolean;
   profileCode: string;
 }
 
@@ -716,6 +717,194 @@ export interface Dashboard {
   activity7d: DayActivity[];
 }
 
+export interface DayMinutes {
+  date: string;
+  minutes: number;
+}
+
+export interface ChronotypeInfo {
+  label: string;
+  bucket: string;
+}
+
+export interface WeekStat {
+  weekStart: string;
+  weekLabel: string;
+  days: DayMinutes[];
+}
+
+export type SubjectMinutesPeriod = typeof SubjectMinutesPeriod[keyof typeof SubjectMinutesPeriod];
+
+
+export const SubjectMinutesPeriod = {
+  week: 'week',
+  all: 'all',
+} as const;
+
+export type SubjectMinutesItemsItem = {
+  subject: string;
+  minutes: number;
+};
+
+export interface SubjectMinutes {
+  period: SubjectMinutesPeriod;
+  items: SubjectMinutesItemsItem[];
+}
+
+export interface MonthHeatmap {
+  month: string;
+  monthLabel: string;
+  days: DayMinutes[];
+}
+
+export type StatsResponseChronotype = {
+  label: string;
+  bucket: string;
+} | null;
+
+export interface StatsResponse {
+  streak: number;
+  todayMinutes: number;
+  avg7: number;
+  peak7: number;
+  consistency30: number;
+  avgSessionMinutes30: number;
+  chronotype: StatsResponseChronotype;
+  weekendMinutes30: number;
+  weekdayMinutes30: number;
+  peakFocus: string | null;
+  mostProductiveDay: string | null;
+  week: WeekStat;
+  subjects: SubjectMinutes;
+  momentum: DayMinutes[];
+  heatmap: MonthHeatmap;
+}
+
+export type ActiveAnnouncementResponseAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  link: string | null;
+  icon: string;
+} | null;
+
+export interface ActiveAnnouncementResponse {
+  announcement: ActiveAnnouncementResponseAnnouncement;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  link: string | null;
+  icon: string;
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnnouncementCreate {
+  title: string;
+  body: string;
+  link?: string | null;
+  icon?: string;
+}
+
+export interface AnnouncementUpdate {
+  title?: string;
+  body?: string;
+  link?: string | null;
+  icon?: string;
+}
+
+export interface AnnouncementToggle {
+  enabled: boolean;
+}
+
+export type AdminAuditEntryBeforeState = { [key: string]: unknown } | null;
+
+export type AdminAuditEntryAfterState = { [key: string]: unknown } | null;
+
+export interface AdminAuditEntry {
+  id: string;
+  adminId: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  beforeState: AdminAuditEntryBeforeState;
+  afterState: AdminAuditEntryAfterState;
+  createdAt: string;
+}
+
+export type AdminStatsResponseActiveAnnouncement = {
+  id: string;
+  title: string;
+  icon: string;
+} | null;
+
+export interface AdminStatsResponse {
+  totalUsers: number;
+  totalCohorts: number;
+  nearCapacityCohorts: number;
+  activeAnnouncement: AdminStatsResponseActiveAnnouncement;
+  recentAudit: AdminAuditEntry[];
+}
+
+export interface AdminCohortSummary {
+  id: string;
+  createdAt: string;
+  memberCount: number;
+  capacity: number;
+}
+
+export interface AdminCohortMember {
+  userId: string;
+  handle: string;
+  email: string;
+  joinedAt: string;
+}
+
+export interface AdminCohortDetail {
+  id: string;
+  createdAt: string;
+  memberCount: number;
+  capacity: number;
+  members: AdminCohortMember[];
+}
+
+export interface CohortMemberMove {
+  toCohortId: string;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  handle: string;
+  email: string;
+  isAdmin: boolean;
+  createdAt: string;
+}
+
+export interface AdminUserDetail {
+  id: string;
+  handle: string;
+  email: string;
+  isAdmin: boolean;
+  createdAt: string;
+  cohortId: string | null;
+  cohortJoinedAt: string | null;
+  sessionCount: number;
+  totalMinutes: number;
+  focusSessionsCompleted: number;
+}
+
+export interface AdminSet {
+  isAdmin: boolean;
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
 export type GetAuthDiscordAuthorizeParams = {
 /**
  * When true, requires a session and links instead of signing in
@@ -757,6 +946,37 @@ tz?: string;
 };
 
 export type DiscoverGroupsParams = {
+q?: string;
+};
+
+export type GetStatsParams = {
+/**
+ * IANA timezone used for calendar-day bucketing
+ */
+tz?: string;
+/**
+ * Monday (YYYY-MM-DD) of the week to show in Study trends
+ */
+weekStart?: string;
+/**
+ * YYYY-MM month to show in the focus heatmap
+ */
+month?: string;
+/**
+ * Period for the subject breakdown
+ */
+subjectsPeriod?: GetStatsSubjectsPeriod;
+};
+
+export type GetStatsSubjectsPeriod = typeof GetStatsSubjectsPeriod[keyof typeof GetStatsSubjectsPeriod];
+
+
+export const GetStatsSubjectsPeriod = {
+  week: 'week',
+  all: 'all',
+} as const;
+
+export type ListAdminUsersParams = {
 q?: string;
 };
 

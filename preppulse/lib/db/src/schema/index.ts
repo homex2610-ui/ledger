@@ -6,3 +6,4 @@ export * from "./topics";
 export * from "./tests";
 export * from "./cards";
 export * from "./community";
+export * from "./admin";

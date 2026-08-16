@@ -28,6 +28,7 @@ export const profilesTable = pgTable(
     weeklyGoalMinutes: integer("weekly_goal_minutes").notNull().default(1200),
     focusMode: boolean("focus_mode").notNull().default(false),
     showOnLeaderboard: boolean("show_on_leaderboard").notNull().default(true),
+    isAdmin: boolean("is_admin").notNull().default(false),
     profileCode: text("profile_code").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

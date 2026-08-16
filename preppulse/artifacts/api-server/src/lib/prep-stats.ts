@@ -206,6 +206,7 @@ export async function toProfileShape(userId: string) {
     weeklyGoalMinutes: profile.weeklyGoalMinutes,
     focusMode: profile.focusMode,
     showOnLeaderboard: profile.showOnLeaderboard,
+    isAdmin: profile.isAdmin,
     profileCode: profile.profileCode,
   };
 }

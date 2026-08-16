@@ -6,6 +6,9 @@ import prepRouter from "./prep.js";
 import studyRouter from "./study.js";
 import recallRouter from "./recall.js";
 import communityRouter from "./community.js";
+import statsRouter from "./stats.js";
+import announcementsRouter from "./announcements.js";
+import adminRouter from "./admin.js";
 
 const router: IRouter = Router();
 
@@ -16,5 +19,8 @@ router.use(prepRouter);
 router.use(studyRouter);
 router.use(recallRouter);
 router.use(communityRouter);
+router.use(statsRouter);
+router.use(announcementsRouter);
+router.use(adminRouter);
 
 export default router;

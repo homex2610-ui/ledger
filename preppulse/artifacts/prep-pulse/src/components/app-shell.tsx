@@ -1,12 +1,12 @@
 import { useLocation, Link } from 'wouter';
-import { BarChart3, BookOpen, BrainCircuit, Home, LogOut, MoreHorizontal, Settings, Timer, Trophy, X } from 'lucide-react';
+import { BarChart3, BookOpen, BrainCircuit, ChartArea, Home, LogOut, Megaphone, MoreHorizontal, Settings, ShieldCheck, Timer, Trophy, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGetDashboard, useGetMe, useLogOut } from '@workspace/api-client-react';
+import { getGetActiveAnnouncementQueryKey, useDismissAnnouncement, useGetActiveAnnouncement, useGetMe, useLogOut } from '@workspace/api-client-react';
 import { getExamConfig } from '@workspace/exam-config';
 import { Avatar } from '@/components/avatar';
 import { OnboardingModal } from '@/components/onboarding';
-import { browserTimeZone, initialsFor } from '@/lib/utils';
+import { initialsFor } from '@/lib/utils';
 
 const navigation = [
   { href: '/', label: 'Overview', icon: Home },
@@ -14,16 +14,8 @@ const navigation = [
   { href: '/tests', label: 'Tests', icon: BarChart3 },
   { href: '/study', label: 'Study', icon: Timer },
   { href: '/recall', label: 'Recall', icon: BrainCircuit },
+  { href: '/stats', label: 'Stats', icon: ChartArea },
   { href: '/compete', label: 'Compete', icon: Trophy },
-];
-
-const SIGNALS = [
-  'Consistency beats the heroic all-nighter.',
-  'A small session today is still a session.',
-  'The syllabus moves one topic at a time.',
-  'Rest is part of the routine, not a reward.',
-  'Show up before you feel ready.',
-  'Yesterday is data. Today is practice.',
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -31,17 +23,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const queryClient = useQueryClient();
   const me = useGetMe().data;
-  const dashboard = useGetDashboard({ tz: browserTimeZone() }).data;
   const logOut = useLogOut();
   const activeLabel = navigation.find((item) => item.href === location)?.label ?? 'PrepPulse';
   const handle = me?.profile.handle ?? 'Learner';
   const initials = initialsFor(handle);
   const examLabel = getExamConfig(me?.profile.examTrack).label;
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const signal = SIGNALS[new Date().getDate() % SIGNALS.length];
-  const signalProgress = dashboard
-    ? Math.min(100, Math.round(((dashboard.weeklyMinutes ?? 0) / Math.max(1, dashboard.weeklyGoalMinutes ?? 1)) * 100))
-    : 35;
+  const activeAnnouncement = useGetActiveAnnouncement().data?.announcement ?? null;
+  const dismissAnnouncement = useDismissAnnouncement();
+
+  const dismissActiveAnnouncement = () => {
+    if (!activeAnnouncement) return;
+    dismissAnnouncement.mutate(
+      { announcementId: activeAnnouncement.id },
+      { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetActiveAnnouncementQueryKey() }) },
+    );
+  };
 
   const signOut = () => {
     logOut.mutate(undefined, { onSuccess: () => queryClient.clear() });
@@ -71,12 +68,23 @@ export function AppShell({ children }: { children: ReactNode }) {
               );
             })}
           </nav>
-          <div className="mt-auto rounded-2xl border border-sidebar-foreground/10 bg-sidebar-foreground/5 p-4">
-            <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-accent">Small signal</p>
-            <p className="mt-2 text-sm leading-relaxed text-sidebar-foreground/75" key={signal} data-testid="small-signal-quote">{signal}</p>
-            <div className="mt-4 h-1 rounded-full bg-sidebar-foreground/10"><div className="h-1 rounded-full bg-accent progress-fill" style={{ width: `${signalProgress}%` }} /></div>
-            <p className="mt-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-sidebar-foreground/40">Week progress</p>
-          </div>
+          {me?.profile.isAdmin && (
+            <Link href="/admin" data-testid="link-nav-admin" className={`nav-link mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${location.startsWith('/admin') ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
+              <ShieldCheck size={17} strokeWidth={location.startsWith('/admin') ? 2.5 : 1.8} />
+              Admin
+              {location.startsWith('/admin') && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent" />}
+            </Link>
+          )}
+          <a
+            href="https://discord.gg/6nf5BrEfHU"
+            target="_blank"
+            rel="noreferrer"
+            data-testid="link-discord"
+            className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl border border-sidebar-foreground/15 bg-sidebar-foreground/5 px-3 py-2.5 text-xs font-bold text-sidebar-foreground/85 transition-colors hover:border-sidebar-foreground/30 hover:bg-sidebar-foreground/10"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" /></svg>
+            Join Discord
+          </a>
           <Link href="/settings" data-testid="link-nav-settings" className="nav-link mt-4 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground">
             <Settings size={17} /> Settings
           </Link>
@@ -96,6 +104,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <p className="font-display text-lg font-bold md:hidden">{activeLabel}</p>
               </div>
             </div>
+            {activeAnnouncement && (
+              <div className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-4 py-2 text-xs font-bold sm:flex" data-testid="announcement-pill">
+                <Megaphone size={13} className="shrink-0 text-primary" />
+                <span className="max-w-[280px] truncate" title={activeAnnouncement.body}>{activeAnnouncement.title}</span>
+                <button type="button" onClick={dismissActiveAnnouncement} aria-label="Dismiss announcement" data-testid="button-dismiss-announcement" className="shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><X size={13} /></button>
+              </div>
+            )}
             <Link href="/settings" data-testid="link-header-profile" className="flex items-center gap-3 rounded-full pl-2 transition-transform hover:scale-[1.02]">
               <span className="hidden text-right sm:block"><span className="block text-xs font-bold">{handle}</span><span className="font-mono-custom text-[10px] text-muted-foreground">{examLabel} · {me?.profile.targetYear ?? ''}</span></span>
               <Avatar src={me?.profile.avatarUrl} initials={initials} className="h-10 w-10 bg-primary text-xs text-white" title={handle} />
@@ -119,7 +134,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="font-display text-xl font-bold">PrepPulse</span>
               <button type="button" onClick={() => setMobileMenuOpen(false)} className="rounded-lg p-2 text-sidebar-foreground/70" aria-label="Close navigation" data-testid="button-close-menu"><X size={19} /></button>
             </div>
-            <nav className="space-y-2">{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMobileMenuOpen(false)} data-testid={`link-drawer-${label.toLowerCase()}`} className={`flex items-center gap-3 rounded-xl px-3 py-3 font-semibold ${location === href ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/70'}`}><Icon size={18} />{label}</Link>)}</nav>
+            <nav className="space-y-2">{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMobileMenuOpen(false)} data-testid={`link-drawer-${label.toLowerCase()}`} className={`flex items-center gap-3 rounded-xl px-3 py-3 font-semibold ${location === href ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/70'}`}><Icon size={18} />{label}</Link>)}
+              {me?.profile.isAdmin && <Link href="/admin" onClick={() => setMobileMenuOpen(false)} data-testid="link-drawer-admin" className={`flex items-center gap-3 rounded-xl px-3 py-3 font-semibold ${location.startsWith('/admin') ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/70'}`}><ShieldCheck size={18} />Admin</Link>}
+            </nav>
             <Link href="/settings" onClick={() => setMobileMenuOpen(false)} data-testid="link-drawer-settings" className="mt-3 flex items-center gap-3 rounded-xl px-3 py-3 font-semibold text-sidebar-foreground/70"><Settings size={18} />Settings</Link>
             <button type="button" onClick={() => { setMobileMenuOpen(false); signOut(); }} data-testid="button-drawer-sign-out" className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 font-semibold text-sidebar-foreground/70"><LogOut size={18} />Sign out</button>
           </div>

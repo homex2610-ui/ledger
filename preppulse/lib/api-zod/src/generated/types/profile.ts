@@ -20,5 +20,6 @@ export interface Profile {
   weeklyGoalMinutes: number;
   focusMode: boolean;
   showOnLeaderboard: boolean;
+  isAdmin: boolean;
   profileCode: string;
 }

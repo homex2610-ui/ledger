@@ -10,10 +10,15 @@ import Syllabus from '@/pages/syllabus';
 import Tests from '@/pages/tests';
 import Study from '@/pages/study';
 import Recall from '@/pages/recall';
+import { Stats } from '@/pages/stats';
 import Compete from '@/pages/compete';
 import JoinByLink from '@/pages/join-by-link';
 import Settings from '@/pages/settings';
 import NotFound from '@/pages/not-found';
+import AdminDashboard from '@/pages/admin/admin-dashboard';
+import AdminAnnouncements from '@/pages/admin/admin-announcements';
+import AdminCohorts from '@/pages/admin/admin-cohorts';
+import AdminUsers from '@/pages/admin/admin-users';
 import {
   Route,
   Switch,
@@ -35,7 +40,12 @@ function Router() {
           <Route path="/tests" component={Tests} />
           <Route path="/study" component={Study} />
           <Route path="/recall" component={Recall} />
+          <Route path="/stats" component={Stats} />
           <Route path="/compete" component={Compete} />
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/announcements" component={AdminAnnouncements} />
+          <Route path="/admin/cohorts" component={AdminCohorts} />
+          <Route path="/admin/users" component={AdminUsers} />
           <Route path="/join/:code" component={JoinByLink} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
