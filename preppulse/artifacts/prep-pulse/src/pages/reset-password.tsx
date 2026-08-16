@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, KeyRound, LoaderCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -10,10 +10,20 @@ export default function ResetPasswordPage({ onAuthed }: { onAuthed: (auth: AuthR
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const resetPassword = useResetPassword();
-  const accessToken = new URLSearchParams(window.location.search).get('access_token');
+  const [accessToken] = useState<string | null>(() => {
+    const fromHash = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
+    const fromQuery = new URLSearchParams(window.location.search).get("access_token");
+    return fromHash ?? fromQuery;
+  });
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (window.location.hash) {
+      window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    }
+  }, []);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();

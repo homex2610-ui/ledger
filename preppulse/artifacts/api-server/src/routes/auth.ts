@@ -22,6 +22,7 @@ import { sendRecoveryEmail, supabaseAuthConfigured, verifyRecoveryToken } from "
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
+const PROD_ORIGIN = "https://ledger-pi-topaz.vercel.app";
 
 // PARTIAL FIX (documented limitation): the bucket store is an in-memory Map
 // on globalThis. This app runs on Vercel as a serverless function
@@ -115,6 +116,23 @@ router.post("/logout", async (req, res) => {
   res.status(204).end();
 });
 
+// Resolves the origin for password-recovery emails. Never returns localhost:
+// the production alias and Vercel preview hosts redirect to themselves, and
+// everything else (dev servers, unknown hosts) falls back to the production
+// origin. APP_ORIGIN overrides all of this when set (per-environment value in
+// Vercel, e.g. a Preview env). The target must also be in the Supabase
+// project's Redirect URLs allow-list, or Supabase silently falls back to its
+// Site URL.
+function resetRedirectOrigin(req: Request): string {
+  const override = process.env.APP_ORIGIN?.replace(/\/+$/, "");
+  if (override) return override;
+  const host = (req.get("host") ?? "").toLowerCase();
+  if (host === "ledger-pi-topaz.vercel.app" || host.endsWith(".vercel.app")) {
+    return `https://${host}`;
+  }
+  return PROD_ORIGIN;
+}
+
 router.post("/forgot-password", authRateLimit, async (req, res) => {
   const body = ForgotPasswordBody.parse(req.body);
   const email = body.email.trim().toLowerCase();
@@ -126,7 +144,7 @@ router.post("/forgot-password", authRateLimit, async (req, res) => {
     res.status(503).json({ error: "Password recovery is temporarily unavailable" });
     return;
   }
-  const redirectTo = `${req.protocol}://${req.get("host") ?? "localhost"}/reset-password`;
+  const redirectTo = `${resetRedirectOrigin(req)}/reset-password`;
   try {
     await sendRecoveryEmail(email, redirectTo);
   } catch {
