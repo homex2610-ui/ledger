@@ -80,15 +80,19 @@ export default function Settings() {
     });
   };
 
-  const handleGoogleLink = (credential: string) => {
+  const handleGoogleLink = (response: { credential: string; select_by?: string }) => {
     setOauthError(null);
+    if (response.select_by === 'auto') {
+      console.info('[settings] ignoring auto-selected Google credential — waiting for an explicit connect attempt');
+      return;
+    }
     const csrfToken = getGisCsrfToken();
     if (!csrfToken) {
       setOauthError('Google sign-in state expired. Reload the page and try again.');
       return;
     }
     linkOAuth.mutate(
-      { data: { provider: 'google', credential, csrfToken } },
+      { data: { provider: 'google', credential: response.credential, csrfToken } },
       {
         onSuccess: () => { providers.refetch(); },
         onError: (err) => {

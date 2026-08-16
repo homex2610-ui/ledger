@@ -7,7 +7,7 @@ declare global {
     google?: {
       accounts: {
         id: {
-          initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void;
+          initialize: (config: { client_id: string; callback: (response: { credential: string; select_by?: string }) => void }) => void;
           renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
         };
       };
@@ -52,7 +52,7 @@ export function GoogleOAuthButton({ label, onStart, disabled }: { label: string;
   );
 }
 
-export function GoogleSignInButton({ clientId, onCredential, disabled }: { clientId: string | null; onCredential: (credential: string) => void; disabled?: boolean }) {
+export function GoogleSignInButton({ clientId, onCredential, disabled }: { clientId: string | null; onCredential: (response: { credential: string; select_by?: string }) => void; disabled?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const onCredentialRef = useRef(onCredential);
@@ -67,7 +67,7 @@ export function GoogleSignInButton({ clientId, onCredential, disabled }: { clien
         if (cancelled || !containerRef.current) return;
         window.google!.accounts.id.initialize({
           client_id: clientId,
-          callback: (response) => onCredentialRef.current(response.credential),
+          callback: (response) => onCredentialRef.current(response),
         });
         window.google!.accounts.id.renderButton(containerRef.current, {
           theme: 'outline',

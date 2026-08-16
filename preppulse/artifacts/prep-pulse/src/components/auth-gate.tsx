@@ -1,7 +1,7 @@
-import { type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetMeQueryKey, useGetMe, type AuthResponse } from '@workspace/api-client-react';
+import { ApiError, getGetMeQueryKey, useGetMe, type AuthResponse } from '@workspace/api-client-react';
 import AuthPage from '@/pages/auth';
 import ForgotPasswordPage from '@/pages/forgot-password';
 import ResetPasswordPage from '@/pages/reset-password';
@@ -10,6 +10,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const queryClient = useQueryClient();
   const query = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false, staleTime: 30_000 } });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('oauth') || params.has('provider')) {
+      params.delete('oauth');
+      params.delete('provider');
+      const qs = params.toString();
+      window.history.replaceState({}, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+    }
+  }, []);
+
+  const sessionDead = Boolean(query.data && query.error instanceof ApiError && query.error.status === 401);
 
   if (query.isLoading) {
     return (
@@ -20,7 +32,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!query.data) {
+  if (!query.data || sessionDead) {
     const onAuthed = (auth: AuthResponse) => {
       queryClient.setQueryData(getGetMeQueryKey(), auth);
     };
