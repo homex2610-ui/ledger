@@ -4,6 +4,7 @@ import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock, Flame, H
 import { getStats, getGetStatsQueryKey, type StatsResponse } from '@workspace/api-client-react';
 import { useQuery } from '@tanstack/react-query';
 import { browserTimeZone } from '@/lib/utils';
+import { formatMinutes as fmtMinutes } from '@/lib/format-duration';
 import { subjectColor } from '@/lib/subject-colors';
 import { Card, EmptyState, ErrorState, LoadingBlock } from '@/components/ui-elements';
 import { DotStrip, Sparkline } from '@/components/mini-charts';
@@ -11,14 +12,6 @@ import { DotStrip, Sparkline } from '@/components/mini-charts';
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-function fmtMinutes(minutes: number): string {
-  if (minutes <= 0) return '0m';
-  if (minutes < 60) return `${minutes}m`;
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
-}
 
 function fmtHours(minutes: number): string {
   if (minutes <= 0) return '0h';

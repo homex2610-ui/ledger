@@ -4,6 +4,7 @@ import { useGetDashboard } from '@workspace/api-client-react';
 import { Card, ButtonLink, ErrorState, LoadingBlock, ProgressBar, SectionTitle, StatTile } from '@/components/ui-elements';
 import { BarStrip, DotStrip, Ring, Sparkline } from '@/components/mini-charts';
 import { browserTimeZone } from '@/lib/utils';
+import { formatMinutes } from '@/lib/format-duration';
 
 export default function Dashboard() {
   const query = useGetDashboard({ tz: browserTimeZone() });
@@ -30,9 +31,9 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Daily pulse" value={`${dashboard.todayMinutes}m`} detail={`${dashboard.todayGoalMinutes - dashboard.todayMinutes > 0 ? `${dashboard.todayGoalMinutes - dashboard.todayMinutes}m left` : 'target met'} of ${dashboard.todayGoalMinutes}m`} accent visual={<Sparkline values={dashboard.activity7d.map((day) => day.minutes)} className="h-8 w-24" strokeClass="stroke-primary-foreground/80" areaClass="fill-primary-foreground/10" dotClass="fill-primary-foreground" />} />
+        <StatTile label="Daily pulse" value={formatMinutes(dashboard.todayMinutes)} detail={`${dashboard.todayGoalMinutes - dashboard.todayMinutes > 0 ? `${formatMinutes(dashboard.todayGoalMinutes - dashboard.todayMinutes)} left` : 'target met'} of ${formatMinutes(dashboard.todayGoalMinutes)}`} accent visual={<Sparkline values={dashboard.activity7d.map((day) => day.minutes)} className="h-8 w-24" strokeClass="stroke-primary-foreground/80" areaClass="fill-primary-foreground/10" dotClass="fill-primary-foreground" />} />
         <StatTile label="Current streak" value={`${dashboard.streak} days`} detail="one session at a time" visual={<DotStrip total={7} filled={Math.min(dashboard.streak, 7)} />} />
-        <StatTile label="This week" value={`${dashboard.weeklyMinutes}m`} detail={`${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes > 0 ? `${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes}m to go` : 'weekly target met'}`} visual={<BarStrip values={dashboard.activity7d.map((day) => day.minutes)} />} />
+        <StatTile label="This week" value={formatMinutes(dashboard.weeklyMinutes)} detail={`${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes > 0 ? `${formatMinutes(dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes)} to go` : 'weekly target met'}`} visual={<BarStrip values={dashboard.activity7d.map((day) => day.minutes)} />} />
         <StatTile label="Syllabus covered" value={`${dashboard.syllabusPercent}%`} detail={`${dashboard.masteredTopics} of ${dashboard.totalTopics} topics mastered`} visual={<Ring value={dashboard.syllabusPercent} />} />
       </div>
 

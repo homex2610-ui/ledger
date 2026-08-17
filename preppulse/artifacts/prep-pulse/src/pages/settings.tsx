@@ -9,6 +9,7 @@ import { GoogleSignInButton, DiscordOAuthButton } from '@/components/oauth-butto
 import { Avatar } from '@/components/avatar';
 import { getGisCsrfToken, initialsFor } from '@/lib/utils';
 import { applyTemplate, applyTheme, getStoredTemplate, getStoredTheme, type AppTemplate, type AppTheme } from '@/lib/theme';
+import { formatMinutes, formatPace, formatWeekShare } from '@/lib/format-duration';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -212,6 +213,7 @@ export default function Settings() {
           <label className="block"><span className="mb-1.5 block text-xs font-bold">Daily goal (minutes)</span><NumberField value={profile.dailyGoalMinutes} min={1} max={720} onCommit={(value) => updateField('dailyGoalMinutes')(value)} testId="input-profile-daily" /></label>
           <label className="block"><span className="mb-1.5 block text-xs font-bold">Weekly goal (minutes)</span><NumberField value={profile.weeklyGoalMinutes} min={1} max={5040} onCommit={(value) => updateField('weeklyGoalMinutes')(value)} testId="input-profile-weekly" /></label>
         </div>
+        <p className="mt-4 rounded-xl border border-border/70 bg-secondary/35 px-4 py-3 font-mono-custom text-[11px] leading-relaxed text-muted-foreground" data-testid="goal-readout">{formatMinutes(profile.dailyGoalMinutes)} a day · {formatMinutes(profile.weeklyGoalMinutes)} a week · {formatPace(profile.weeklyGoalMinutes, 7)} across 7 days · {formatWeekShare(profile.weeklyGoalMinutes)}</p>
       </Card>
 
       <Card className="p-5 md:p-7"><SectionTitle eyebrow="Preferences" title="How Ledger shows up" action={<SavingLabel pending={updateProfile.isPending} />} /><div className="divide-y divide-border/70"><SettingRow icon={<Focus size={17} />} title="Focus mode" detail="Keep your rank and activity out of the weekly circle." enabled={values.focusMode ?? false} onToggle={() => update({ focusMode: !values.focusMode })} testId="switch-focus-mode" /><SettingRow icon={values.showOnLeaderboard ? <Eye size={17} /> : <EyeOff size={17} />} title="Show me on leaderboard" detail="Let your friends see your handle and weekly pulse." enabled={values.showOnLeaderboard ?? true} onToggle={() => update({ showOnLeaderboard: !values.showOnLeaderboard })} testId="switch-leaderboard-visibility" /></div></Card>
