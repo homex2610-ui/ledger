@@ -16,8 +16,19 @@ export function ProgressBar({ value, color = 'primary', locked = false, classNam
   return <div className={`h-2 overflow-hidden rounded-full bg-secondary ${className}`}><div className={`progress-fill h-full rounded-full ${background}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>;
 }
 
-export function StatTile({ label, value, detail, accent = false }: { label: string; value: string; detail: string; accent?: boolean }) {
-  return <Card className={`p-4 ${accent ? 'border-primary/20 bg-primary text-primary-foreground' : ''}`}><p className={`font-mono-custom text-[10px] uppercase tracking-[.15em] ${accent ? 'text-primary-foreground/65' : 'text-muted-foreground'}`}>{label}</p><p className="mt-2 font-display text-3xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-xs ${accent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{detail}</p></Card>;
+export function StatTile({ label, value, detail, accent = false, visual }: { label: string; value: string; detail: string; accent?: boolean; visual?: ReactNode }) {
+  return (
+    <Card className={`p-4 ${accent ? 'border-primary/20 bg-primary text-primary-foreground' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`font-mono-custom text-[10px] uppercase tracking-[.15em] ${accent ? 'text-primary-foreground/65' : 'text-muted-foreground'}`}>{label}</p>
+          <p className="mt-2 font-display text-3xl font-bold tracking-tight">{value}</p>
+          <p className={`mt-1 text-xs ${accent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{detail}</p>
+        </div>
+        {visual && <div className="shrink-0">{visual}</div>}
+      </div>
+    </Card>
+  );
 }
 
 export function LoadingBlock({ className = 'h-24' }: { className?: string }) { return <div className={`skeleton rounded-2xl ${className}`} aria-label="Loading" data-testid="loading-block" />; }

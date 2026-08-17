@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { browserTimeZone } from '@/lib/utils';
 import { subjectColor } from '@/lib/subject-colors';
 import { Card, EmptyState, ErrorState, LoadingBlock } from '@/components/ui-elements';
+import { DotStrip, Sparkline } from '@/components/mini-charts';
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -59,7 +60,7 @@ function chronotypeIcon(bucket: string) {
   return <Sunset size={20} />;
 }
 
-function MetricCard({ icon, label, value, caption, highlighted = false }: { icon: React.ReactNode; label: string; value: string; caption: string; highlighted?: boolean }) {
+function MetricCard({ icon, label, value, caption, highlighted = false, visual }: { icon: React.ReactNode; label: string; value: string; caption: string; highlighted?: boolean; visual?: React.ReactNode }) {
   return (
     <div className={`rounded-2xl border p-4 ${highlighted ? 'border-warm/40 bg-warm/10' : 'border-border/80 bg-card'}`}>
       <div className="flex items-start justify-between gap-3">
@@ -68,6 +69,7 @@ function MetricCard({ icon, label, value, caption, highlighted = false }: { icon
       </div>
       <p className="mt-3 text-2xl font-medium tracking-tight">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
+      {visual && <div className="mt-3">{visual}</div>}
     </div>
   );
 }
@@ -145,11 +147,11 @@ export function Stats() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard highlighted icon={<Flame size={20} />} label="Study streak" value={`${stats.streak}d`} caption="days in a row" />
+            <MetricCard highlighted icon={<Flame size={20} />} label="Study streak" value={`${stats.streak}d`} caption="days in a row" visual={<DotStrip total={14} filled={Math.min(stats.streak, 14)} />} />
             <MetricCard icon={<Timer size={20} />} label="Focused today" value={fmtMinutes(stats.todayMinutes)} caption="logged today" />
-            <MetricCard icon={<CalendarDays size={20} />} label="7-day average" value={fmtMinutes(stats.avg7)} caption="min per day, last 7 days" />
+            <MetricCard icon={<CalendarDays size={20} />} label="7-day average" value={fmtMinutes(stats.avg7)} caption="min per day, last 7 days" visual={<Sparkline values={stats.momentum.slice(-7).map((day) => day.minutes)} className="h-7 w-full" />} />
             <MetricCard icon={<TrendingUp size={20} />} label="7-day peak" value={fmtMinutes(stats.peak7)} caption="best day, last 7 days" />
-            <MetricCard icon={<Target size={20} />} label="Consistency" value={`${stats.consistency30}%`} caption="days with focus, last 30 days" />
+            <MetricCard icon={<Target size={20} />} label="Consistency" value={`${stats.consistency30}%`} caption="days with focus, last 30 days" visual={<DotStrip total={30} filled={Math.round((stats.consistency30 / 100) * 30)} dotClassName="h-1 w-1" />} />
             <MetricCard icon={<Hourglass size={20} />} label="Avg session length" value={fmtMinutes(stats.avgSessionMinutes30)} caption="per session, last 30 days" />
             <MetricCard icon={chronotypeIcon(stats.chronotype?.bucket ?? '')} label="Chronotype" value={stats.chronotype?.label ?? '—'} caption="weighted by focus hours, last 30 days" />
             <MetricCard icon={<CalendarDays size={20} />} label="Weekend vs weekday" value={`${fmtHours(stats.weekendMinutes30)} / ${fmtHours(stats.weekdayMinutes30)}`} caption="weekend / weekday, last 30 days" />

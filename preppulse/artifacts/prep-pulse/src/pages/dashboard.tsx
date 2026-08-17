@@ -2,6 +2,7 @@ import { ArrowRight, Flame, Play, Sparkles, Target, TrendingUp } from 'lucide-re
 import { Link } from 'wouter';
 import { useGetDashboard } from '@workspace/api-client-react';
 import { Card, ButtonLink, ErrorState, LoadingBlock, ProgressBar, SectionTitle, StatTile } from '@/components/ui-elements';
+import { BarStrip, DotStrip, Ring, Sparkline } from '@/components/mini-charts';
 import { browserTimeZone } from '@/lib/utils';
 
 export default function Dashboard() {
@@ -17,16 +18,22 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="rise-in flex flex-col justify-between gap-5 md:flex-row md:items-end">
-        <div><p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Your next right step</p><h1 className="mt-2 max-w-2xl font-display text-4xl font-bold leading-[.98] tracking-[-.045em] md:text-6xl">{dashboard.greeting || 'Good morning, Aarav.'}</h1><p className="mt-4 text-sm text-muted-foreground">{dashboard.examLabel} <span className="mx-2 text-border">/</span> target {dashboard.targetYear} <span className="mx-2 text-border">/</span> {dashboard.daysLeft} days in view</p></div>
-        <Link href="/study" data-testid="link-start-focus" className="group inline-flex w-fit items-center gap-3 rounded-xl bg-accent px-4 py-3 text-sm font-bold text-accent-foreground shadow-sm transition-transform hover:-translate-y-0.5"><Play size={16} fill="currentColor" /> Start a focus block <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></Link>
+      <div className="rise-in flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div>
+          <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Overview</p>
+          <p className="mt-1 text-sm text-muted-foreground">{dashboard.examLabel} <span className="mx-2 text-border">/</span> target {dashboard.targetYear}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-full border border-primary/20 bg-primary/5 px-3.5 py-2 font-mono-custom text-[10px] font-bold uppercase tracking-[.12em] text-primary" data-testid="days-left-pill">{dashboard.daysLeft} days to {dashboard.examLabel}</span>
+          <Link href="/study" data-testid="link-start-focus" className="group inline-flex w-fit items-center gap-3 rounded-xl bg-accent px-4 py-2.5 text-sm font-bold text-accent-foreground shadow-sm transition-transform hover:-translate-y-0.5"><Play size={16} fill="currentColor" /> Start a focus block <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></Link>
+        </div>
       </div>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Daily pulse" value={`${dashboard.todayMinutes}m`} detail={`${dashboard.todayGoalMinutes - dashboard.todayMinutes > 0 ? `${dashboard.todayGoalMinutes - dashboard.todayMinutes}m left` : 'target met'} of ${dashboard.todayGoalMinutes}m`} accent />
-        <StatTile label="Current streak" value={`${dashboard.streak} days`} detail="one session at a time" />
-        <StatTile label="This week" value={`${dashboard.weeklyMinutes}m`} detail={`${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes > 0 ? `${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes}m to go` : 'weekly target met'}`} />
-        <StatTile label="Syllabus covered" value={`${dashboard.syllabusPercent}%`} detail={`${dashboard.masteredTopics} of ${dashboard.totalTopics} topics mastered`} />
+        <StatTile label="Daily pulse" value={`${dashboard.todayMinutes}m`} detail={`${dashboard.todayGoalMinutes - dashboard.todayMinutes > 0 ? `${dashboard.todayGoalMinutes - dashboard.todayMinutes}m left` : 'target met'} of ${dashboard.todayGoalMinutes}m`} accent visual={<Sparkline values={dashboard.activity7d.map((day) => day.minutes)} className="h-8 w-24" strokeClass="stroke-primary-foreground/80" areaClass="fill-primary-foreground/10" dotClass="fill-primary-foreground" />} />
+        <StatTile label="Current streak" value={`${dashboard.streak} days`} detail="one session at a time" visual={<DotStrip total={7} filled={Math.min(dashboard.streak, 7)} />} />
+        <StatTile label="This week" value={`${dashboard.weeklyMinutes}m`} detail={`${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes > 0 ? `${dashboard.weeklyGoalMinutes - dashboard.weeklyMinutes}m to go` : 'weekly target met'}`} visual={<BarStrip values={dashboard.activity7d.map((day) => day.minutes)} />} />
+        <StatTile label="Syllabus covered" value={`${dashboard.syllabusPercent}%`} detail={`${dashboard.masteredTopics} of ${dashboard.totalTopics} topics mastered`} visual={<Ring value={dashboard.syllabusPercent} />} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_.85fr]">
@@ -63,5 +70,5 @@ export default function Dashboard() {
 }
 
 function DashboardSkeleton() {
-  return <div className="mx-auto max-w-6xl"><div className="skeleton h-32 w-3/4 rounded-2xl" /><div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[1, 2, 3, 4].map((n) => <LoadingBlock key={n} className="h-32" />)}</div><div className="mt-6 grid gap-6 lg:grid-cols-2"><LoadingBlock className="h-64" /><LoadingBlock className="h-64" /></div></div>;
+  return <div className="mx-auto max-w-6xl"><div className="skeleton h-14 w-full rounded-2xl" /><div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[1, 2, 3, 4].map((n) => <LoadingBlock key={n} className="h-32" />)}</div><div className="mt-6 grid gap-6 lg:grid-cols-2"><LoadingBlock className="h-64" /><LoadingBlock className="h-64" /></div></div>;
 }
