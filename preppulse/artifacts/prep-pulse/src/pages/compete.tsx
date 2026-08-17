@@ -30,7 +30,7 @@ import {
   type GroupSummary,
   type LeaderboardEntry,
 } from '@workspace/api-client-react';
-import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle } from '@/components/ui-elements';
+import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle, StatTile } from '@/components/ui-elements';
 import { Avatar, avatarColorFor } from '@/components/avatar';
 import { browserTimeZone } from '@/lib/utils';
 
@@ -39,6 +39,7 @@ type Scope = 'private' | 'cohort';
 
 const SESSION_TAB_KEY = 'pp-compete-tab';
 const PREV_RANK_KEY = 'pp-prev-rank';
+const rankDeltaByHandle = new Map<string, number | null>();
 
 let podiumStagedOnce = false;
 let pinnedDrawnOnce = false;
@@ -59,7 +60,7 @@ export default function Compete() {
   const [tab, setTab] = useState<Tab>('board');
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-[1200px]">
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Compare gently</p>
@@ -88,7 +89,7 @@ export default function Compete() {
 // ---------------------------------------------------------------------------
 
 function BoardTab() {
-  return <div className="mx-auto max-w-[600px] space-y-6"><CompetePanel /></div>;
+  return <CompetePanel />;
 }
 
 function CompetePanel() {
@@ -115,15 +116,17 @@ function CompetePanel() {
   if (!scope) return <LoadingBlock className="h-80" />;
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-border/80 bg-card p-4">
+    <div className="space-y-6 lg:space-y-8">
+      <section className="rounded-2xl border border-border/80 bg-card p-4 md:p-5">
         <SegmentedToggle scope={scope} onChange={changeScope} />
-        <div className="pp-tab-fade mt-4" key={scope}>
+        <div className="pp-tab-fade mt-5" key={scope}>
           {scope === 'private' ? <PrivateTab /> : <CohortTab />}
         </div>
       </section>
-      <ThePointCard scope={scope} />
-      <YourBoundaryCard scope={scope} />
+      <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+        <ThePointCard scope={scope} />
+        <YourBoundaryCard scope={scope} />
+      </div>
     </div>
   );
 }
@@ -179,12 +182,14 @@ function useRankDelta(handle: string | undefined, rank: number | undefined): num
   const [delta, setDelta] = useState<number | null>(null);
   useEffect(() => {
     if (!handle || !rank) return;
+    const cached = rankDeltaByHandle.get(handle);
+    if (cached !== undefined) { setDelta(cached); return; }
     try {
       const raw = localStorage.getItem(PREV_RANK_KEY);
       const prev = raw ? JSON.parse(raw) as { handle?: string; rank?: number } : null;
-      let next: number | null = null;
-      if (prev && prev.handle === handle && typeof prev.rank === 'number' && prev.rank !== rank) next = rank - prev.rank;
+      const next = prev && prev.handle === handle && typeof prev.rank === 'number' && prev.rank !== rank ? rank - prev.rank : null;
       localStorage.setItem(PREV_RANK_KEY, JSON.stringify({ handle, rank }));
+      rankDeltaByHandle.set(handle, next);
       setDelta(next);
     } catch { /* storage unavailable */ }
   }, [handle, rank]);
@@ -231,7 +236,7 @@ function RankedBoard({ entries, weekLabel, focused, streakByHandle, avatarColorB
   if (loading) return <BoardSkeleton />;
   if (error) return <ErrorState onRetry={onRetry} />;
   return (
-    <section className="rounded-xl border border-border/70 bg-background/60 p-4">
+    <section className="rounded-xl border border-border/70 bg-background/60 p-5 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-extrabold text-foreground">Leaderboard</h2>
@@ -258,9 +263,9 @@ function RankedBoard({ entries, weekLabel, focused, streakByHandle, avatarColorB
 }
 
 const PODIUM_TIERS: Record<number, { card: string; flame: string }> = {
-  1: { card: 'border-amber-400/60 bg-amber-400/10', flame: 'text-amber-500' },
-  2: { card: 'border-slate-300/70 bg-slate-300/10', flame: 'text-slate-400' },
-  3: { card: 'border-orange-300/70 bg-orange-300/10', flame: 'text-orange-500' },
+  1: { card: 'border-amber-400/70 bg-gradient-to-b from-amber-400/25 via-amber-400/10 to-transparent shadow-[0_0_0_1px_hsl(45_93%_47%/.08),0_10px_32px_hsl(45_93%_47%/.18)]', flame: 'text-amber-500' },
+  2: { card: 'border-slate-300/70 bg-gradient-to-b from-slate-300/25 via-slate-300/10 to-transparent', flame: 'text-slate-400' },
+  3: { card: 'border-orange-300/70 bg-gradient-to-b from-orange-300/25 via-orange-300/10 to-transparent', flame: 'text-orange-500' },
 };
 
 const PODIUM_DELAY: Record<number, number> = { 3: 0, 2: 60, 1: 120 };
@@ -274,7 +279,7 @@ function Podium({ entries, streakByHandle, avatarColorByHandle }: { entries: Lea
   if (!present.length) return null;
   const grid = present.length === 1 ? 'grid-cols-1 max-w-xs' : present.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
   return (
-    <ol aria-label="Top 3" className={`mx-auto mt-4 grid ${grid} gap-2`}>
+    <ol aria-label="Top 3" className={`mx-auto mt-5 grid ${grid} gap-2 md:gap-3`}>
       {present.map((entry) => (
         <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} tier={PODIUM_TIERS[entry.rank] ?? PODIUM_TIERS[1]} streak={streakByHandle.get(entry.handle) ?? 0} avatarClass={avatarColorByHandle.get(entry.handle)} animate={animate} delay={PODIUM_DELAY[entry.rank] ?? 0} />
       ))}
@@ -292,13 +297,13 @@ function PodiumCard({ entry, tier, streak, avatarClass, animate, delay }: { entr
   const score = useCountUp(entry.score, animate);
   const isFirst = entry.rank === 1;
   return (
-    <li className={`relative rounded-2xl border p-4 text-center ${tier.card}`} style={{ opacity: staged ? 1 : 0, transform: staged ? 'none' : 'translateY(8px)', transition: 'opacity 200ms ease-out, transform 200ms ease-out', transitionDelay: `${delay}ms` }} data-testid={`podium-${entry.rank}`}>
+    <li className={`relative rounded-2xl border p-4 text-center transition-[opacity,transform,box-shadow] duration-200 ease-out md:p-5 ${tier.card} ${staged ? 'hover:-translate-y-1 hover:shadow-lg' : ''}`} style={{ opacity: staged ? 1 : 0, transform: staged ? undefined : 'translateY(8px)', transitionDelay: `${delay}ms` }} data-testid={`podium-${entry.rank}`}>
       {isFirst && <Trophy size={15} className="absolute right-3 top-3 text-amber-500" />}
       <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-muted-foreground">Rank {String(entry.rank).padStart(2, '0')}</p>
-      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-3 h-14 w-14 text-base ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
-      <p className="mt-2.5 truncate text-sm font-bold text-foreground">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
-      <p className="mt-0.5 text-lg font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{score}</p>
-      <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+      <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-3 h-14 w-14 text-base md:h-16 md:w-16 md:text-lg ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
+      <p className="mt-2.5 truncate text-sm font-bold text-foreground md:mt-3 md:text-base">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
+      <p className="mt-0.5 text-lg font-extrabold text-foreground md:mt-1 md:text-2xl" title="Pulse = minutes studied + 30 × topics moved this week">{score}</p>
+      <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground md:mt-1">
         {streak > 0 && <span className={`inline-flex items-center gap-0.5 ${tier.flame} ${isFirst ? 'flame-breathe' : ''}`} title={`${streak}-day streak`}><Flame size={11} fill="currentColor" />{streak}</span>}
         <span>{entry.hours}h · {entry.topics} topics</span>
       </p>
@@ -327,7 +332,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
   const toggleClass = 'mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/60 px-4 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
   return (
-    <ol className="mt-3" aria-label="Ranked leaderboard">
+    <ol className="mt-4 divide-y divide-border/40" aria-label="Ranked leaderboard">
       {visibleTop.map((entry) => (
         <li key={`${entry.rank}-${entry.handle}`}>
           <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
@@ -348,7 +353,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
       )}
       <li>
         <div className="grid transition-[grid-template-rows] duration-200 ease-out" style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}>
-          <ol aria-label="Remaining ranks" className={`min-h-0 overflow-hidden ${expanded ? '' : 'invisible'}`} aria-hidden={!expanded}>
+          <ol aria-label="Remaining ranks" className={`min-h-0 divide-y divide-border/40 overflow-hidden ${expanded ? '' : 'invisible'}`} aria-hidden={!expanded}>
             {extras.map((entry) => (
               <li key={`${entry.rank}-${entry.handle}`}>
                 <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
@@ -376,7 +381,7 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, removable, onRe
   delta?: number | null;
 }) {
   return (
-    <div className="flex items-center gap-3 py-2.5" data-testid={`row-leaderboard-${entry.handle}`}>
+    <div className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 transition-[background-color,transform] duration-150 hover:-translate-y-px hover:bg-secondary/70" data-testid={`row-leaderboard-${entry.handle}`}>
       <span className="w-6 shrink-0 text-right font-mono-custom text-sm font-bold text-muted-foreground">{entry.rank}</span>
       <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarColorByHandle.get(entry.handle) ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
       <div className="min-w-0 flex-1">
@@ -409,7 +414,7 @@ function PinnedRow({ entry, streak, delta, avatarClass }: { entry: LeaderboardEn
     return () => cancelAnimationFrame(raf);
   }, [animate]);
   return (
-    <div className="relative mt-1 flex items-center gap-3 py-2.5 pl-3.5" data-testid={`row-leaderboard-${entry.handle}`}>
+    <div className="relative -mx-2 mt-1 flex items-center gap-3 rounded-xl px-2 py-3 pl-3.5 transition-[background-color,transform] duration-150 hover:-translate-y-px hover:bg-secondary/70" data-testid={`row-leaderboard-${entry.handle}`}>
       <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-accent" style={{ transform: drawn ? 'scaleY(1)' : 'scaleY(0)', transformOrigin: 'top', transition: 'transform 200ms ease-out' }} />
       <span className="w-6 shrink-0 text-right font-mono-custom text-sm font-bold text-foreground">{entry.rank}</span>
       <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
@@ -435,6 +440,28 @@ function BoardSkeleton() {
       </div>
       <div className="skeleton h-24 rounded-xl" />
       <div className="skeleton h-24 rounded-xl" />
+    </div>
+  );
+}
+
+function BoardStats({ entries, streak }: { entries: LeaderboardEntry[]; streak: number | undefined }) {
+  const self = entries.find((entry) => entry.isCurrentUser);
+  const delta = useRankDelta(self?.handle, self?.rank);
+  const tiles: { label: string; value: string; detail: string; accent: boolean }[] = [];
+  if (streak && streak > 0) tiles.push({ label: 'Streak', value: `${streak}d`, detail: 'days studied in a row', accent: false });
+  if (self) {
+    tiles.push({ label: 'Pulse this week', value: `${self.score}`, detail: 'minutes + 30 × topics moved', accent: true });
+    const detail = delta === null || delta === 0 ? 'holding steady' : delta < 0 ? `up ${-delta} since your last visit` : `down ${delta} since your last visit`;
+    tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail, accent: false });
+  }
+  if (!tiles.length) return null;
+  return (
+    <div className="flex flex-wrap gap-3" data-testid="board-stats">
+      {tiles.map((tile) => (
+        <div key={tile.label} className="min-w-[150px] flex-1">
+          <StatTile {...tile} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -509,8 +536,10 @@ function PrivateTab() {
   const board = leaderboardQuery.data;
 
   return (
-    <div role="tabpanel" id="panel-private" aria-labelledby="tab-private" className="space-y-3">
-      <section className="rounded-xl border border-border/70 bg-background/60 p-4" id="connections-card">
+    <div role="tabpanel" id="panel-private" aria-labelledby="tab-private" className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+      <div className="min-w-0 space-y-4">
+        <BoardStats entries={board?.entries ?? []} streak={streakByHandle.get(self.handle)} />
+        <section className="rounded-xl border border-border/70 bg-background/60 p-4" id="connections-card">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-extrabold text-foreground">Your private circle</h2>
           <p className="font-mono-custom text-xs font-bold tabular-nums text-muted-foreground" data-testid="circle-member-count">{memberCount} / {capacity}</p>
@@ -538,26 +567,27 @@ function PrivateTab() {
           <button type="button" onClick={copyCode} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-empty-copy-code">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy your invite code'}</button>
         </section>
       ) : (
-        <>
-          <RankedBoard
-            entries={board?.entries ?? []}
-            weekLabel={board?.weekLabel}
-            focused={board?.focused ?? false}
-            streakByHandle={streakByHandle}
-            avatarColorByHandle={avatarColorByHandle}
-            loading={leaderboardQuery.isLoading}
-            error={leaderboardQuery.isError}
-            onRetry={() => leaderboardQuery.refetch()}
-            removableByHandle={removableByHandle}
-            onRemove={(userId) => remove.mutate({ userId }, { onSuccess: refresh })}
-            ownerHandle={ownerHandle}
-            emptyTitle="No one on the board yet"
-            emptyDetail="Your weekly minutes and topic moves decide the score. Invite a friend to fill the board."
-          />
-          <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />
-        </>
+        <RankedBoard
+          entries={board?.entries ?? []}
+          weekLabel={board?.weekLabel}
+          focused={board?.focused ?? false}
+          streakByHandle={streakByHandle}
+          avatarColorByHandle={avatarColorByHandle}
+          loading={leaderboardQuery.isLoading}
+          error={leaderboardQuery.isError}
+          onRetry={() => leaderboardQuery.refetch()}
+          removableByHandle={removableByHandle}
+          onRemove={(userId) => remove.mutate({ userId }, { onSuccess: refresh })}
+          ownerHandle={ownerHandle}
+          emptyTitle="No one on the board yet"
+          emptyDetail="Your weekly minutes and topic moves decide the score. Invite a friend to fill the board."
+        />
       )}
       <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week. Circle only — no strangers.</p>
+      </div>
+      <aside className="min-w-0 xl:sticky xl:top-24" aria-label="Circle activity sidebar">
+        {!alone && <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />}
+      </aside>
     </div>
   );
 }
@@ -588,10 +618,13 @@ function CohortTab() {
   const avatarColorByHandle = new Map(members.map((member: CohortMemberRow) => [member.handle, avatarColorFor(member.userId)]));
   const board = leaderboardQuery.data;
   const alone = memberCount <= 1;
+  const selfEntry = board?.entries.find((entry) => entry.isCurrentUser);
 
   return (
-    <div role="tabpanel" id="panel-cohort" aria-labelledby="tab-cohort" className="space-y-3" data-testid="cohort-section">
-      <section className="rounded-xl border border-border/70 bg-background/60 p-4" data-testid="cohort-card">
+    <div role="tabpanel" id="panel-cohort" aria-labelledby="tab-cohort" className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start" data-testid="cohort-section">
+      <div className="min-w-0 space-y-4">
+        <BoardStats entries={board?.entries ?? []} streak={selfEntry ? streakByHandle.get(selfEntry.handle) : undefined} />
+        <section className="rounded-xl border border-border/70 bg-background/60 p-4" data-testid="cohort-card">
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-1.5 text-sm font-extrabold text-foreground"><Users size={14} className="text-primary" /> Cohort size</h2>
           <p className="font-mono-custom text-xs font-bold tabular-nums text-muted-foreground" data-testid="cohort-member-count">{memberCount} of {capacity}</p>
@@ -608,23 +641,24 @@ function CohortTab() {
           <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">Others who joined around the same time will appear here. Your board and activity stay private until then.</p>
         </section>
       ) : (
-        <>
-          <RankedBoard
-            entries={board?.entries ?? []}
-            weekLabel={board?.weekLabel}
-            focused={board?.focused ?? false}
-            streakByHandle={streakByHandle}
-            avatarColorByHandle={avatarColorByHandle}
-            loading={leaderboardQuery.isLoading}
-            error={leaderboardQuery.isError}
-            onRetry={() => leaderboardQuery.refetch()}
-            emptyTitle="No one on the board yet"
-            emptyDetail="The board fills as your cohort studies."
-          />
-          <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={feedQuery.data ?? []} emptyText="Activity from your cohort will appear here." />
-        </>
+        <RankedBoard
+          entries={board?.entries ?? []}
+          weekLabel={board?.weekLabel}
+          focused={board?.focused ?? false}
+          streakByHandle={streakByHandle}
+          avatarColorByHandle={avatarColorByHandle}
+          loading={leaderboardQuery.isLoading}
+          error={leaderboardQuery.isError}
+          onRetry={() => leaderboardQuery.refetch()}
+          emptyTitle="No one on the board yet"
+          emptyDetail="The board fills as your cohort studies."
+        />
       )}
       <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">You're grouped with others who joined around the same time. Not searchable, no name lookup — it's view-only: you see each other's weekly board and activity, nothing else.</p>
+      </div>
+      <aside className="min-w-0 xl:sticky xl:top-24" aria-label="Cohort activity sidebar">
+        {!alone && <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={feedQuery.data ?? []} emptyText="Activity from your cohort will appear here." />}
+      </aside>
     </div>
   );
 }
@@ -712,7 +746,7 @@ function FeedCard({ eyebrow, title, items, emptyText }: { eyebrow: string; title
     if (newly.size) setFreshKeys(newly);
   }, [items]);
   return (
-    <section className="rounded-xl border border-border/70 bg-background/60 p-4">
+    <section className="rounded-xl border border-border/70 bg-background/60 p-5 md:p-6">
       <h2 className="text-sm font-extrabold text-foreground">{title}</h2>
       <p className="mt-0.5 text-xs font-medium text-muted-foreground">{eyebrow}</p>
       {groups.length ? (
@@ -732,7 +766,7 @@ function FeedCard({ eyebrow, title, items, emptyText }: { eyebrow: string; title
 
 function ThePointCard({ scope }: { scope: Scope }) {
   return (
-    <Card className="p-5 md:p-7">
+    <Card className="p-6 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-8">
       <SectionTitle eyebrow="The point" title="Effort is the scoreboard" action={<Trophy size={17} className="text-primary" />} />
       <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? "Pulse combines focused minutes and topics moved forward. Only the people in your private circle can see it — there's no public scoreboard." : "Pulse combines focused minutes and topics moved forward. Your cohort only ever sees your weekly board — no profiles, no messages, nothing else."}</p>
     </Card>
@@ -741,7 +775,7 @@ function ThePointCard({ scope }: { scope: Scope }) {
 
 function YourBoundaryCard({ scope }: { scope: Scope }) {
   return (
-    <Card className="p-5 md:p-7">
+    <Card className="p-6 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-8">
       <SectionTitle eyebrow="Your boundary" title="Change visibility in settings" />
       <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? 'Focus mode hides comparison UI while keeping your own progress private and intact. Leaderboard visibility is opt-in — even within your circle.' : 'Focus mode hides your rank and pulse from the cohort board too. Comparison stays opt-in everywhere, no exceptions.'}</p>
     </Card>
