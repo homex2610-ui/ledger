@@ -10,6 +10,7 @@ import { toProfileShape } from "../lib/prep-stats.js";
 import { GoogleVerificationError, verifyGoogleCredential } from "../lib/oauth/google.js";
 import { DiscordOAuthError, discordAvatarUrl, exchangeDiscordCode, fetchDiscordUser, getDiscordAuthorizeUrl, joinDiscordGuild } from "../lib/oauth/discord.js";
 import { loadOAuthConfig } from "../lib/oauth/config.js";
+import { logger } from "../lib/logger.js";
 import {
   AlreadyLinkedError,
   countSignInMethods,
@@ -179,7 +180,8 @@ router.get("/discord/callback", async (req, res) => {
   const { code, state } = req.query;
   const storedState = req.cookies?.[OAUTH_STATE_COOKIE];
   if (typeof code !== "string" || code.length === 0 || typeof state !== "string" || !storedState || storedState !== state) {
-    res.status(400).json({ error: "Discord sign-in state does not match. Try again.", code: "state_mismatch" });
+    logger.warn(`[oauth] discord state mismatch (code=${typeof code}, state=${typeof state}, cookie=${Boolean(storedState)})`);
+    res.redirect(`${redirectBase(req)}/?oauth=error&provider=discord&reason=state_mismatch`);
     return;
   }
 
@@ -192,10 +194,20 @@ router.get("/discord/callback", async (req, res) => {
   try {
     const redirectUri = buildRedirectUri(req);
     accessToken = await exchangeDiscordCode(code, redirectUri);
+  } catch (error) {
+    if (error instanceof DiscordOAuthError) {
+      logger.warn(`[oauth] discord code exchange failed: ${error.message}`);
+      res.redirect(`${redirectBase(req)}/?oauth=error&provider=discord&reason=exchange_failed`);
+      return;
+    }
+    throw error;
+  }
+  try {
     identity = await fetchDiscordUser(accessToken);
   } catch (error) {
     if (error instanceof DiscordOAuthError) {
-      res.redirect(`${redirectBase(req)}/?oauth=error&provider=discord`);
+      logger.warn(`[oauth] discord identity fetch failed: ${error.message}`);
+      res.redirect(`${redirectBase(req)}/?oauth=error&provider=discord&reason=identity_failed`);
       return;
     }
     throw error;

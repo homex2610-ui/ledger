@@ -26,6 +26,7 @@ function useOauthQueryNotice(): string | null {
     const params = new URLSearchParams(window.location.search);
     const oauth = params.get('oauth');
     const provider = params.get('provider');
+    const reason = params.get('reason');
     if (!oauth) return;
     window.history.replaceState({}, '', window.location.pathname);
     try {
@@ -35,7 +36,11 @@ function useOauthQueryNotice(): string | null {
       /* storage unavailable */
     }
     const providerLabel = provider === 'google' ? 'Google' : provider === 'discord' ? 'Discord' : null;
-    if (oauth === 'error') setNotice(`${providerLabel ? providerLabel + ' ' : ''}sign-in failed. Try again.`);
+    if (oauth === 'error') {
+      if (provider === 'discord' && reason === 'state_mismatch') setNotice('Discord sign-in expired. Go back and try again.');
+      else if (provider === 'discord' && (reason === 'exchange_failed' || reason === 'identity_failed')) setNotice('Discord rejected the sign-in. Try again in a moment.');
+      else setNotice(`${providerLabel ? providerLabel + ' ' : ''}sign-in failed. Try again.`);
+    }
     if (oauth === 'conflict') setNotice(`This email already belongs to an account. If it\u2019s your account, sign in with your email and password, or use \u201cForgot password?\u201d to reset it \u2014 then connect ${providerLabel ?? 'the provider'} in Settings.`);
     if (oauth === 'success') setNotice('Signed in.');
   }, []);
@@ -148,11 +153,20 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
       const result = await discordAuthorize.refetch();
       if (result.data?.url) {
         window.location.href = result.data.url;
-      } else {
-        setError('Discord sign-in is unavailable right now.');
+        return;
       }
-    } catch {
       setError('Discord sign-in is unavailable right now.');
+    } catch (err) {
+      const data = err instanceof ApiError ? (err.data as { error?: string; code?: string } | null) : null;
+      const code = data?.code;
+      if (code === 'rate_limited') {
+        setError('Too many sign-in attempts. Wait a few minutes and try again.');
+      } else if (code === 'provider_unavailable') {
+        setError('Discord sign-in isn\u2019t configured yet.');
+      } else {
+        console.error('Discord sign-in error:', err);
+        setError(data?.error ?? 'Discord sign-in is unavailable right now. Try again in a moment.');
+      }
     }
   };
 

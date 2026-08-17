@@ -116,11 +116,18 @@ export default function Settings() {
       const result = await discordAuthorizeLink.refetch();
       if (result.data?.url) {
         window.location.href = result.data.url;
-      } else {
-        setOauthError('Discord is unavailable right now.');
+        return;
       }
-    } catch {
       setOauthError('Discord is unavailable right now.');
+    } catch (err) {
+      const data = err instanceof ApiError ? (err.data as { error?: string; code?: string } | null) : null;
+      const code = data?.code;
+      if (code === 'rate_limited') setOauthError('Too many attempts. Wait a few minutes and try again.');
+      else if (code === 'provider_unavailable') setOauthError('Discord isn\u2019t configured yet.');
+      else {
+        console.error('Discord link error:', err);
+        setOauthError(data?.error ?? 'Discord is unavailable right now.');
+      }
     }
   };
 

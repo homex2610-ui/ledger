@@ -56,7 +56,12 @@ export async function exchangeDiscordCode(code: string, redirectUri: string): Pr
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: body.toString(),
   });
-  if (!res.ok) throw new DiscordOAuthError("Discord code exchange failed");
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new DiscordOAuthError(
+      `Discord code exchange failed (${res.status})${detail.trim() ? `: ${detail.trim().slice(0, 200)}` : ""}`,
+    );
+  }
   const json = (await res.json()) as { access_token?: string };
   if (!json.access_token) throw new DiscordOAuthError("Discord code exchange returned no token");
   return json.access_token;
@@ -67,7 +72,12 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordIden
   const res = await fetch(`${discordApiUrl}/users/@me`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new DiscordOAuthError("Failed to fetch Discord identity");
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new DiscordOAuthError(
+      `Failed to fetch Discord identity (${res.status})${detail.trim() ? `: ${detail.trim().slice(0, 200)}` : ""}`,
+    );
+  }
   const json = (await res.json()) as {
     id?: string;
     username?: string;
