@@ -5,10 +5,10 @@ import { DashboardBackdrop } from '@/components/dashboard-backdrop';
 import { useOauthQueryNotice } from '@/lib/oauth-notice';
 
 const FEATURES = [
-  { icon: Flame, title: 'Daily pulse', detail: 'One honest number for today, a streak to protect, and targets that stay human even on bad days.' },
-  { icon: ChartArea, title: 'Syllabus coverage', detail: 'Topic-by-topic progress toward JEE Main, Advanced or NEET — weak spots flagged before the exam notices.' },
-  { icon: BrainCircuit, title: 'Spaced recall', detail: 'Cards resurface right when you are about to forget them, on a review schedule you actually control.' },
-  { icon: Trophy, title: 'Compete with your circle', detail: 'Weekly minutes, ranks and a leaderboard shared only with the people who keep you honest.' },
+  { icon: Flame, title: 'Daily pulse', detail: 'A clear number for today, a streak to protect, and weekly targets that stay human.' },
+  { icon: ChartArea, title: 'Syllabus coverage', detail: 'Topic-by-topic progress toward JEE Main, Advanced or NEET, with weak spots flagged early.' },
+  { icon: BrainCircuit, title: 'Spaced recall', detail: 'Cards resurface right when you are about to forget them — review on your own schedule.' },
+  { icon: Trophy, title: 'Compete with your circle', detail: 'Weekly minutes, ranks and a leaderboard with the people who keep you honest.' },
 ];
 
 export default function LandingPage() {
@@ -23,10 +23,7 @@ export default function LandingPage() {
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BrandMark size={40} />
-            <span>
-              <span className="block font-display text-lg font-bold leading-tight tracking-[-.02em]">Ledger</span>
-              <span className="block font-mono-custom text-[9px] uppercase tracking-[.2em] text-muted-foreground/70">keep moving</span>
-            </span>
+            <span className="font-display text-lg font-bold tracking-[-.02em]">Ledger</span>
           </div>
           <Link href="/signin" data-testid="link-landing-signin" className="rounded-xl border border-border bg-card/80 px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-secondary">Sign in</Link>
         </header>
@@ -36,13 +33,11 @@ export default function LandingPage() {
         <main className="flex flex-1 flex-col justify-center py-16">
           <p className="font-mono-custom text-[10px] uppercase tracking-[.28em] text-primary">A study companion for JEE / NEET prep</p>
           <h1 className="mt-4 max-w-2xl font-display text-4xl font-bold leading-[1.02] tracking-[-.04em] md:text-6xl">Every session accounted.<br />Every chapter a step closer.</h1>
-          <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">Ledger turns study hours into a daily pulse, tracks your syllabus and recall, and puts your effort on a weekly leaderboard — with the people who keep you honest.</p>
+          <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">Ledger turns study hours into a daily pulse, tracks syllabus coverage and spaced recall, and puts you on a weekly leaderboard with your circle.</p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link href="/signin" data-testid="link-landing-cta" className="group inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-bold text-accent-foreground shadow-sm transition-transform hover:-translate-y-0.5">Start free <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></Link>
             <Link href="/signin" className="rounded-xl border border-border bg-card/80 px-5 py-3 text-sm font-bold text-foreground transition-colors hover:bg-secondary">Continue with Google</Link>
-            <Link href="/signin" className="rounded-xl px-4 py-3 text-sm font-bold text-muted-foreground transition-colors hover:text-foreground">Sign in with Discord →</Link>
           </div>
-          <p className="mt-4 font-mono-custom text-[9px] uppercase tracking-[.2em] text-muted-foreground/60">No credit card · No ads · Your data stays yours</p>
 
           <div className="mt-16 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map(({ icon: Icon, title, detail }) => (
