@@ -173,7 +173,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
               <div className="flex items-center gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent font-display text-xl font-bold text-accent-foreground shadow-sm">P</span>
                 <span className="flex flex-col gap-0.5">
-                  <span className="font-display text-lg font-bold leading-none tracking-[-.02em]">PrepPulse</span>
+                  <span className="font-display text-lg font-bold leading-none tracking-[-.02em]">Ledger</span>
                   <span className="font-mono-custom text-[9px] uppercase tracking-[.2em] text-muted-foreground">keep moving</span>
                 </span>
               </div>
@@ -187,7 +187,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
           <div className="p-7 md:p-10">
             <div className="mb-6 flex items-center gap-3 md:hidden">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-accent-foreground shadow-sm">P</span>
-              <span className="font-display text-lg font-bold tracking-[-.02em]">PrepPulse</span>
+              <span className="font-display text-lg font-bold tracking-[-.02em]">Ledger</span>
             </div>
             <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Continue as you</p>
             <h1 className="mt-1 font-display text-3xl font-bold tracking-[-.04em]">Sign in to keep your pulse</h1>

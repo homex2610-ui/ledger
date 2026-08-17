@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const me = useGetMe().data;
   const logOut = useLogOut();
-  const activeLabel = navigation.find((item) => item.href === location)?.label ?? 'PrepPulse';
+  const activeLabel = navigation.find((item) => item.href === location)?.label ?? 'Ledger';
   const handle = me?.profile.handle ?? 'Learner';
   const initials = initialsFor(handle);
   const examLabel = getExamConfig(me?.profile.examTrack).label;
@@ -49,9 +49,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="main-grid mx-auto grid min-h-[100dvh] max-w-[1540px] md:h-full md:overflow-hidden">
         <aside className="hidden border-r border-sidebar/30 bg-sidebar px-5 py-7 text-sidebar-foreground md:flex md:flex-col md:overflow-y-auto">
           <Link href="/" className="mb-12 flex items-center gap-3" data-testid="link-brand">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent font-display text-lg font-bold text-white shadow-sm">P</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent font-display text-lg font-bold text-white shadow-sm">L</span>
             <span>
-              <span className="block font-display text-[1.2rem] font-bold tracking-tight">PrepPulse</span>
+              <span className="block font-display text-[1.2rem] font-bold tracking-tight">Ledger</span>
               <span className="font-mono-custom text-[9px] uppercase tracking-[.2em] text-sidebar-foreground/55">keep moving</span>
             </span>
           </Link>
@@ -131,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-40 bg-sidebar/40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
           <div className="h-full w-[82%] max-w-[300px] bg-sidebar p-6 text-sidebar-foreground shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-10 flex items-center justify-between">
-              <span className="font-display text-xl font-bold">PrepPulse</span>
+              <span className="font-display text-xl font-bold">Ledger</span>
               <button type="button" onClick={() => setMobileMenuOpen(false)} className="rounded-lg p-2 text-sidebar-foreground/70" aria-label="Close navigation" data-testid="button-close-menu"><X size={19} /></button>
             </div>
             <nav className="space-y-2">{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMobileMenuOpen(false)} data-testid={`link-drawer-${label.toLowerCase()}`} className={`flex items-center gap-3 rounded-xl px-3 py-3 font-semibold ${location === href ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/70'}`}><Icon size={18} />{label}</Link>)}

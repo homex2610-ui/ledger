@@ -96,6 +96,8 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
     return visibilityById.get(id) !== false;
   });
 
+  let lastScore = Number.NaN;
+  let lastRank = 0;
   const entries = visibleIds
     .map((id) => {
       const info = handles.get(id) ?? { handle: "unknown", initials: "??", avatarUrl: null };
@@ -111,8 +113,14 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
         isCurrentUser: id === currentUserId,
       };
     })
-    .sort((a, b) => b.score - a.score)
-    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    .sort((a, b) => b.score - a.score || a.handle.localeCompare(b.handle))
+    .map((entry, index) => {
+      if (index === 0 || entry.score !== lastScore) {
+        lastScore = entry.score;
+        lastRank = index + 1;
+      }
+      return { ...entry, rank: lastRank };
+    });
 
   return { entries, focused: Boolean(myProfile?.focusMode) };
 }

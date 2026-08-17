@@ -93,7 +93,7 @@ export function OnboardingModal() {
           <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary sm:flex"><Target size={22} /></span>
           <div>
             <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">One-time setup</p>
-            <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">Tell PrepPulse about you</h2>
+            <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">Tell Ledger about you</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">A few details make your prep personal — syllabus, focus mode and your weekly circle will all use them. You can change everything later in Settings.</p>
           </div>
         </div>

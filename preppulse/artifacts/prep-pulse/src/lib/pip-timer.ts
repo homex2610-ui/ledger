@@ -61,7 +61,7 @@ function buildDom(win: Window) {
     </style>
     <div class="pip-top">
       <span class="pip-dot"></span>
-      <span class="pip-status">Focus &middot; PrepPulse</span>
+      <span class="pip-status">Focus &middot; Ledger</span>
     </div>
     <div class="pip-time">00:00:00</div>
     <div class="pip-sub">&mdash;</div>

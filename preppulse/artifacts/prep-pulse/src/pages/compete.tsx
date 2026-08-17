@@ -268,7 +268,8 @@ const PODIUM_DELAY: Record<number, number> = { 3: 0, 2: 60, 1: 120 };
 function Podium({ entries, streakByHandle, avatarColorByHandle }: { entries: LeaderboardEntry[]; streakByHandle: Map<string, number>; avatarColorByHandle: Map<string, string> }) {
   const animate = !podiumStagedOnce && !prefersReducedMotion();
   useEffect(() => { podiumStagedOnce = true; }, []);
-  const byRank = new Map(entries.map((entry) => [entry.rank, entry]));
+  const byRank = new Map<number, LeaderboardEntry>();
+  for (const entry of entries) if (!byRank.has(entry.rank)) byRank.set(entry.rank, entry);
   const present = [2, 1, 3].filter((rank) => byRank.has(rank)).map((rank) => byRank.get(rank) as LeaderboardEntry);
   if (!present.length) return null;
   const grid = present.length === 1 ? 'grid-cols-1 max-w-xs' : present.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
@@ -322,6 +323,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
   const lastRank = ranked.length ? ranked[ranked.length - 1].rank : 0;
   const nextRank = extras.length ? extras[0].rank : 0;
   const delta = useRankDelta(self?.handle, self?.rank);
+  const toggleLabel = nextRank === lastRank ? `Show ${ranked.length} more` : `Show ranks ${nextRank}–${lastRank}`;
   const toggleClass = 'mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/60 px-4 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
   return (
@@ -339,7 +341,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
             </button>
           ) : (
             <button type="button" onClick={() => setExpanded(true)} className={toggleClass}>
-              Show ranks {nextRank}–{lastRank} <ChevronDown size={13} />
+              {toggleLabel} <ChevronDown size={13} />
             </button>
           )}
         </li>

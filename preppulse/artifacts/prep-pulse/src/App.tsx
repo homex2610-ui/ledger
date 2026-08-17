@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthGate } from '@/components/auth-gate';
 import { AppShell } from '@/components/app-shell';
+import { InstallPrompt } from '@/components/install-prompt';
 import Dashboard from '@/pages/dashboard';
 import Syllabus from '@/pages/syllabus';
 import Tests from '@/pages/tests';
@@ -70,6 +71,7 @@ function App() {
           </AuthGate>
         </WouterRouter>
         <Toaster />
+        <InstallPrompt />
       </TooltipProvider>
     </QueryClientProvider>
   );

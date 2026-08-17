@@ -98,7 +98,7 @@ export default function Settings() {
         onError: (err) => {
           const data = err instanceof ApiError ? (err.data as { error?: string; code?: string } | null) : null;
           const code = data?.code;
-          if (code === 'already_linked') setOauthError('This Google account is already linked to another PrepPulse account.');
+          if (code === 'already_linked') setOauthError('This Google account is already linked to another Ledger account.');
           else if (code === 'invalid_credential' || code === 'csrf_mismatch') setOauthError('Google credential was invalid or expired. Try again.');
           else if (code === 'rate_limited') setOauthError('Too many sign-in attempts. Wait a few minutes and try again.');
           else {
@@ -207,7 +207,7 @@ export default function Settings() {
         </div>
       </Card>
 
-      <Card className="p-5 md:p-7"><SectionTitle eyebrow="Preferences" title="How PrepPulse shows up" action={<SavingLabel pending={updateProfile.isPending} />} /><div className="divide-y divide-border/70"><SettingRow icon={<Focus size={17} />} title="Focus mode" detail="Keep your rank and activity out of the weekly circle." enabled={values.focusMode ?? false} onToggle={() => update({ focusMode: !values.focusMode })} testId="switch-focus-mode" /><SettingRow icon={values.showOnLeaderboard ? <Eye size={17} /> : <EyeOff size={17} />} title="Show me on leaderboard" detail="Let your friends see your handle and weekly pulse." enabled={values.showOnLeaderboard ?? true} onToggle={() => update({ showOnLeaderboard: !values.showOnLeaderboard })} testId="switch-leaderboard-visibility" /></div></Card>
+      <Card className="p-5 md:p-7"><SectionTitle eyebrow="Preferences" title="How Ledger shows up" action={<SavingLabel pending={updateProfile.isPending} />} /><div className="divide-y divide-border/70"><SettingRow icon={<Focus size={17} />} title="Focus mode" detail="Keep your rank and activity out of the weekly circle." enabled={values.focusMode ?? false} onToggle={() => update({ focusMode: !values.focusMode })} testId="switch-focus-mode" /><SettingRow icon={values.showOnLeaderboard ? <Eye size={17} /> : <EyeOff size={17} />} title="Show me on leaderboard" detail="Let your friends see your handle and weekly pulse." enabled={values.showOnLeaderboard ?? true} onToggle={() => update({ showOnLeaderboard: !values.showOnLeaderboard })} testId="switch-leaderboard-visibility" /></div></Card>
 
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Appearance" title="Pick your vibe" />
@@ -253,7 +253,7 @@ export default function Settings() {
         </div>
       </Card>
 
-      <Card className="p-5 md:p-7"><SectionTitle eyebrow="Circle code" title="Find your people" action={<Link2 size={17} className="text-primary" />} /><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Share this code with someone on PrepPulse. They enter it under Compete → My circle, and you become mutual connections — the only way anyone sees your pulse.</p><div className="mt-4 flex items-center justify-between rounded-2xl border border-dashed border-border p-5"><p className="font-mono-custom text-3xl font-bold tracking-[.25em] text-primary" data-testid="text-settings-code">{profile.profileCode}</p><button type="button" onClick={copyCode} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-secondary" data-testid="button-copy-code">{copied ? <Check size={13} className="text-primary" /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div></Card>
+      <Card className="p-5 md:p-7"><SectionTitle eyebrow="Circle code" title="Find your people" action={<Link2 size={17} className="text-primary" />} /><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Share this code with someone on Ledger. They enter it under Compete → My circle, and you become mutual connections — the only way anyone sees your pulse.</p><div className="mt-4 flex items-center justify-between rounded-2xl border border-dashed border-border p-5"><p className="font-mono-custom text-3xl font-bold tracking-[.25em] text-primary" data-testid="text-settings-code">{profile.profileCode}</p><button type="button" onClick={copyCode} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-secondary" data-testid="button-copy-code">{copied ? <Check size={13} className="text-primary" /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div></Card>
 
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Connected accounts" title="Sign in with Discord or Google" />

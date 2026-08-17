@@ -755,7 +755,7 @@
   button, input, select { font: inherit; }
   button { cursor: pointer; }
 
-  /* Native select internals follow the PrepPulse palette, never browser defaults */
+  /* Native select internals follow the Ledger palette, never browser defaults */
   select {
     color-scheme: light;
     accent-color: hsl(var(--ring));

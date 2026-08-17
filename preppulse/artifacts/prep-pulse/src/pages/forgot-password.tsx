@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
         <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/80 bg-card/95 p-7 shadow-[0_24px_80px_hsl(186_32%_16%/.25)] backdrop-blur-xl md:p-10">
           <div className="mb-6 flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-accent-foreground shadow-sm">P</span>
-            <span className="font-display text-lg font-bold tracking-[-.02em]">PrepPulse</span>
+            <span className="font-display text-lg font-bold tracking-[-.02em]">Ledger</span>
           </div>
 
           {sent ? (
