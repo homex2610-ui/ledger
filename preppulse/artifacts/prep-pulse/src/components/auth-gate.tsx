@@ -1,8 +1,9 @@
 import { useEffect, type ReactNode } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, Redirect } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError, getGetMeQueryKey, useGetMe, type AuthResponse } from '@workspace/api-client-react';
 import AuthPage from '@/pages/auth';
+import LandingPage from '@/pages/landing';
 import ForgotPasswordPage from '@/pages/forgot-password';
 import ResetPasswordPage from '@/pages/reset-password';
 import { BrandMark } from '@/components/brand-mark';
@@ -52,7 +53,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <ResetPasswordPage onAuthed={onAuthed} />;
   }
   if (!query.data || sessionDead) {
+    if (location === '/' || location === '') {
+      return <LandingPage />;
+    }
     return <AuthPage onAuthed={onAuthed} />;
+  }
+
+  if (location === '/signin') {
+    return <Redirect to="/" replace />;
   }
 
   return <>{children}</>;
