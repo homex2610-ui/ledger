@@ -24,13 +24,6 @@
       "breakpoints": true
     },
     {
-      "idx": 2,
-      "version": "7",
-      "when": 1786882993532,
-      "tag": "0002_funny_mandroid",
-      "breakpoints": true
-    },
-    {
       "idx": 3,
       "version": "7",
       "when": 1788172000000,
@@ -42,6 +35,13 @@
       "version": "7",
       "when": 1788219000000,
       "tag": "0004_announcements_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786977946747,
+      "tag": "0005_hot_the_renegades",
       "breakpoints": true
     }
   ]

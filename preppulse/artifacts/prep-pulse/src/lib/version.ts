@@ -10,6 +10,21 @@ export interface ReleaseNote {
 
 export const APP_RELEASES: ReleaseNote[] = [
   {
+    version: '1.5.0',
+    date: 'Aug 18, 2026',
+    type: 'Feature',
+    heading: 'Share your focus',
+    added: [
+      'A daily focus card you can share after any 25+ minute block.',
+      'A public share page with a live preview — no account needed to look.',
+      'Attribution: new sign-ups through your link are quietly credited to you.',
+    ],
+    improved: [
+      'Your focus card adapts to which variant you land on.',
+    ],
+    fixed: [],
+  },
+  {
     version: '1.4.2',
     date: 'Aug 17, 2026',
     type: 'UI',
@@ -65,7 +80,7 @@ export const BUILD_SHA = buildSha === 'dev' ? 'dev' : buildSha.slice(0, 7);
 
 export const ENVIRONMENT = import.meta.env.PROD ? 'Production' : 'Development';
 
-export const DB_SCHEMA_VERSION = '0004';
+export const DB_SCHEMA_VERSION = '0005';
 
 export const CHANGELOG_SEEN_KEY = 'pp-changelog-seen';
 

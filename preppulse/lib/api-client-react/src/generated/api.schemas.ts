@@ -463,6 +463,94 @@ export interface StudySessionInput {
   source: StudySessionInputSource;
 }
 
+export type ShareArtifactType = typeof ShareArtifactType[keyof typeof ShareArtifactType];
+
+
+export const ShareArtifactType = {
+  daily_focus: 'daily_focus',
+} as const;
+
+export type ShareArtifactVariant = typeof ShareArtifactVariant[keyof typeof ShareArtifactVariant];
+
+
+export const ShareArtifactVariant = {
+  A: 'A',
+  B: 'B',
+} as const;
+
+export type ShareArtifactPayloadType = typeof ShareArtifactPayloadType[keyof typeof ShareArtifactPayloadType];
+
+
+export const ShareArtifactPayloadType = {
+  daily_focus: 'daily_focus',
+} as const;
+
+export type ShareArtifactPayloadSubjectsItem = {
+  subject: string;
+  minutes: number;
+  percent: number;
+};
+
+export type ShareArtifactPayload = {
+  type: ShareArtifactPayloadType;
+  displayName: string;
+  minutes: number;
+  minutesLabel: string;
+  streak: number;
+  subjects: ShareArtifactPayloadSubjectsItem[];
+  dayLabel: string;
+  createdAt: string;
+};
+
+export interface ShareArtifact {
+  id: string;
+  type: ShareArtifactType;
+  variant?: ShareArtifactVariant;
+  payload: ShareArtifactPayload;
+  createdAt: string;
+  shareUrl?: string;
+}
+
+export type CreateShareInputVisibility = typeof CreateShareInputVisibility[keyof typeof CreateShareInputVisibility];
+
+
+export const CreateShareInputVisibility = {
+  public: 'public',
+  circle: 'circle',
+  private: 'private',
+} as const;
+
+export interface CreateShareInput {
+  visibility: CreateShareInputVisibility;
+  /** @pattern ^\d+\.\d+\.\d+$ */
+  appVersion?: string;
+  tz?: string;
+}
+
+export type SharePromptEventInputEvent = typeof SharePromptEventInputEvent[keyof typeof SharePromptEventInputEvent];
+
+
+export const SharePromptEventInputEvent = {
+  share_prompt_viewed: 'share_prompt_viewed',
+  share_clicked: 'share_clicked',
+} as const;
+
+export interface SharePromptEventInput {
+  event: SharePromptEventInputEvent;
+  artifactId?: string;
+}
+
+export type ShareOpenEventInputEvent = typeof ShareOpenEventInputEvent[keyof typeof ShareOpenEventInputEvent];
+
+
+export const ShareOpenEventInputEvent = {
+  share_link_opened: 'share_link_opened',
+} as const;
+
+export interface ShareOpenEventInput {
+  event: ShareOpenEventInputEvent;
+}
+
 export interface FocusSessionInput {
   /** @minLength 1 */
   subject: string;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { CalendarDays, Check, CheckCircle2, ChevronDown, Circle, Clock3, Flame, Maximize2, Pause, Pencil, PictureInPicture2, Play, Plus, RotateCcw, SkipForward, Target, Timer, Trash2, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetDashboardQueryKey, getListTasksQueryKey, useCreateStudySession, useCreateTask, useDeleteTask, useGetDashboard, useGetProfile, useListTasks, useUpdateTask } from '@workspace/api-client-react';
+import { getGetDashboardQueryKey, getListTasksQueryKey, useCreateShare, useCreateStudySession, useCreateTask, useDeleteTask, useGetDashboard, useGetProfile, useListTasks, useUpdateTask, type ShareArtifact } from '@workspace/api-client-react';
 import type { StudySessionInputSource, TaskUpdateStatus } from '@workspace/api-client-react';
 import { getExamConfig } from '@workspace/exam-config';
 import { Card, ProgressBar, SectionTitle } from '@/components/ui-elements';
@@ -12,6 +12,10 @@ import { formatMinutes } from '@/lib/format-duration';
 import { clearFocusSession, focusSessionSeconds, loadFocusSession, saveFocusSession } from '@/lib/focus-session';
 import { FocusMusic } from '@/components/focus-music';
 import { BarStrip, Ring } from '@/components/mini-charts';
+import { SharePrompt } from '@/components/share-prompt';
+import { ShareSheet } from '@/components/share-sheet';
+import { sharePromptsEnabled } from '@/lib/share';
+import { APP_VERSION } from '@/lib/version';
 
 const RITUAL_STEPS = ['Phone in another room.', 'This block is for one thing.', 'When it ends, write one sentence.'];
 
@@ -51,6 +55,9 @@ export default function Study() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSubject, setEditSubject] = useState('Mixed revision');
+  const [promptMinutes, setPromptMinutes] = useState<number | null>(null);
+  const [createdArtifact, setCreatedArtifact] = useState<ShareArtifact | null>(null);
+  const createShare = useCreateShare();
 
   const phaseRef = useRef(restoredSession?.phase ?? phase);
   const cycleRef = useRef(restoredSession?.cycle ?? pomoCycle);
@@ -155,7 +162,15 @@ export default function Study() {
   };
 
   const logSession = (minutes: number, source: StudySessionInputSource, sessionSubject: string, callback?: () => void) => {
-    createSession.mutate({ data: { subject: sessionSubject, minutes, source } }, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() }); callback?.(); setLogged(true); } });
+    createSession.mutate({ data: { subject: sessionSubject, minutes, source } }, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() }); callback?.(); setLogged(true); if (minutes >= 25 && sharePromptsEnabled()) setPromptMinutes(minutes); } });
+  };
+  const startSharing = () => {
+    if (!promptMinutes) return;
+    setPromptMinutes(null);
+    createShare.mutate(
+      { data: { visibility: 'public', appVersion: APP_VERSION.replace('v', ''), tz: Intl.DateTimeFormat().resolvedOptions().timeZone } },
+      { onSuccess: (artifact) => setCreatedArtifact(artifact) },
+    );
   };
   const logBlock = () => {
     logSession(25, 'timer', subjectRef.current, () => {});
@@ -407,6 +422,8 @@ export default function Study() {
       })}</div> : <p className="mt-4 text-sm text-muted-foreground">A task is a promise to your future self. Add one.</p>}
     </Card>
     {midSession && <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 md:hidden" data-testid="mini-timer"><div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-sidebar/95 px-4 py-2.5 text-sidebar-foreground shadow-[0_18px_48px_hsl(186_32%_16%/.25)] backdrop-blur"><p className="font-mono-custom text-xl font-bold tabular-nums tracking-[-.04em]">{minutes}:{remaining}</p><button type="button" onClick={running ? pauseTimer : startTimer} className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-accent-foreground transition-transform duration-150 hover:scale-105" aria-label={running ? 'Pause timer' : 'Resume timer'}>{running ? <Pause size={15} /> : <Play size={15} fill="currentColor" />}</button><button type="button" onClick={resetTimer} className="flex h-9 w-9 items-center justify-center rounded-xl border border-sidebar-foreground/15 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-foreground/10" aria-label="Reset timer"><RotateCcw size={14} /></button></div></div>}
+    {promptMinutes !== null && !createdArtifact && <SharePrompt minutes={promptMinutes} onShare={startSharing} onDismiss={() => setPromptMinutes(null)} />}
+    {createdArtifact && <ShareSheet artifact={createdArtifact} onClose={() => setCreatedArtifact(null)} />}
     {fullscreen && <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-background px-6" data-testid="focus-fullscreen"><div className="pointer-events-none absolute inset-0"><div className="absolute left-1/2 top-1/2 h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/15" /><div className="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/10" /><div className={`absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/10 blur-3xl ${running ? 'pp-breathe' : ''}`} /></div><div className="relative flex flex-col items-center gap-6 text-center"><div className="flex items-center gap-2"><p className="font-mono-custom text-[10px] uppercase tracking-[.2em] text-accent">{mode === 'pomodoro' ? `Pomodoro · ${phase === 'focus' ? 'Focus' : phase === 'short_break' ? 'Short break' : 'Long break'}` : 'Flow'}</p>{running && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />}</div><p className="font-mono-custom text-[8rem] leading-none tracking-[-.06em] tabular-nums text-foreground md:text-[10rem]" data-testid="text-fullscreen-timer">{minutes}:{remaining}</p><div><p className="text-sm text-muted-foreground">{phaseNote}</p><p className="mt-1 font-mono-custom text-xs text-muted-foreground/70">{timerSubject}{timerTaskId && timerTaskName ? ` · ${timerTaskName}` : ''}</p></div>{mode === 'pomodoro' && phase === 'focus' && <div className="flex items-center gap-1.5">{[1, 2, 3, 4].map((dot) => <span key={dot} className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${dot < cycleProgress ? 'bg-accent' : dot === cycleProgress ? 'scale-125 animate-pulse bg-accent shadow-[0_0_8px_hsl(var(--accent)/.8)]' : 'border border-muted-foreground/30'}`} />)}</div>}<div className="mt-4 flex flex-wrap items-center justify-center gap-3"><button type="button" onClick={running ? pauseTimer : startTimer} className="inline-flex items-center gap-2 rounded-2xl bg-accent px-8 py-4 text-base font-bold text-accent-foreground transition-[transform,background-color] duration-150 hover:-translate-y-0.5" data-testid="button-fullscreen-toggle"><span className="relative inline-flex h-[18px] w-[18px] items-center justify-center"><Play size={18} fill="currentColor" className={`absolute transition-all duration-200 ease-out ${running ? 'scale-50 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100'}`} /><Pause size={18} className={`absolute transition-all duration-200 ease-out ${running ? 'scale-100 rotate-0 opacity-100' : 'scale-50 -rotate-90 opacity-0'}`} /></span>{running ? 'Pause' : seconds > 0 ? 'Resume' : mode === 'flow' ? 'Start flow' : 'Start focus'}</button>{seconds > 0 && !running && (mode === 'flow' || (mode === 'pomodoro' && phase === 'focus' && seconds < 25 * 60)) && <button type="button" onClick={finishTimer} disabled={createSession.isPending} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-bold text-primary-foreground transition-[transform,background-color] duration-150 hover:-translate-y-0.5 disabled:opacity-60">{createSession.isPending ? 'Saving...' : 'Finish & log'}</button>}{mode === 'pomodoro' && <button type="button" onClick={skipTimer} className="inline-flex items-center gap-2 rounded-2xl border border-border px-6 py-4 text-sm font-bold text-muted-foreground transition-colors hover:bg-secondary" data-testid="button-fullscreen-skip"><SkipForward size={16} /> Skip</button>}<button type="button" onClick={closeFullscreen} className="inline-flex items-center gap-2 rounded-2xl border border-border px-6 py-4 text-sm font-bold text-muted-foreground transition-colors hover:bg-secondary" data-testid="button-fullscreen-exit"><X size={16} /> Exit</button></div><p className="mt-2 font-mono-custom text-[10px] uppercase tracking-[.2em] text-muted-foreground/50">Esc to exit</p></div></div>}
   </div>;
 }

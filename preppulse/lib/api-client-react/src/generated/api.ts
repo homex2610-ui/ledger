@@ -45,6 +45,7 @@ import type {
   CirclesResponse,
   CohortMemberMove,
   CohortResponse,
+  CreateShareInput,
   Dashboard,
   DiscordAuthCallbackParams,
   DiscoverGroupsParams,
@@ -78,6 +79,9 @@ import type {
   Profile,
   ProfileUpdate,
   ResetPasswordInput,
+  ShareArtifact,
+  ShareOpenEventInput,
+  SharePromptEventInput,
   SignupInput,
   StatsResponse,
   StudySession,
@@ -5816,5 +5820,367 @@ export const useRemoveAdminUser = <TError = ErrorType<void | ErrorResponse>,
         TContext
       > => {
       return useMutation(getRemoveAdminUserMutationOptions(options));
+    }
+
+export const getCreateShareUrl = () => {
+
+
+
+
+  return `/api/shares`
+}
+
+/**
+ * @summary Create a Daily Focus share artifact from today's real study data
+ */
+export const createShare = async (createShareInput: CreateShareInput, options?: Parameters<typeof customFetch>[1]): Promise<ShareArtifact> => {
+
+  return customFetch<ShareArtifact>(getCreateShareUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createShareInput)
+  }
+);}
+
+
+
+
+
+export const getCreateShareMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createShare>>, TError,{data: BodyType<CreateShareInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createShare>>, TError,{data: BodyType<CreateShareInput>}, TContext> => {
+
+const mutationKey = ['createShare'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createShare>>, {data: BodyType<CreateShareInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createShare(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateShareMutationResult = NonNullable<Awaited<ReturnType<typeof createShare>>>
+    export type CreateShareMutationBody = BodyType<CreateShareInput>
+    export type CreateShareMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create a Daily Focus share artifact from today's real study data
+ */
+export const useCreateShare = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createShare>>, TError,{data: BodyType<CreateShareInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createShare>>,
+        TError,
+        {data: BodyType<CreateShareInput>},
+        TContext
+      > => {
+      return useMutation(getCreateShareMutationOptions(options));
+    }
+
+export const getRecordSharePromptEventUrl = () => {
+
+
+
+
+  return `/api/shares/events`
+}
+
+/**
+ * @summary Record an owner-side share funnel event (prompt viewed or clicked)
+ */
+export const recordSharePromptEvent = async (sharePromptEventInput: SharePromptEventInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRecordSharePromptEventUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sharePromptEventInput)
+  }
+);}
+
+
+
+
+
+export const getRecordSharePromptEventMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordSharePromptEvent>>, TError,{data: BodyType<SharePromptEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordSharePromptEvent>>, TError,{data: BodyType<SharePromptEventInput>}, TContext> => {
+
+const mutationKey = ['recordSharePromptEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordSharePromptEvent>>, {data: BodyType<SharePromptEventInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordSharePromptEvent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordSharePromptEventMutationResult = NonNullable<Awaited<ReturnType<typeof recordSharePromptEvent>>>
+    export type RecordSharePromptEventMutationBody = BodyType<SharePromptEventInput>
+    export type RecordSharePromptEventMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Record an owner-side share funnel event (prompt viewed or clicked)
+ */
+export const useRecordSharePromptEvent = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordSharePromptEvent>>, TError,{data: BodyType<SharePromptEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordSharePromptEvent>>,
+        TError,
+        {data: BodyType<SharePromptEventInput>},
+        TContext
+      > => {
+      return useMutation(getRecordSharePromptEventMutationOptions(options));
+    }
+
+export const getGetShareUrl = (shareId: string,) => {
+
+
+
+
+  return `/api/shares/${shareId}`
+}
+
+/**
+ * @summary Resolve a public share artifact
+ */
+export const getShare = async (shareId: string, options?: Parameters<typeof customFetch>[1]): Promise<ShareArtifact> => {
+
+  return customFetch<ShareArtifact>(getGetShareUrl(shareId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetShareQueryKey = (shareId: string,) => {
+    return [
+    `/api/shares/${shareId}`
+    ] as const;
+    }
+
+
+export const getGetShareQueryOptions = <TData = Awaited<ReturnType<typeof getShare>>, TError = ErrorType<ErrorResponse>>(shareId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getShare>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetShareQueryKey(shareId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getShare>>> = ({ signal }) => getShare(shareId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: shareId !== null && shareId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getShare>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetShareQueryResult = NonNullable<Awaited<ReturnType<typeof getShare>>>
+export type GetShareQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Resolve a public share artifact
+ */
+
+export function useGetShare<TData = Awaited<ReturnType<typeof getShare>>, TError = ErrorType<ErrorResponse>>(
+ shareId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getShare>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetShareQueryOptions(shareId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecordShareOpenEventUrl = (shareId: string,) => {
+
+
+
+
+  return `/api/shares/${shareId}/events`
+}
+
+/**
+ * @summary Record a share link open (fired by the share page)
+ */
+export const recordShareOpenEvent = async (shareId: string,
+    shareOpenEventInput: ShareOpenEventInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRecordShareOpenEventUrl(shareId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(shareOpenEventInput)
+  }
+);}
+
+
+
+
+
+export const getRecordShareOpenEventMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordShareOpenEvent>>, TError,{shareId: string;data: BodyType<ShareOpenEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordShareOpenEvent>>, TError,{shareId: string;data: BodyType<ShareOpenEventInput>}, TContext> => {
+
+const mutationKey = ['recordShareOpenEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordShareOpenEvent>>, {shareId: string;data: BodyType<ShareOpenEventInput>}> = (props) => {
+          const {shareId,data} = props ?? {};
+
+          return  recordShareOpenEvent(shareId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordShareOpenEventMutationResult = NonNullable<Awaited<ReturnType<typeof recordShareOpenEvent>>>
+    export type RecordShareOpenEventMutationBody = BodyType<ShareOpenEventInput>
+    export type RecordShareOpenEventMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Record a share link open (fired by the share page)
+ */
+export const useRecordShareOpenEvent = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordShareOpenEvent>>, TError,{shareId: string;data: BodyType<ShareOpenEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordShareOpenEvent>>,
+        TError,
+        {shareId: string;data: BodyType<ShareOpenEventInput>},
+        TContext
+      > => {
+      return useMutation(getRecordShareOpenEventMutationOptions(options));
+    }
+
+export const getCreateReferralAttributionUrl = (shareId: string,) => {
+
+
+
+
+  return `/api/shares/${shareId}/attribution`
+}
+
+/**
+ * @summary Attribute the signed-in account to a share's inviter (fired after signup/login)
+ */
+export const createReferralAttribution = async (shareId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCreateReferralAttributionUrl(shareId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreateReferralAttributionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReferralAttribution>>, TError,{shareId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createReferralAttribution>>, TError,{shareId: string}, TContext> => {
+
+const mutationKey = ['createReferralAttribution'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createReferralAttribution>>, {shareId: string}> = (props) => {
+          const {shareId} = props ?? {};
+
+          return  createReferralAttribution(shareId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateReferralAttributionMutationResult = NonNullable<Awaited<ReturnType<typeof createReferralAttribution>>>
+
+    export type CreateReferralAttributionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Attribute the signed-in account to a share's inviter (fired after signup/login)
+ */
+export const useCreateReferralAttribution = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReferralAttribution>>, TError,{shareId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createReferralAttribution>>,
+        TError,
+        {shareId: string},
+        TContext
+      > => {
+      return useMutation(getCreateReferralAttributionMutationOptions(options));
     }
 

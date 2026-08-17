@@ -19,6 +19,7 @@ import {
 } from "@workspace/api-zod";
 import { subjectAllowedForTrack } from "@workspace/exam-config";
 import { requireAuth } from "../lib/auth.js";
+import { afterSessionRecorded } from "../lib/shares-events.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -116,12 +117,18 @@ router.patch("/focus-sessions/:focusSessionId", async (req, res) => {
   }
 
   if (body.status === "completed") {
-    await db.insert(studySessionsTable).values({
-      userId: req.userId,
-      subject: updated.subject,
-      minutes: updated.actualMinutes ?? updated.plannedMinutes,
-      source: "timer",
-    });
+    const logged = (
+      await db
+        .insert(studySessionsTable)
+        .values({
+          userId: req.userId,
+          subject: updated.subject,
+          minutes: updated.actualMinutes ?? updated.plannedMinutes,
+          source: "timer",
+        })
+        .returning()
+    )[0];
+    void afterSessionRecorded({ userId: req.userId, minutes: logged.minutes, createdAt: logged.createdAt });
   }
 
   res.json(UpdateFocusSessionResponse.parse(toFocusShape(updated)));

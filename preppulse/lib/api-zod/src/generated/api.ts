@@ -1845,3 +1845,103 @@ export const RemoveAdminUserParams = zod.object({
 export const RemoveAdminUserResponse = zod.void()
 
 
+/**
+ * @summary Create a Daily Focus share artifact from today's real study data
+ */
+export const createShareBodyAppVersionRegExp = new RegExp('^\\d+\\.\\d+\\.\\d+$');
+
+
+export const CreateShareBody = zod.object({
+  "visibility": zod.enum(['public', 'circle', 'private']),
+  "appVersion": zod.string().regex(createShareBodyAppVersionRegExp).optional(),
+  "tz": zod.string().optional()
+})
+
+export const CreateShareResponse = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['daily_focus']),
+  "variant": zod.enum(['A', 'B']).optional(),
+  "payload": zod.object({
+  "type": zod.enum(['daily_focus']),
+  "displayName": zod.string(),
+  "minutes": zod.number(),
+  "minutesLabel": zod.string(),
+  "streak": zod.number(),
+  "subjects": zod.array(zod.object({
+  "subject": zod.string(),
+  "minutes": zod.number(),
+  "percent": zod.number()
+})),
+  "dayLabel": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "createdAt": zod.coerce.date(),
+  "shareUrl": zod.string().optional()
+})
+
+
+/**
+ * @summary Record an owner-side share funnel event (prompt viewed or clicked)
+ */
+export const RecordSharePromptEventBody = zod.object({
+  "event": zod.enum(['share_prompt_viewed', 'share_clicked']),
+  "artifactId": zod.string().optional()
+})
+
+export const RecordSharePromptEventResponse = zod.void()
+
+
+/**
+ * @summary Resolve a public share artifact
+ */
+export const GetShareParams = zod.object({
+  "shareId": zod.coerce.string()
+})
+
+export const GetShareResponse = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['daily_focus']),
+  "variant": zod.enum(['A', 'B']).optional(),
+  "payload": zod.object({
+  "type": zod.enum(['daily_focus']),
+  "displayName": zod.string(),
+  "minutes": zod.number(),
+  "minutesLabel": zod.string(),
+  "streak": zod.number(),
+  "subjects": zod.array(zod.object({
+  "subject": zod.string(),
+  "minutes": zod.number(),
+  "percent": zod.number()
+})),
+  "dayLabel": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "createdAt": zod.coerce.date(),
+  "shareUrl": zod.string().optional()
+})
+
+
+/**
+ * @summary Record a share link open (fired by the share page)
+ */
+export const RecordShareOpenEventParams = zod.object({
+  "shareId": zod.coerce.string()
+})
+
+export const RecordShareOpenEventBody = zod.object({
+  "event": zod.enum(['share_link_opened'])
+})
+
+export const RecordShareOpenEventResponse = zod.void()
+
+
+/**
+ * @summary Attribute the signed-in account to a share's inviter (fired after signup/login)
+ */
+export const CreateReferralAttributionParams = zod.object({
+  "shareId": zod.coerce.string()
+})
+
+export const CreateReferralAttributionResponse = zod.void()
+
+

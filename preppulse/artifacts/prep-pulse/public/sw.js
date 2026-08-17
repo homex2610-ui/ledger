@@ -1,4 +1,4 @@
-const CACHE = 'ledger-v1';
+const CACHE = 'ledger-v2';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

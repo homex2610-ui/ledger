@@ -20,6 +20,8 @@ tags:
     description: Spaced-repetition recall deck
   - name: community
     description: Circles and groups
+  - name: shares
+    description: Share artifacts, referral attribution, and the sharing funnel
 paths:
   /healthz:
     get:
@@ -1451,6 +1453,143 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /shares:
+    post:
+      operationId: createShare
+      tags: [shares]
+      summary: Create a Daily Focus share artifact from today's real study data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShareInput"
+      responses:
+        "201":
+          description: Created share artifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareArtifact"
+        "400":
+          description: Not eligible (fewer than 25 focused minutes today) or invalid visibility
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Share creation rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shares/events:
+    post:
+      operationId: recordSharePromptEvent
+      tags: [shares]
+      summary: Record an owner-side share funnel event (prompt viewed or clicked)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SharePromptEventInput"
+      responses:
+        "204":
+          description: Recorded
+        "429":
+          description: Event rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shares/{shareId}:
+    get:
+      operationId: getShare
+      tags: [shares]
+      summary: Resolve a public share artifact
+      parameters:
+        - name: shareId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public share artifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareArtifact"
+        "404":
+          description: Not found, not public, or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shares/{shareId}/events:
+    post:
+      operationId: recordShareOpenEvent
+      tags: [shares]
+      summary: Record a share link open (fired by the share page)
+      parameters:
+        - name: shareId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareOpenEventInput"
+      responses:
+        "204":
+          description: Recorded
+        "429":
+          description: Event rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shares/{shareId}/attribution:
+    post:
+      operationId: createReferralAttribution
+      tags: [shares]
+      summary: Attribute the signed-in account to a share's inviter (fired after signup/login)
+      parameters:
+        - name: shareId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Attribution created
+        "400":
+          description: Self-referral rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Share not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Account already attributed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -2009,6 +2148,84 @@ components:
           type: string
           enum: [manual, timer]
       required: [subject, minutes, source]
+
+    ShareArtifact:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [daily_focus]
+        variant:
+          type: string
+          enum: [A, B]
+        payload:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [daily_focus]
+            displayName:
+              type: string
+            minutes:
+              type: number
+            minutesLabel:
+              type: string
+            streak:
+              type: number
+            subjects:
+              type: array
+              items:
+                type: object
+                properties:
+                  subject:
+                    type: string
+                  minutes:
+                    type: number
+                  percent:
+                    type: number
+                required: [subject, minutes, percent]
+            dayLabel:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+          required: [type, displayName, minutes, minutesLabel, streak, subjects, dayLabel, createdAt]
+        createdAt:
+          type: string
+          format: date-time
+        shareUrl:
+          type: string
+      required: [id, type, payload, createdAt]
+    CreateShareInput:
+      type: object
+      properties:
+        visibility:
+          type: string
+          enum: [public, circle, private]
+        appVersion:
+          type: string
+          pattern: "^\\d+\\.\\d+\\.\\d+$"
+        tz:
+          type: string
+      required: [visibility]
+    SharePromptEventInput:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [share_prompt_viewed, share_clicked]
+        artifactId:
+          type: string
+      required: [event]
+    ShareOpenEventInput:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [share_link_opened]
+      required: [event]
 
     FocusSession:
       type: object

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Rocket, Sun, Timer, Trash2, Unplug, UserRound } from 'lucide-react';
+import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Rocket, Share2, Sun, Timer, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError, exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
 import { EXAM_TRACKS, getExamConfig } from '@workspace/exam-config';
@@ -12,6 +12,7 @@ import { applyTemplate, applyTheme, getStoredTemplate, getStoredTheme, type AppT
 import { formatMinutes, formatPace, formatWeekShare } from '@/lib/format-duration';
 import { hourLabel, loadReminderPrefs, REMINDER_INTERVALS, saveReminderPrefs, type ReminderPrefs } from '@/lib/reminder-prefs';
 import { APP_RELEASES, APP_VERSION, BUILD_SHA, DB_SCHEMA_VERSION, ENVIRONMENT, isChangelogSeen, markChangelogSeen } from '@/lib/version';
+import { setSharePromptsEnabled, sharePromptsEnabled } from '@/lib/share';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -305,6 +306,14 @@ export default function Settings() {
       </Card>
 
       <Card className="p-5 md:p-7"><SectionTitle eyebrow="Circle code" title="Find your people" action={<Link2 size={17} className="text-primary" />} /><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Share this code with someone on Ledger. They enter it under Compete → My circle, and you become mutual connections — the only way anyone sees your pulse.</p><div className="mt-4 flex items-center justify-between rounded-2xl border border-dashed border-border p-5"><p className="font-mono-custom text-3xl font-bold tracking-[.25em] text-primary" data-testid="text-settings-code">{profile.profileCode}</p><button type="button" onClick={copyCode} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-secondary" data-testid="button-copy-code">{copied ? <Check size={13} className="text-primary" /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div></Card>
+
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="Sharing" title="Daily focus cards" action={<Share2 size={17} className="text-primary" />} />
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">After a 25+ minute focus block, Ledger can offer to turn your day into a shareable card. Nothing is shared without your tap.</p>
+        <div className="mt-2 border-t border-border/70">
+          <SettingRow icon={<Share2 size={16} />} title="Share prompts" detail="Ask whether you'd like to share after a qualifying focus block." enabled={sharePromptsEnabled()} onToggle={() => setSharePromptsEnabled(!sharePromptsEnabled())} testId="switch-share-prompts" />
+        </div>
+      </Card>
 
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Connected accounts" title="Sign in with Discord or Google" />

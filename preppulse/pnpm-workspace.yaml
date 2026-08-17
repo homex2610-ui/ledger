@@ -71,6 +71,7 @@ onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
   - msw
+  - sharp
   - unrs-resolver
 
 # pnpm 11 treats ignored build scripts as a fatal error by default. esbuild's
@@ -162,3 +163,4 @@ overrides:
 
 allowBuilds:
   esbuild: set this to true or false
+  sharp: set this to true or false

@@ -1,14 +1,15 @@
 import { useLocation, Link } from 'wouter';
 import { BarChart3, BookOpen, BrainCircuit, ChartArea, Home, LogOut, Megaphone, MoreHorizontal, Settings, ShieldCheck, Timer, Trophy, X } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetActiveAnnouncementQueryKey, useDismissAnnouncement, useGetActiveAnnouncement, useGetMe, useLogOut } from '@workspace/api-client-react';
+import { getGetActiveAnnouncementQueryKey, useCreateReferralAttribution, useDismissAnnouncement, useGetActiveAnnouncement, useGetMe, useLogOut } from '@workspace/api-client-react';
 import { getExamConfig } from '@workspace/exam-config';
 import { Avatar } from '@/components/avatar';
 import { BrandMark } from '@/components/brand-mark';
 import { OnboardingModal } from '@/components/onboarding';
 import { initialsFor } from '@/lib/utils';
 import { useFocusReminder } from '@/lib/reminder-prefs';
+import { clearShareRef, readShareRef } from '@/lib/share';
 
 const navigation = [
   { href: '/', label: 'Overview', icon: Home },
@@ -42,6 +43,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetActiveAnnouncementQueryKey() }) },
     );
   };
+
+  const attribution = useCreateReferralAttribution();
+
+  useEffect(() => {
+    if (!me || attribution.isPending) return;
+    const ref = readShareRef();
+    if (!ref) return;
+    attribution.mutate(
+      { shareId: ref },
+      {
+        onSuccess: () => clearShareRef(),
+        onError: () => {
+          const attempts = Number(sessionStorage.getItem('pp-share-attempts') ?? '0') + 1;
+          sessionStorage.setItem('pp-share-attempts', String(attempts));
+          if (attempts >= 3) clearShareRef();
+        },
+      },
+    );
+  }, [me, attribution.isPending]);
 
   const signOut = () => {
     logOut.mutate(undefined, { onSuccess: () => queryClient.clear() });

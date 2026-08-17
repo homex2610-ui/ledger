@@ -38,6 +38,7 @@ import {
 import { allowedTopicTransitions, canTransitionTopic, getExamConfig, subjectAllowedForTrack, subjectLabel, type TopicStatus } from "@workspace/exam-config";
 import { clearSessionCookie, requireAuth } from "../lib/auth.js";
 import { deleteSupabaseUser } from "../lib/supabase-auth.js";
+import { afterSessionRecorded } from "../lib/shares-events.js";
 import {
   activityForDays,
   computeStreak,
@@ -508,6 +509,7 @@ router.post("/study-sessions", async (req, res) => {
       .values({ userId: req.userId, subject: body.subject, minutes: body.minutes, source: body.source })
       .returning()
   )[0];
+  void afterSessionRecorded({ userId: req.userId, minutes: inserted.minutes, createdAt: inserted.createdAt });
   res.status(201).json(
     CreateStudySessionResponse.parse({
       id: inserted.id,

@@ -9,6 +9,7 @@ import communityRouter from "./community.js";
 import statsRouter from "./stats.js";
 import announcementsRouter from "./announcements.js";
 import adminRouter from "./admin.js";
+import sharesRouter from "./shares.js";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(communityRouter);
 router.use(statsRouter);
 router.use(announcementsRouter);
 router.use(adminRouter);
+router.use(sharesRouter);
 
 export default router;
