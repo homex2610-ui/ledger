@@ -5,6 +5,7 @@ import { ApiError, getGetMeQueryKey, useGetMe, type AuthResponse } from '@worksp
 import AuthPage from '@/pages/auth';
 import ForgotPasswordPage from '@/pages/forgot-password';
 import ResetPasswordPage from '@/pages/reset-password';
+import { BrandMark } from '@/components/brand-mark';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -38,7 +39,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (query.isLoading) {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-5 bg-background">
-        <span className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl bg-accent font-display text-2xl font-bold text-accent-foreground shadow-sm">P</span>
+        <span className="animate-pulse"><BrandMark size={56} /></span>
         <p className="font-mono-custom text-[10px] uppercase tracking-[.2em] text-muted-foreground">waking your prep pulse…</p>
       </div>
     );

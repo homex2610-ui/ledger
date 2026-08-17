@@ -5,6 +5,7 @@ import { useLocation } from 'wouter';
 import { ApiError, getGetAuthDiscordAuthorizeQueryKey, getGetMeQueryKey, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGoogleAuth, useLogIn, useSignUp, type AuthResponse } from '@workspace/api-client-react';
 import { GoogleSignInButton, GoogleOAuthButton, DiscordOAuthButton } from '@/components/oauth-buttons';
 import { DashboardBackdrop } from '@/components/dashboard-backdrop';
+import { BrandMark } from '@/components/brand-mark';
 import { getGisCsrfToken } from '@/lib/utils';
 
 export function apiErrorMessage(err: unknown): string | null {
@@ -185,7 +186,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
           <div className="hidden flex-col justify-between border-r border-border/70 p-10 md:flex">
             <div>
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent font-display text-xl font-bold text-accent-foreground shadow-sm">P</span>
+                <BrandMark size={44} />
                 <span className="flex flex-col gap-0.5">
                   <span className="font-display text-lg font-bold leading-none tracking-[-.02em]">Ledger</span>
                   <span className="font-mono-custom text-[9px] uppercase tracking-[.2em] text-muted-foreground">keep moving</span>
@@ -200,7 +201,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
 
           <div className="p-7 md:p-10">
             <div className="mb-6 flex items-center gap-3 md:hidden">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-accent-foreground shadow-sm">P</span>
+              <BrandMark size={40} />
               <span className="font-display text-lg font-bold tracking-[-.02em]">Ledger</span>
             </div>
             <p className="font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Continue as you</p>

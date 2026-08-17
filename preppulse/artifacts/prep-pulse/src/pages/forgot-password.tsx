@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+﻿import { useState, type FormEvent } from 'react';
 import { ArrowLeft, LoaderCircle, MailCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useForgotPassword } from '@workspace/api-client-react';
 import { DashboardBackdrop } from '@/components/dashboard-backdrop';
+import { BrandMark } from '@/components/brand-mark';
 import { apiErrorMessage } from '@/pages/auth';
 
 export default function ForgotPasswordPage() {
@@ -39,7 +40,7 @@ export default function ForgotPasswordPage() {
       <div className="absolute inset-0 flex items-center justify-center px-5 py-10">
         <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/80 bg-card/95 p-7 shadow-[0_24px_80px_hsl(186_32%_16%/.25)] backdrop-blur-xl md:p-10">
           <div className="mb-6 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-accent-foreground shadow-sm">P</span>
+            <BrandMark size={40} />
             <span className="font-display text-lg font-bold tracking-[-.02em]">Ledger</span>
           </div>
 
@@ -83,7 +84,7 @@ export default function ForgotPasswordPage() {
                   disabled={forgotPassword.isPending}
                   className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity disabled:opacity-60"
                 >
-                  {forgotPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Sending…</span> : 'Send reset link'}
+                  {forgotPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Sendingâ€¦</span> : 'Send reset link'}
                 </button>
               </form>
 

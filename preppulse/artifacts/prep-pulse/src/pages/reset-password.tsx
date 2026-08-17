@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+﻿import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, KeyRound, LoaderCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { getGetMeQueryKey, useResetPassword, type AuthResponse } from '@workspace/api-client-react';
 import { DashboardBackdrop } from '@/components/dashboard-backdrop';
+import { BrandMark } from '@/components/brand-mark';
 import { apiErrorMessage } from '@/pages/auth';
 
 export default function ResetPasswordPage({ onAuthed }: { onAuthed: (auth: AuthResponse) => void }) {
@@ -59,7 +60,7 @@ export default function ResetPasswordPage({ onAuthed }: { onAuthed: (auth: AuthR
       <div className="absolute inset-0 flex items-center justify-center px-5 py-10">
         <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/80 bg-card/95 p-7 shadow-[0_24px_80px_hsl(186_32%_16%/.25)] backdrop-blur-xl md:p-10">
           <div className="mb-6 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-accent-foreground shadow-sm">P</span>
+            <BrandMark size={40} />
             <span className="font-display text-lg font-bold tracking-[-.02em]">Ledger</span>
           </div>
 
@@ -110,7 +111,7 @@ export default function ResetPasswordPage({ onAuthed }: { onAuthed: (auth: AuthR
                   disabled={resetPassword.isPending}
                   className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity disabled:opacity-60"
                 >
-                  {resetPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Setting…</span> : 'Set password'}
+                  {resetPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Settingâ€¦</span> : 'Set password'}
                 </button>
               </form>
 

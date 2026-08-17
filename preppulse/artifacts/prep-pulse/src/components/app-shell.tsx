@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getGetActiveAnnouncementQueryKey, useDismissAnnouncement, useGetActiveAnnouncement, useGetMe, useLogOut } from '@workspace/api-client-react';
 import { getExamConfig } from '@workspace/exam-config';
 import { Avatar } from '@/components/avatar';
+import { BrandMark } from '@/components/brand-mark';
 import { OnboardingModal } from '@/components/onboarding';
 import { initialsFor } from '@/lib/utils';
 
@@ -49,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="main-grid mx-auto grid min-h-[100dvh] max-w-[1540px] md:h-full md:overflow-hidden">
         <aside className="hidden border-r border-sidebar/30 bg-sidebar px-5 py-7 text-sidebar-foreground md:flex md:flex-col md:overflow-y-auto">
           <Link href="/" className="mb-12 flex items-center gap-3" data-testid="link-brand">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent font-display text-lg font-bold text-white shadow-sm">L</span>
+            <BrandMark size={40} />
             <span>
               <span className="block font-display text-[1.2rem] font-bold tracking-tight">Ledger</span>
               <span className="font-mono-custom text-[9px] uppercase tracking-[.2em] text-sidebar-foreground/55">keep moving</span>
