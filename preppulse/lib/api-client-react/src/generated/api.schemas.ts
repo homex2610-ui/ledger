@@ -799,6 +799,8 @@ export interface Announcement {
   link: string | null;
   icon: string;
   isEnabled: boolean;
+  startsAt: string | null;
+  expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -808,6 +810,8 @@ export interface AnnouncementCreate {
   body: string;
   link?: string | null;
   icon?: string;
+  startsAt?: string | null;
+  expiresAt?: string | null;
 }
 
 export interface AnnouncementUpdate {
@@ -815,6 +819,8 @@ export interface AnnouncementUpdate {
   body?: string;
   link?: string | null;
   icon?: string;
+  startsAt?: string | null;
+  expiresAt?: string | null;
 }
 
 export interface AnnouncementToggle {

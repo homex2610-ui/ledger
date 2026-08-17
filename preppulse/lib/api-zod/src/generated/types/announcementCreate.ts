@@ -11,4 +11,6 @@ export interface AnnouncementCreate {
   body: string;
   link?: string | null;
   icon?: string;
+  startsAt?: Date | null;
+  expiresAt?: Date | null;
 }

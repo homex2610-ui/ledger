@@ -25,7 +25,30 @@ const ICON_MAP: Record<string, ComponentType<{ size?: number; className?: string
 };
 
 function toBody(data: AnnouncementCreate): AnnouncementCreate {
-  return { ...data, icon: data.icon ?? 'megaphone', link: data.link?.trim() ? data.link.trim() : null };
+  return {
+    ...data,
+    icon: data.icon ?? 'megaphone',
+    link: data.link?.trim() ? data.link.trim() : null,
+    startsAt: data.startsAt ?? null,
+    expiresAt: data.expiresAt ?? null,
+  };
+}
+
+function toLocalInput(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 16) : '';
+}
+
+function toIso(input: string): string | null {
+  const value = input.trim();
+  return value ? new Date(value).toISOString() : null;
+}
+
+function announcementStatus(announcement: Announcement): { label: string; className: string } {
+  const now = Date.now();
+  if (!announcement.isEnabled) return { label: 'Draft', className: 'bg-pill-warm text-pill-warm-fg' };
+  if (announcement.startsAt && new Date(announcement.startsAt).getTime() > now) return { label: 'Scheduled', className: 'bg-pill-warm text-pill-warm-fg' };
+  if (announcement.expiresAt && new Date(announcement.expiresAt).getTime() <= now) return { label: 'Expired', className: 'bg-pill-warm text-pill-warm-fg' };
+  return { label: 'Live', className: 'bg-pill-success text-pill-success-fg' };
 }
 
 function AnnouncementForm({ initial, onDone, busy }: { initial?: Announcement; onDone: (data: AnnouncementCreate) => void; busy: boolean }) {
@@ -33,7 +56,11 @@ function AnnouncementForm({ initial, onDone, busy }: { initial?: Announcement; o
   const [body, setBody] = useState(initial?.body ?? '');
   const [link, setLink] = useState(initial?.link ?? '');
   const [icon, setIcon] = useState(initial?.icon ?? 'megaphone');
-  const valid = title.trim().length > 0 && body.trim().length > 0;
+  const [startsAt, setStartsAt] = useState(toLocalInput(initial?.startsAt));
+  const [expiresAt, setExpiresAt] = useState(toLocalInput(initial?.expiresAt));
+  const startsIso = toIso(startsAt);
+  const expiresIso = toIso(expiresAt);
+  const valid = title.trim().length > 0 && body.trim().length > 0 && (!startsIso || !expiresIso || expiresIso > startsIso);
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -60,8 +87,18 @@ function AnnouncementForm({ initial, onDone, busy }: { initial?: Announcement; o
         <label className="mb-1 block text-xs font-semibold text-muted-foreground">Link (optional)</label>
         <input value={link} onChange={(event) => setLink(event.target.value)} data-testid="input-announcement-link" className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary" placeholder="https://…" />
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-muted-foreground">Show from (optional, local time)</label>
+          <input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} data-testid="input-announcement-starts" className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-muted-foreground">Hide after (optional, local time)</label>
+          <input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} data-testid="input-announcement-expires" className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary" />
+        </div>
+      </div>
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={() => onDone({ title, body, link, icon })} disabled={!valid || busy} data-testid="button-save-announcement" className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" onClick={() => onDone({ title, body, link, icon, startsAt: startsIso, expiresAt: expiresIso })} disabled={!valid || busy} data-testid="button-save-announcement" className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50">
           {busy ? 'Saving…' : initial ? 'Save changes' : 'Create announcement'}
         </button>
       </div>
@@ -125,7 +162,7 @@ export function AdminAnnouncements() {
     <AdminGate>
       <AdminPageHeader
         title="Announcements"
-        subtitle="Pills shown in every user's header. Only one can be live at a time."
+        subtitle="Pills shown in every user's header. Only one can be live at a time; schedule start/end times to auto-show and auto-hide."
         action={
           <button type="button" onClick={() => { setShowCreate((open) => !open); setEditingId(null); }} data-testid="button-new-announcement" className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90">
             {showCreate ? <X size={14} /> : <Plus size={14} />}{showCreate ? 'Cancel' : 'New announcement'}
@@ -158,10 +195,16 @@ export function AdminAnnouncements() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-display font-bold tracking-tight">{announcement.title}</h3>
-                      <span className={`rounded-full px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase tracking-[.12em] ${announcement.isEnabled ? 'bg-pill-success text-pill-success-fg' : 'bg-pill-warm text-pill-warm-fg'}`}>{announcement.isEnabled ? 'Live' : 'Draft'}</span>
+                      <span className={`rounded-full px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase tracking-[.12em] ${announcementStatus(announcement).className}`}>{announcementStatus(announcement).label}</span>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{announcement.body}</p>
                     {announcement.link && <p className="mt-1 truncate font-mono-custom text-[10px] text-primary">{announcement.link}</p>}
+                    {announcement.startsAt && (
+                      <p className="mt-1 font-mono-custom text-[9px] uppercase tracking-[.12em] text-muted-foreground/70">Shows {new Date(announcement.startsAt).toLocaleString()}{announcement.expiresAt ? ` · hides ${new Date(announcement.expiresAt).toLocaleString()}` : ''}</p>
+                    )}
+                    {!announcement.startsAt && announcement.expiresAt && (
+                      <p className="mt-1 font-mono-custom text-[9px] uppercase tracking-[.12em] text-muted-foreground/70">Hides {new Date(announcement.expiresAt).toLocaleString()}</p>
+                    )}
                     <p className="mt-2 font-mono-custom text-[9px] uppercase tracking-[.12em] text-muted-foreground/70">Created {timeAgo(announcement.createdAt)}</p>
                     {editingId === announcement.id && (
                       <div className="mt-4 border-t border-border/70 pt-4">

@@ -13,6 +13,8 @@ export interface Announcement {
   link: string | null;
   icon: string;
   isEnabled: boolean;
+  startsAt: Date | null;
+  expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

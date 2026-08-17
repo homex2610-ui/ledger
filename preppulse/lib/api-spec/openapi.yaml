@@ -2600,13 +2600,21 @@ components:
           type: string
         isEnabled:
           type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-      required: [id, title, body, link, icon, isEnabled, createdAt, updatedAt]
+      required: [id, title, body, link, icon, isEnabled, startsAt, expiresAt, createdAt, updatedAt]
 
     AnnouncementCreate:
       type: object
@@ -2620,6 +2628,14 @@ components:
           nullable: true
         icon:
           type: string
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
       required: [title, body]
 
     AnnouncementUpdate:
@@ -2634,6 +2650,14 @@ components:
           nullable: true
         icon:
           type: string
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
 
     AnnouncementToggle:
       type: object

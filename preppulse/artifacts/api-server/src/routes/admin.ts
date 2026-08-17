@@ -120,7 +120,14 @@ router.post("/admin/announcements", async (req, res) => {
   const body = CreateAnnouncementBody.parse(req.body);
   const inserted = await db
     .insert(announcementsTable)
-    .values({ title: body.title, body: body.body, link: body.link ?? null, icon: body.icon ?? "megaphone" })
+    .values({
+      title: body.title,
+      body: body.body,
+      link: body.link ?? null,
+      icon: body.icon ?? "megaphone",
+      startsAt: body.startsAt ? new Date(body.startsAt) : null,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+    })
     .returning();
   res.status(201).json(CreateAnnouncementResponse.parse(inserted[0]));
 });
@@ -130,7 +137,15 @@ router.patch("/admin/announcements/:announcementId", async (req, res) => {
   const body = UpdateAnnouncementBody.parse(req.body);
   const updated = await db
     .update(announcementsTable)
-    .set({ title: body.title, body: body.body, link: body.link ?? null, icon: body.icon, updatedAt: new Date() })
+    .set({
+      title: body.title,
+      body: body.body,
+      link: body.link ?? null,
+      icon: body.icon,
+      startsAt: body.startsAt === undefined ? undefined : body.startsAt ? new Date(body.startsAt) : null,
+      expiresAt: body.expiresAt === undefined ? undefined : body.expiresAt ? new Date(body.expiresAt) : null,
+      updatedAt: new Date(),
+    })
     .where(eq(announcementsTable.id, announcementId))
     .returning();
   if (!updated[0]) {

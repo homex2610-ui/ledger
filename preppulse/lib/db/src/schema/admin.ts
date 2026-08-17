@@ -11,6 +11,8 @@ export const announcementsTable = pgTable(
     link: text("link"),
     icon: text("icon").notNull().default("megaphone"),
     isEnabled: boolean("is_enabled").notNull().default(false),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

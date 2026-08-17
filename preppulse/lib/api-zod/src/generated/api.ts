@@ -1640,6 +1640,8 @@ export const ListAdminAnnouncementsResponseItem = zod.object({
   "link": zod.string().nullable(),
   "icon": zod.string(),
   "isEnabled": zod.boolean(),
+  "startsAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1653,7 +1655,9 @@ export const CreateAnnouncementBody = zod.object({
   "title": zod.string(),
   "body": zod.string(),
   "link": zod.string().nullish(),
-  "icon": zod.string().optional()
+  "icon": zod.string().optional(),
+  "startsAt": zod.coerce.date().nullish(),
+  "expiresAt": zod.coerce.date().nullish()
 })
 
 export const CreateAnnouncementResponse = zod.object({
@@ -1663,6 +1667,8 @@ export const CreateAnnouncementResponse = zod.object({
   "link": zod.string().nullable(),
   "icon": zod.string(),
   "isEnabled": zod.boolean(),
+  "startsAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1679,7 +1685,9 @@ export const UpdateAnnouncementBody = zod.object({
   "title": zod.string().optional(),
   "body": zod.string().optional(),
   "link": zod.string().nullish(),
-  "icon": zod.string().optional()
+  "icon": zod.string().optional(),
+  "startsAt": zod.coerce.date().nullish(),
+  "expiresAt": zod.coerce.date().nullish()
 })
 
 export const UpdateAnnouncementResponse = zod.object({
@@ -1689,6 +1697,8 @@ export const UpdateAnnouncementResponse = zod.object({
   "link": zod.string().nullable(),
   "icon": zod.string(),
   "isEnabled": zod.boolean(),
+  "startsAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
