@@ -1725,7 +1725,8 @@ export const ListAdminCohortsResponseItem = zod.object({
   "id": zod.string(),
   "createdAt": zod.coerce.date(),
   "memberCount": zod.number(),
-  "capacity": zod.number()
+  "capacity": zod.number(),
+  "weeklyMinutes": zod.number()
 })
 export const ListAdminCohortsResponse = zod.array(ListAdminCohortsResponseItem)
 
@@ -1783,6 +1784,23 @@ export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
 
 
 /**
+ * @summary All users with lifetime totals, for CSV export
+ */
+export const ListAdminUsersExportResponseItem = zod.object({
+  "id": zod.string(),
+  "handle": zod.string(),
+  "email": zod.string(),
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "cohortId": zod.string().nullable(),
+  "sessionCount": zod.number(),
+  "totalMinutes": zod.number(),
+  "focusSessionsCompleted": zod.number()
+})
+export const ListAdminUsersExportResponse = zod.array(ListAdminUsersExportResponseItem)
+
+
+/**
  * @summary Full detail for one user
  */
 export const GetAdminUserParams = zod.object({
@@ -1815,5 +1833,15 @@ export const SetAdminBody = zod.object({
 })
 
 export const SetAdminResponse = zod.void()
+
+
+/**
+ * @summary Remove a user and all their data (cascades). Their sign-in provider stays; a fresh sign-in re-creates the account.
+ */
+export const RemoveAdminUserParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const RemoveAdminUserResponse = zod.void()
 
 

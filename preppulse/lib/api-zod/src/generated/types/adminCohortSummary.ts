@@ -11,4 +11,5 @@ export interface AdminCohortSummary {
   createdAt: Date;
   memberCount: number;
   capacity: number;
+  weeklyMinutes: number;
 }

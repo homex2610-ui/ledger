@@ -1,9 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, ShieldCheck } from 'lucide-react';
-import { getGetAdminUserQueryKey, getListAdminUsersQueryKey, useGetAdminUser, useListAdminUsers, useSetAdmin } from '@workspace/api-client-react';
+import { Download, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { getGetAdminUserQueryKey, getListAdminUsersQueryKey, listAdminUsersExport, useGetAdminUser, useListAdminUsers, useRemoveAdminUser, useSetAdmin, type AdminUserExportRow } from '@workspace/api-client-react';
 import { AdminGate, AdminPageHeader, timeAgo } from '@/pages/admin/admin-shell';
 import { Card, EmptyState, ErrorState, LoadingBlock } from '@/components/ui-elements';
+
+const EXPORT_COLUMNS: { key: keyof AdminUserExportRow; label: string }[] = [
+  { key: 'handle', label: 'handle' },
+  { key: 'email', label: 'email' },
+  { key: 'isAdmin', label: 'is_admin' },
+  { key: 'createdAt', label: 'created_at' },
+  { key: 'cohortId', label: 'cohort_id' },
+  { key: 'sessionCount', label: 'study_sessions' },
+  { key: 'totalMinutes', label: 'total_minutes' },
+  { key: 'focusSessionsCompleted', label: 'focus_sessions' },
+];
+
+function toCsv(rows: AdminUserExportRow[]): string {
+  const escape = (value: string | number | boolean | null) => {
+    const text = value === null ? '' : String(value);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const header = EXPORT_COLUMNS.map((column) => column.label).join(',');
+  const lines = rows.map((row) => EXPORT_COLUMNS.map((column) => escape(row[column.key])).join(','));
+  return [header, ...lines].join('\n');
+}
 
 export function AdminUsers() {
   const queryClient = useQueryClient();
@@ -11,9 +32,11 @@ export function AdminUsers() {
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const { data: users, isPending, isError, refetch } = useListAdminUsers({ q: query || undefined });
   const userDetail = useGetAdminUser(expandedId ?? '', { query: { queryKey: getGetAdminUserQueryKey(expandedId ?? ''), enabled: expandedId !== null } });
   const setAdmin = useSetAdmin();
+  const removeUser = useRemoveAdminUser();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(search.trim()), 300);
@@ -38,9 +61,43 @@ export function AdminUsers() {
     );
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const rows = await listAdminUsersExport();
+      const blob = new Blob([`\uFEFF${toCsv(rows)}`], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'ledger-users.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch { /* export failed silently */ } finally { setExporting(false); }
+  };
+
+  const handleRemove = (userId: string, handle: string) => {
+    if (!window.confirm(`Remove ${handle} and ALL their data? This can't be undone.`)) return;
+    setRoleError(null);
+    removeUser.mutate(
+      { userId },
+      {
+        onSuccess: () => { refresh(); setExpandedId(null); },
+        onError: (error: Error) => setRoleError(error.message || 'Could not remove this user.'),
+      },
+    );
+  };
+
   return (
     <AdminGate>
-      <AdminPageHeader title="Users" subtitle="Every account, plus the power to grant admin." />
+      <AdminPageHeader
+        title="Users"
+        subtitle="Every account, plus the power to grant admin and remove accounts."
+        action={
+          <button type="button" onClick={handleExport} disabled={exporting} data-testid="button-export-users" className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            <Download size={14} />{exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+        }
+      />
 
       <div className="mb-4 flex items-center gap-2 rounded-xl border border-border/80 bg-card px-3 py-2">
         <Search size={15} className="shrink-0 text-muted-foreground" />
@@ -92,6 +149,11 @@ export function AdminUsers() {
                     ) : (
                       <ErrorState onRetry={() => userDetail.refetch()} />
                     )}
+                    <div className="mt-4 border-t border-border/70 pt-3">
+                      <button type="button" onClick={() => handleRemove(user.id, user.handle)} disabled={removeUser.isPending} data-testid={`button-remove-user-${user.id}`} className="flex items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs font-bold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50">
+                        <Trash2 size={13} />{removeUser.isPending ? 'Removing…' : 'Remove account'}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

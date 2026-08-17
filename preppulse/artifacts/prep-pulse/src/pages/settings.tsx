@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Sun, Trash2, Unplug, UserRound } from 'lucide-react';
+import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Sun, Timer, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError, exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
 import { EXAM_TRACKS, getExamConfig } from '@workspace/exam-config';
@@ -10,6 +10,7 @@ import { Avatar } from '@/components/avatar';
 import { getGisCsrfToken, initialsFor } from '@/lib/utils';
 import { applyTemplate, applyTheme, getStoredTemplate, getStoredTheme, type AppTemplate, type AppTheme } from '@/lib/theme';
 import { formatMinutes, formatPace, formatWeekShare } from '@/lib/format-duration';
+import { hourLabel, loadReminderPrefs, REMINDER_INTERVALS, saveReminderPrefs, type ReminderPrefs } from '@/lib/reminder-prefs';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -37,6 +38,12 @@ export default function Settings() {
   const hasPassword = Boolean(me?.user?.hasPassword);
   const [theme, setTheme] = useState<AppTheme>(getStoredTheme());
   const [template, setTemplate] = useState<AppTemplate>(getStoredTemplate());
+  const [reminderPrefs, setReminderPrefs] = useState<ReminderPrefs>(loadReminderPrefs());
+  const updateReminderPrefs = (next: Partial<ReminderPrefs>) => {
+    const merged = { ...reminderPrefs, ...next };
+    setReminderPrefs(merged);
+    saveReminderPrefs({ ...merged, nextAt: null });
+  };
   useEffect(() => { if (profile) setValues({ focusMode: profile.focusMode, showOnLeaderboard: profile.showOnLeaderboard }); }, [profile]);
 
   const update = (next: Partial<ProfileUpdate>) => {
@@ -217,6 +224,38 @@ export default function Settings() {
       </Card>
 
       <Card className="p-5 md:p-7"><SectionTitle eyebrow="Preferences" title="How Ledger shows up" action={<SavingLabel pending={updateProfile.isPending} />} /><div className="divide-y divide-border/70"><SettingRow icon={<Focus size={17} />} title="Focus mode" detail="Keep your rank and activity out of the weekly circle." enabled={values.focusMode ?? false} onToggle={() => update({ focusMode: !values.focusMode })} testId="switch-focus-mode" /><SettingRow icon={values.showOnLeaderboard ? <Eye size={17} /> : <EyeOff size={17} />} title="Show me on leaderboard" detail="Let your friends see your handle and weekly pulse." enabled={values.showOnLeaderboard ?? true} onToggle={() => update({ showOnLeaderboard: !values.showOnLeaderboard })} testId="switch-leaderboard-visibility" /></div></Card>
+
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="Study reminders" title="A gentle nudge, on your terms" />
+        <div className="divide-y divide-border/70">
+          <SettingRow icon={<Timer size={17} />} title="Remind me to start focus blocks" detail="Shows a banner while you're in the app, between your chosen hours." enabled={reminderPrefs.enabled} onToggle={() => updateReminderPrefs({ enabled: !reminderPrefs.enabled })} testId="switch-reminder-enabled" />
+          {reminderPrefs.enabled && (
+            <div className="space-y-4 py-5 first:pt-2 last:pb-2">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold">Remind every</span>
+                  <Select value={String(reminderPrefs.intervalMinutes)} onChange={(event) => updateReminderPrefs({ intervalMinutes: Number(event.target.value) })} data-testid="select-reminder-interval">
+                    {REMINDER_INTERVALS.map((minutes) => <option key={minutes} value={minutes}>{formatMinutes(minutes)}</option>)}
+                  </Select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold">From</span>
+                  <Select value={String(reminderPrefs.startHour)} onChange={(event) => updateReminderPrefs({ startHour: Number(event.target.value) })} data-testid="select-reminder-start">
+                    {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+                  </Select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold">Until</span>
+                  <Select value={String(reminderPrefs.endHour)} onChange={(event) => updateReminderPrefs({ endHour: Number(event.target.value) })} data-testid="select-reminder-end">
+                    {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+                  </Select>
+                </label>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">Saved on this device only — nothing is sent to the server.</p>
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Appearance" title="Pick your vibe" />

@@ -18,6 +18,8 @@ export * from './adminSet';
 export * from './adminStatsResponse';
 export * from './adminStatsResponseActiveAnnouncement';
 export * from './adminUserDetail';
+export * from './adminUserExportRow';
+export * from './adminUsersExport';
 export * from './adminUserSummary';
 export * from './announcement';
 export * from './announcementCreate';

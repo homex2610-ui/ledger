@@ -27,6 +27,7 @@ import type {
   AdminStatsResponse,
   AdminUserDetail,
   AdminUserSummary,
+  AdminUsersExport,
   Announcement,
   AnnouncementCreate,
   AnnouncementToggle,
@@ -5520,6 +5521,83 @@ export function useListAdminUsers<TData = Awaited<ReturnType<typeof listAdminUse
 
 
 
+export const getListAdminUsersExportUrl = () => {
+
+
+
+
+  return `/api/admin/users/export`
+}
+
+/**
+ * @summary All users with lifetime totals, for CSV export
+ */
+export const listAdminUsersExport = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminUsersExport> => {
+
+  return customFetch<AdminUsersExport>(getListAdminUsersExportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminUsersExportQueryKey = () => {
+    return [
+    `/api/admin/users/export`
+    ] as const;
+    }
+
+
+export const getListAdminUsersExportQueryOptions = <TData = Awaited<ReturnType<typeof listAdminUsersExport>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminUsersExport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminUsersExportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsersExport>>> = ({ signal }) => listAdminUsersExport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminUsersExport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminUsersExportQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminUsersExport>>>
+export type ListAdminUsersExportQueryError = ErrorType<void>
+
+
+/**
+ * @summary All users with lifetime totals, for CSV export
+ */
+
+export function useListAdminUsersExport<TData = Awaited<ReturnType<typeof listAdminUsersExport>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminUsersExport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminUsersExportQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetAdminUserUrl = (userId: string,) => {
 
 
@@ -5667,5 +5745,76 @@ export const useSetAdmin = <TError = ErrorType<void | ErrorResponse>,
         TContext
       > => {
       return useMutation(getSetAdminMutationOptions(options));
+    }
+
+export const getRemoveAdminUserUrl = (userId: string,) => {
+
+
+
+
+  return `/api/admin/users/${userId}/remove`
+}
+
+/**
+ * @summary Remove a user and all their data (cascades). Their sign-in provider stays; a fresh sign-in re-creates the account.
+ */
+export const removeAdminUser = async (userId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRemoveAdminUserUrl(userId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRemoveAdminUserMutationOptions = <TError = ErrorType<void | ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeAdminUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeAdminUser>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['removeAdminUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeAdminUser>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  removeAdminUser(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveAdminUserMutationResult = NonNullable<Awaited<ReturnType<typeof removeAdminUser>>>
+
+    export type RemoveAdminUserMutationError = ErrorType<void | ErrorResponse>
+
+    /**
+ * @summary Remove a user and all their data (cascades). Their sign-in provider stays; a fresh sign-in re-creates the account.
+ */
+export const useRemoveAdminUser = <TError = ErrorType<void | ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeAdminUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeAdminUser>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getRemoveAdminUserMutationOptions(options));
     }
 

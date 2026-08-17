@@ -8,6 +8,7 @@ import { Avatar } from '@/components/avatar';
 import { BrandMark } from '@/components/brand-mark';
 import { OnboardingModal } from '@/components/onboarding';
 import { initialsFor } from '@/lib/utils';
+import { useFocusReminder } from '@/lib/reminder-prefs';
 
 const navigation = [
   { href: '/', label: 'Overview', icon: Home },
@@ -32,6 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const activeAnnouncement = useGetActiveAnnouncement().data?.announcement ?? null;
   const dismissAnnouncement = useDismissAnnouncement();
+  const reminder = useFocusReminder();
 
   const dismissActiveAnnouncement = () => {
     if (!activeAnnouncement) return;
@@ -117,6 +119,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Avatar src={me?.profile.avatarUrl} initials={initials} className="h-10 w-10 bg-primary text-xs text-white" title={handle} />
             </Link>
           </header>
+          {reminder.show && location !== '/study' && (
+            <div className="mx-5 mt-4 flex items-center gap-3 rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 md:mx-10" data-testid="focus-reminder">
+              <Timer size={16} className="shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">Time for a focus block?</p>
+                <p className="text-xs text-muted-foreground">Even 25 focused minutes moves the needle.</p>
+              </div>
+              <Link href="/study" className="shrink-0 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="link-reminder-study">Start a block</Link>
+              <button type="button" onClick={reminder.dismiss} aria-label="Dismiss reminder" data-testid="button-dismiss-reminder" className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><X size={14} /></button>
+            </div>
+          )}
           <main className="page-enter px-5 pb-28 pt-7 md:min-h-0 md:flex-1 md:overflow-y-auto md:px-10 md:pb-12 md:pt-10">{children}</main>
         </div>
       </div>

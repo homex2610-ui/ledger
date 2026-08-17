@@ -22,9 +22,11 @@ import {
   GetAdminUserResponse,
   ListAdminAnnouncementsResponse,
   ListAdminCohortsResponse,
+  ListAdminUsersExportResponse,
   ListAdminUsersResponse,
   MoveCohortMemberBody,
   MoveCohortMemberParams,
+  RemoveAdminUserParams,
   SetAdminBody,
   SetAdminParams,
   ToggleAnnouncementBody,
@@ -176,10 +178,12 @@ router.get("/admin/cohorts", async (_req, res) => {
     .select({
       id: cohortsTable.id,
       createdAt: cohortsTable.createdAt,
-      memberCount: sql<number>`count(${cohortMembersTable.userId})::int`,
+      memberCount: sql<number>`count(distinct ${cohortMembersTable.userId})::int`,
+      weeklyMinutes: sql<number>`coalesce(sum(case when ${studySessionsTable.createdAt} >= date_trunc('week', now()) then ${studySessionsTable.minutes} else 0 end), 0)::int`,
     })
     .from(cohortsTable)
     .leftJoin(cohortMembersTable, eq(cohortMembersTable.cohortId, cohortsTable.id))
+    .leftJoin(studySessionsTable, eq(studySessionsTable.userId, cohortMembersTable.userId))
     .groupBy(cohortsTable.id)
     .orderBy(asc(cohortsTable.createdAt));
   res.json(ListAdminCohortsResponse.parse(rows.map((row) => ({ ...row, capacity: COHORT_CAPACITY }))));
@@ -248,6 +252,29 @@ router.get("/admin/users", async (req, res) => {
   res.json(ListAdminUsersResponse.parse(rows.map((row) => ({ ...row, isAdmin: row.isAdmin ?? false }))));
 });
 
+router.get("/admin/users/export", async (_req, res) => {
+  const rows = await db
+    .select({
+      id: usersTable.id,
+      handle: usersTable.handle,
+      email: usersTable.email,
+      isAdmin: profilesTable.isAdmin,
+      createdAt: usersTable.createdAt,
+      cohortId: cohortMembersTable.cohortId,
+      sessionCount: sql<number>`count(${studySessionsTable.id})::int`,
+      totalMinutes: sql<number>`coalesce(sum(${studySessionsTable.minutes}), 0)::int`,
+      focusSessionsCompleted: sql<number>`count(${focusSessionsTable.id}) filter (where ${focusSessionsTable.status} = 'completed')::int`,
+    })
+    .from(usersTable)
+    .leftJoin(profilesTable, eq(profilesTable.userId, usersTable.id))
+    .leftJoin(cohortMembersTable, eq(cohortMembersTable.userId, usersTable.id))
+    .leftJoin(studySessionsTable, eq(studySessionsTable.userId, usersTable.id))
+    .leftJoin(focusSessionsTable, eq(focusSessionsTable.userId, usersTable.id))
+    .groupBy(usersTable.id, profilesTable.isAdmin, cohortMembersTable.cohortId)
+    .orderBy(asc(usersTable.createdAt));
+  res.json(ListAdminUsersExportResponse.parse(rows.map((row) => ({ ...row, isAdmin: row.isAdmin ?? false }))));
+});
+
 router.get("/admin/users/:userId", async (req, res) => {
   const { userId } = GetAdminUserParams.parse(req.params);
   const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -298,6 +325,41 @@ router.post("/admin/users/:userId/set-admin", async (req, res) => {
     }
     throw error;
   }
+});
+
+router.post("/admin/users/:userId/remove", async (req, res) => {
+  const { userId } = RemoveAdminUserParams.parse(req.params);
+  if (userId === req.userId) {
+    res.status(409).json({ error: "You can't remove your own account." });
+    return;
+  }
+  const targetRows = await db
+    .select({ id: usersTable.id, handle: usersTable.handle, email: usersTable.email, isAdmin: profilesTable.isAdmin })
+    .from(usersTable)
+    .leftJoin(profilesTable, eq(profilesTable.userId, usersTable.id))
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!targetRows[0]) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const target = targetRows[0];
+  if (target.isAdmin) {
+    const [adminRows] = await db.select({ count: sql<number>`count(*)::int` }).from(profilesTable).where(eq(profilesTable.isAdmin, true));
+    if ((adminRows?.count ?? 0) <= 1) {
+      res.status(409).json({ error: "Can't remove the last admin" });
+      return;
+    }
+  }
+  await db.delete(usersTable).where(eq(usersTable.id, userId));
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "user_remove",
+    targetType: "user",
+    targetId: userId,
+    beforeState: { handle: target.handle, email: target.email, isAdmin: target.isAdmin ?? false },
+  });
+  res.status(204).end();
 });
 
 export default router;

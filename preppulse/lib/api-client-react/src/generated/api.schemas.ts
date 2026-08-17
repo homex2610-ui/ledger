@@ -861,6 +861,7 @@ export interface AdminCohortSummary {
   createdAt: string;
   memberCount: number;
   capacity: number;
+  weeklyMinutes: number;
 }
 
 export interface AdminCohortMember {
@@ -889,6 +890,20 @@ export interface AdminUserSummary {
   isAdmin: boolean;
   createdAt: string;
 }
+
+export interface AdminUserExportRow {
+  id: string;
+  handle: string;
+  email: string;
+  isAdmin: boolean;
+  createdAt: string;
+  cohortId: string | null;
+  sessionCount: number;
+  totalMinutes: number;
+  focusSessionsCompleted: number;
+}
+
+export type AdminUsersExport = AdminUserExportRow[];
 
 export interface AdminUserDetail {
   id: string;

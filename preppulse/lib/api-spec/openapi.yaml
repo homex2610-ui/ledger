@@ -1363,6 +1363,21 @@ paths:
         "404":
           description: Not an admin
 
+  /admin/users/export:
+    get:
+      operationId: listAdminUsersExport
+      tags: [admin]
+      summary: All users with lifetime totals, for CSV export
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsersExport"
+        "404":
+          description: Not an admin
+
   /admin/users/{userId}:
     get:
       operationId: getAdminUser
@@ -1408,6 +1423,29 @@ paths:
           description: Not an admin or not found
         "409":
           description: Cannot remove the last admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{userId}/remove:
+    post:
+      operationId: removeAdminUser
+      tags: [admin]
+      summary: Remove a user and all their data (cascades). Their sign-in provider stays; a fresh sign-in re-creates the account.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not an admin or not found
+        "409":
+          description: Cannot remove yourself or the last admin
           content:
             application/json:
               schema:
@@ -2732,7 +2770,9 @@ components:
           type: number
         capacity:
           type: number
-      required: [id, createdAt, memberCount, capacity]
+        weeklyMinutes:
+          type: number
+      required: [id, createdAt, memberCount, capacity, weeklyMinutes]
 
     AdminCohortMember:
       type: object
@@ -2788,6 +2828,36 @@ components:
           type: string
           format: date-time
       required: [id, handle, email, isAdmin, createdAt]
+
+    AdminUserExportRow:
+      type: object
+      properties:
+        id:
+          type: string
+        handle:
+          type: string
+        email:
+          type: string
+        isAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        cohortId:
+          type: string
+          nullable: true
+        sessionCount:
+          type: number
+        totalMinutes:
+          type: number
+        focusSessionsCompleted:
+          type: number
+      required: [id, handle, email, isAdmin, createdAt, cohortId, sessionCount, totalMinutes, focusSessionsCompleted]
+
+    AdminUsersExport:
+      type: array
+      items:
+        $ref: "#/components/schemas/AdminUserExportRow"
 
     AdminUserDetail:
       type: object

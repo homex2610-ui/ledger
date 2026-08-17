@@ -4,6 +4,7 @@ import { UsersRound } from 'lucide-react';
 import { getGetAdminCohortQueryKey, getListAdminCohortsQueryKey, useGetAdminCohort, useListAdminCohorts, useMoveCohortMember } from '@workspace/api-client-react';
 import { AdminGate, AdminPageHeader } from '@/pages/admin/admin-shell';
 import { Card, EmptyState, ErrorState, LoadingBlock } from '@/components/ui-elements';
+import { formatMinutes } from '@/lib/format-duration';
 
 function shortId(id: string): string {
   return id.slice(0, 8);
@@ -43,7 +44,7 @@ export function AdminCohorts() {
 
   return (
     <AdminGate>
-      <AdminPageHeader title="Cohorts" subtitle="Study groups and their members. Move people around as space allows." />
+      <AdminPageHeader title="Cohorts" subtitle="Study groups and their members. Move people around as space allows. Weekly minutes are this week's total across each cohort." />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-1">
@@ -67,7 +68,7 @@ export function AdminCohorts() {
                         <p className="font-display text-sm font-bold tracking-tight">{cohortLabel(cohort)}</p>
                         {nearCapacity && <span className="rounded-full bg-pill-warm px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase tracking-[.12em] text-pill-warm-fg">Near full</span>}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{cohort.memberCount} / {cohort.capacity} members</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{cohort.memberCount} / {cohort.capacity} members · {formatMinutes(cohort.weeklyMinutes)} studied this week</p>
                     </button>
                   </li>
                 );
