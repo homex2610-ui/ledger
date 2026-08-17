@@ -50,11 +50,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-background md:h-[100dvh] md:overflow-hidden">
       <div className="main-grid mx-auto grid min-h-[100dvh] max-w-[1540px] md:h-full md:overflow-hidden">
-        <aside className="hidden border-r border-sidebar/30 bg-sidebar px-5 py-7 text-sidebar-foreground md:flex md:flex-col md:overflow-y-auto">
-          <Link href="/" className="mb-12 flex items-center gap-3" data-testid="link-brand">
-            <BrandMark size={40} />
+        <aside className="hidden border-r border-sidebar/30 bg-sidebar px-4 py-6 text-sidebar-foreground md:flex md:flex-col md:overflow-y-auto">
+          <Link href="/" className="mb-8 flex items-center gap-3" data-testid="link-brand">
+            <BrandMark size={36} />
             <span>
-              <span className="block font-display text-[1.2rem] font-bold tracking-tight">Ledger</span>
+              <span className="block font-display text-[1.1rem] font-bold tracking-tight">Ledger</span>
               <span className="font-mono-custom text-[9px] uppercase tracking-[.2em] text-sidebar-foreground/55">keep moving</span>
             </span>
           </Link>
@@ -63,19 +63,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             {navigation.map(({ href, label, icon: Icon }) => {
               const active = location === href;
               return (
-                <Link key={href} href={href} data-testid={`link-nav-${label.toLowerCase()}`} className={`nav-link flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${active ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
-                  <Icon size={17} strokeWidth={active ? 2.5 : 1.8} />
+                <Link key={href} href={href} data-testid={`link-nav-${label.toLowerCase()}`} className={`nav-link relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${active ? 'bg-sidebar-foreground/10 text-sidebar-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
+                  {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />}
+                  <Icon size={17} strokeWidth={active ? 2.5 : 1.8} className={active ? 'text-accent' : ''} />
                   {label}
-                  {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent" />}
                 </Link>
               );
             })}
           </nav>
           {me?.profile.isAdmin && (
-            <Link href="/admin" data-testid="link-nav-admin" className={`nav-link mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${location.startsWith('/admin') ? 'bg-accent/20 text-accent' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
-              <ShieldCheck size={17} strokeWidth={location.startsWith('/admin') ? 2.5 : 1.8} />
+            <Link href="/admin" data-testid="link-nav-admin" className={`nav-link relative mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${location.startsWith('/admin') ? 'bg-sidebar-foreground/10 text-sidebar-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
+              {location.startsWith('/admin') && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />}
+              <ShieldCheck size={17} strokeWidth={location.startsWith('/admin') ? 2.5 : 1.8} className={location.startsWith('/admin') ? 'text-accent' : ''} />
               Admin
-              {location.startsWith('/admin') && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent" />}
             </Link>
           )}
           <a
@@ -88,10 +88,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" /></svg>
             Join Discord
           </a>
-          <Link href="/settings" data-testid="link-nav-settings" className="nav-link mt-4 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground">
+          <Link href="/settings" data-testid="link-nav-settings" className="nav-link mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground">
             <Settings size={17} /> Settings
           </Link>
-          <button type="button" onClick={signOut} disabled={logOut.isPending} className="nav-link mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground" data-testid="button-sign-out">
+          <button type="button" onClick={signOut} disabled={logOut.isPending} className="nav-link mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground" data-testid="button-sign-out">
             <LogOut size={17} /> {logOut.isPending ? 'Signing out…' : 'Sign out'}
           </button>
         </aside>
@@ -137,7 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <nav className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-around rounded-2xl border border-border/80 bg-card/95 p-2 shadow-[0_14px_40px_hsl(186_32%_16%/.12)] backdrop-blur-md md:hidden" aria-label="Mobile navigation">
         {navigation.map(({ href, label, icon: Icon }) => {
           const active = location === href;
-          return <Link key={href} href={href} data-testid={`link-mobile-${label.toLowerCase()}`} className={`flex min-w-[48px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}><Icon size={17} /><span>{label}</span></Link>;
+          return <Link key={href} href={href} data-testid={`link-mobile-${label.toLowerCase()}`} className={`flex min-w-[40px] flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[9px] font-semibold ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}><Icon size={16} /><span className="leading-none">{label}</span></Link>;
         })}
       </nav>
 

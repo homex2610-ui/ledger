@@ -1,7 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link2, Music2, Pause, Play, Volume2, X } from 'lucide-react';
+import { CloudRain, Headphones, Link2, Music2, Pause, Play, Volume2, X } from 'lucide-react';
 import { extractYouTubeId, loadFocusMusicUrl, saveFocusMusicUrl } from '@/lib/focus-music';
 import { Card, SectionTitle } from '@/components/ui-elements';
+
+const PRESETS = [
+  { label: 'Lo-fi', id: 'jfKfPfyJRdk', icon: Headphones },
+  { label: 'Rain', id: '7klljnYrw4k', icon: CloudRain },
+];
+
+const VOLUME_KEY = 'pp-focus-music-volume';
+
+function loadVolume(): number {
+  try {
+    const raw = Number(localStorage.getItem(VOLUME_KEY));
+    if (Number.isFinite(raw) && raw >= 0 && raw <= 100) return raw;
+  } catch {
+    return 80;
+  }
+  return 80;
+}
 
 type YTPlayer = {
   playVideo: () => void;
@@ -18,6 +35,7 @@ type YTPlayerConfig = {
   events?: {
     onReady?: (event: { target: YTPlayer }) => void;
     onStateChange?: (event: { data: number }) => void;
+    onError?: (event: { data: number }) => void;
   };
 };
 
@@ -52,7 +70,7 @@ export function FocusMusic() {
   const [videoId, setVideoId] = useState<string | null>(() => extractYouTubeId(loadFocusMusicUrl()));
   const [title, setTitle] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(80);
+  const [volume, setVolume] = useState(loadVolume);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const volumeRef = useRef(volume);
@@ -76,6 +94,7 @@ export function FocusMusic() {
             try { event.target.playVideo(); } catch { /* autoplay may be blocked */ }
           },
           onStateChange: (event) => setPlaying(event.data === YT_STATES.PLAYING),
+          onError: () => setError('This audio isn\u2019t available right now \u2014 try another preset or a fresh link.'),
         },
       });
     });
@@ -86,20 +105,26 @@ export function FocusMusic() {
     };
   }, [videoId]);
 
+  const playId = (id: string) => {
+    setError(null);
+    const watch = `https://www.youtube.com/watch?v=${id}`;
+    saveFocusMusicUrl(watch);
+    setDraft(watch);
+    setVideoId(id);
+    setTitle(null);
+    void fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(watch)}&format=json`)
+      .then((response) => (response.ok ? response.json() as Promise<{ title?: string }> : null))
+      .then((data) => { if (data?.title) setTitle(data.title); })
+      .catch(() => { return; });
+  };
+
   const apply = () => {
     const id = extractYouTubeId(draft);
     if (!id) {
       setError('Paste a YouTube link — watch, shorts, or share links all work.');
       return;
     }
-    setError(null);
-    saveFocusMusicUrl(draft);
-    setVideoId(id);
-    setTitle(null);
-    void fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`)
-      .then((response) => (response.ok ? response.json() as Promise<{ title?: string }> : null))
-      .then((data) => { if (data?.title) setTitle(data.title); })
-      .catch(() => { return; });
+    playId(id);
   };
 
   const toggle = () => {
@@ -109,6 +134,12 @@ export function FocusMusic() {
       if (playing) player.pauseVideo();
       else player.playVideo();
     } catch { /* player not ready */ }
+  };
+
+  const changeVolume = (next: number) => {
+    setVolume(next);
+    try { localStorage.setItem(VOLUME_KEY, String(next)); } catch { return; }
+    try { playerRef.current?.setVolume(next); } catch { /* player not ready */ }
   };
 
   const clear = () => {
@@ -121,10 +152,15 @@ export function FocusMusic() {
   };
 
   return (
-    <Card className="p-5 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-7">
-      <SectionTitle eyebrow="Background music" title="Lo-fi while you lock in" action={playing && videoId ? <span className="pp-eq"><span /><span /><span /><span /></span> : <Music2 size={18} className="text-primary" />} />
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Paste any YouTube link — the audio keeps playing while you focus.</p>
-      <div className="mt-4 flex gap-2">
+    <Card className="p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-5">
+      <SectionTitle eyebrow="Background music" title="Focus audio" action={playing && videoId ? <span className="pp-eq"><span /><span /><span /><span /></span> : <Music2 size={18} className="text-primary" />} />
+      <p className="text-sm leading-relaxed text-muted-foreground">Pick a soundscape, or paste any YouTube link — the audio keeps playing while you focus.</p>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {PRESETS.map(({ label, id, icon: Icon }) => (
+          <button key={label} type="button" onClick={() => playId(id)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-all duration-150 ${videoId === id ? 'border-accent/30 bg-accent/12 text-accent' : 'border-border/80 text-muted-foreground hover:border-accent/40 hover:text-foreground'}`} data-testid={`focus-preset-${label.toLowerCase()}`}><Icon size={12} />{label}</button>
+        ))}
+      </div>
+      <div className="mt-3 flex gap-2">
         <div className="relative min-w-0 flex-1">
           <Link2 size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -140,7 +176,7 @@ export function FocusMusic() {
       </div>
       {error && <p className="mt-2 text-xs font-semibold text-accent" data-testid="focus-music-error">{error}</p>}
       {videoId ? (
-        <div className="mt-4">
+        <div className="mt-3">
           <div className="relative aspect-video overflow-hidden rounded-xl border border-border/70 bg-sidebar" data-testid="iframe-focus-music">
             <div id="focus-music-player" className="absolute inset-0" />
           </div>
@@ -157,7 +193,7 @@ export function FocusMusic() {
           </div>
           <div className="mt-2 flex items-center gap-2">
             <Volume2 size={13} className="shrink-0 text-muted-foreground/60" />
-            <input type="range" min={0} max={100} value={volume} onChange={(event) => { const next = Number(event.target.value); setVolume(next); try { playerRef.current?.setVolume(next); } catch { /* player not ready */ } }} className="h-1.5 w-full cursor-pointer accent-[hsl(var(--primary))]" aria-label="Music volume" data-testid="input-focus-music-volume" />
+            <input type="range" min={0} max={100} value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="h-1.5 w-full cursor-pointer accent-[hsl(var(--primary))]" aria-label="Music volume" data-testid="input-focus-music-volume" />
             <span className="w-7 shrink-0 text-right font-mono-custom text-[9px] text-muted-foreground/60">{volume}</span>
           </div>
         </div>
