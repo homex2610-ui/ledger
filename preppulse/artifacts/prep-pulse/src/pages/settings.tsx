@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Sun, Timer, Trash2, Unplug, UserRound } from 'lucide-react';
+import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Rocket, Sun, Timer, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError, exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
 import { EXAM_TRACKS, getExamConfig } from '@workspace/exam-config';
@@ -11,6 +11,7 @@ import { getGisCsrfToken, initialsFor } from '@/lib/utils';
 import { applyTemplate, applyTheme, getStoredTemplate, getStoredTheme, type AppTemplate, type AppTheme } from '@/lib/theme';
 import { formatMinutes, formatPace, formatWeekShare } from '@/lib/format-duration';
 import { hourLabel, loadReminderPrefs, REMINDER_INTERVALS, saveReminderPrefs, type ReminderPrefs } from '@/lib/reminder-prefs';
+import { APP_RELEASES, APP_VERSION, BUILD_SHA, DB_SCHEMA_VERSION, ENVIRONMENT, isChangelogSeen, markChangelogSeen } from '@/lib/version';
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -33,6 +34,8 @@ export default function Settings() {
   const [pwConfirm, setPwConfirm] = useState('');
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSaved, setPwSaved] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
+  const [changelogSeen, setChangelogSeen] = useState(isChangelogSeen());
   const changePassword = useChangePassword();
   const me = queryClient.getQueryData<AuthResponse>(getGetMeQueryKey());
   const hasPassword = Boolean(me?.user?.hasPassword);
@@ -375,6 +378,36 @@ export default function Settings() {
           <button type="button" onClick={handleExport} disabled={exporting} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-bold hover:bg-secondary disabled:opacity-50" data-testid="button-export-data">{exporting ? 'Preparing…' : <><Download size={14} /> Export your data</>}</button>
           <button type="button" onClick={() => setDeleteOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-accent/30 px-4 py-2.5 text-xs font-bold text-accent hover:bg-accent/10" data-testid="button-delete-account"><Trash2 size={14} /> Delete account</button>
         </div>
+      </Card>
+
+      <Card className="p-5 md:p-7">
+        <SectionTitle eyebrow="About Ledger" title="Version and changelog" action={!changelogSeen ? <span className="rounded-full bg-accent px-2.5 py-1 font-mono-custom text-[10px] font-bold uppercase tracking-[.1em] text-accent-foreground" data-testid="badge-whats-new">New · {APP_VERSION}</span> : undefined} />
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <p className="font-display text-3xl font-bold tracking-tight" data-testid="text-app-version">{APP_VERSION}</p>
+          <button type="button" onClick={() => { setChangelogOpen((open) => !open); if (!changelogSeen) { markChangelogSeen(); setChangelogSeen(true); } }} className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs font-bold transition-colors hover:bg-secondary" data-testid="button-whats-new"><Rocket size={13} className="text-primary" /> What's new<ChevronRight size={13} className={`transition-transform duration-200 ${changelogOpen ? 'rotate-90' : ''}`} /></button>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <InfoRow icon={<Rocket size={17} />} title="Build" detail={`Commit ${BUILD_SHA} · ${ENVIRONMENT} · released ${APP_RELEASES[0].date}.`} status={ENVIRONMENT} />
+          <InfoRow icon={<UserRound size={17} />} title="Data layer" detail={`Database schema ${DB_SCHEMA_VERSION} — the app version above is independent of it.`} status="Schema" />
+        </div>
+        {changelogOpen && (
+          <div className="mt-4 space-y-3 border-t border-border/70 pt-4" data-testid="changelog">
+            {APP_RELEASES.map((release) => (
+              <div key={release.version} className="rounded-xl border border-border/70 p-4" data-testid={`changelog-release-${release.version}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-mono-custom text-sm font-bold text-primary">v{release.version}</p>
+                  <span className="rounded-full bg-secondary px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase tracking-[.12em] text-muted-foreground">{release.type}</span>
+                  <span className="font-mono-custom text-[10px] text-muted-foreground">{release.date}</span>
+                </div>
+                <p className="mt-2 text-sm font-bold">{release.heading}</p>
+                {release.added.length > 0 && <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-muted-foreground">{release.added.map((note) => <li key={note}>{note}</li>)}</ul>}
+                {release.improved.length > 0 && <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-muted-foreground">{release.improved.map((note) => <li key={note}>{note}</li>)}</ul>}
+                {release.fixed.length > 0 && <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-muted-foreground">{release.fixed.map((note) => <li key={note}>{note}</li>)}</ul>}
+              </div>
+            ))}
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">Rollbacks are handled through the deployment pipeline, not this screen — this changelog only documents what shipped.</p>
+          </div>
+        )}
       </Card>
 
       <Card className="border-accent/20 bg-accent/5 p-5 md:p-7"><div className="flex gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground"><Check size={17} /></div><div><p className="font-display font-bold">A note for the hard days</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">This is a tracker, not a judge. If you miss a day, the next honest session is all that matters.</p></div></div></Card>

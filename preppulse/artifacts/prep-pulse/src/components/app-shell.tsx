@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const handle = me?.profile.handle ?? 'Learner';
   const initials = initialsFor(handle);
   const examLabel = getExamConfig(me?.profile.examTrack).label;
-  const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   const activeAnnouncement = useGetActiveAnnouncement().data?.announcement ?? null;
   const dismissAnnouncement = useDismissAnnouncement();
   const reminder = useFocusReminder();
@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {navigation.map(({ href, label, icon: Icon }) => {
               const active = location === href;
               return (
-                <Link key={href} href={href} data-testid={`link-nav-${label.toLowerCase()}`} className={`nav-link relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${active ? 'bg-sidebar-foreground/10 text-sidebar-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
+                <Link key={href} href={href} data-testid={`link-nav-${label.toLowerCase()}`} className={`nav-link relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold hover:translate-x-0.5 ${active ? 'bg-sidebar-foreground/10 text-sidebar-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
                   {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />}
                   <Icon size={17} strokeWidth={active ? 2.5 : 1.8} className={active ? 'text-accent' : ''} />
                   {label}
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
           {me?.profile.isAdmin && (
-            <Link href="/admin" data-testid="link-nav-admin" className={`nav-link relative mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${location.startsWith('/admin') ? 'bg-sidebar-foreground/10 text-sidebar-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
+            <Link href="/admin" data-testid="link-nav-admin" className={`nav-link relative mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold hover:translate-x-0.5 ${location.startsWith('/admin') ? 'bg-sidebar-foreground/10 text-sidebar-foreground' : 'text-sidebar-foreground/65 hover:bg-sidebar-foreground/7 hover:text-sidebar-foreground'}`}>
               {location.startsWith('/admin') && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />}
               <ShieldCheck size={17} strokeWidth={location.startsWith('/admin') ? 2.5 : 1.8} className={location.startsWith('/admin') ? 'text-accent' : ''} />
               Admin
@@ -97,7 +97,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="min-w-0 md:flex md:h-full md:min-h-0 md:flex-col md:overflow-hidden">
-          <header className="sticky top-0 z-10 flex h-[72px] items-center justify-between border-b border-border/70 bg-background/90 px-5 backdrop-blur-md md:px-10">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/70 bg-background/90 px-5 backdrop-blur-md md:px-10">
             <div className="flex items-center gap-3">
               <button type="button" onClick={() => setMobileMenuOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary md:hidden" aria-label="Open navigation" data-testid="button-open-menu">
                 <MoreHorizontal size={18} />
@@ -108,15 +108,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
             {activeAnnouncement && (
-              <div className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-4 py-2 text-xs font-bold sm:flex" data-testid="announcement-pill">
+              <div className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-3.5 py-1.5 text-xs font-bold sm:flex" data-testid="announcement-pill">
                 <Megaphone size={13} className="shrink-0 text-primary" />
-                <span className="max-w-[280px] truncate" title={activeAnnouncement.body}>{activeAnnouncement.title}</span>
+                <span className="max-w-[240px] truncate" title={activeAnnouncement.body}>{activeAnnouncement.title}</span>
                 <button type="button" onClick={dismissActiveAnnouncement} aria-label="Dismiss announcement" data-testid="button-dismiss-announcement" className="shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><X size={13} /></button>
               </div>
             )}
             <Link href="/settings" data-testid="link-header-profile" className="flex items-center gap-3 rounded-full pl-2 transition-transform hover:scale-[1.02]">
-              <span className="hidden text-right sm:block"><span className="block text-xs font-bold">{handle}</span><span className="font-mono-custom text-[10px] text-muted-foreground">{examLabel} · {me?.profile.targetYear ?? ''}</span></span>
-              <Avatar src={me?.profile.avatarUrl} initials={initials} className="h-10 w-10 bg-primary text-xs text-white" title={handle} />
+              <span className="hidden text-right sm:block"><span className="block text-[11px] font-bold leading-tight">{handle}</span><span className="font-mono-custom text-[9px] text-muted-foreground">{examLabel} · {me?.profile.targetYear ?? ''}</span></span>
+              <Avatar src={me?.profile.avatarUrl} initials={initials} className="h-9 w-9 bg-primary text-xs text-white" title={handle} />
             </Link>
           </header>
           {reminder.show && location !== '/study' && (
@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button type="button" onClick={reminder.dismiss} aria-label="Dismiss reminder" data-testid="button-dismiss-reminder" className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><X size={14} /></button>
             </div>
           )}
-          <main className="page-enter px-5 pb-28 pt-7 md:min-h-0 md:flex-1 md:overflow-y-auto md:px-10 md:pb-12 md:pt-10">{children}</main>
+          <main className="page-enter px-5 pb-28 pt-6 md:min-h-0 md:flex-1 md:overflow-y-auto md:px-10 md:pb-12 md:pt-8">{children}</main>
         </div>
       </div>
 

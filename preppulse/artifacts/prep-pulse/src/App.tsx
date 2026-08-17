@@ -20,6 +20,7 @@ import AdminDashboard from '@/pages/admin/admin-dashboard';
 import AdminAnnouncements from '@/pages/admin/admin-announcements';
 import AdminCohorts from '@/pages/admin/admin-cohorts';
 import AdminUsers from '@/pages/admin/admin-users';
+import AdminReleases from '@/pages/admin/admin-releases';
 import {
   Route,
   Switch,
@@ -47,6 +48,7 @@ function Router() {
           <Route path="/admin/announcements" component={AdminAnnouncements} />
           <Route path="/admin/cohorts" component={AdminCohorts} />
           <Route path="/admin/users" component={AdminUsers} />
+          <Route path="/admin/releases" component={AdminReleases} />
           <Route path="/join/:code" component={JoinByLink} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />

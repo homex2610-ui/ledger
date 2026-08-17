@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Megaphone, ShieldCheck, Users, UsersRound } from 'lucide-react';
+import { Megaphone, Rocket, ShieldCheck, Users, UsersRound } from 'lucide-react';
 import { useGetMe } from '@workspace/api-client-react';
 import { LoadingBlock } from '@/components/ui-elements';
 import NotFound from '@/pages/not-found';
@@ -10,6 +10,7 @@ const TABS = [
   { href: '/admin/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/admin/cohorts', label: 'Cohorts', icon: UsersRound },
   { href: '/admin/users', label: 'Users', icon: Users },
+  { href: '/admin/releases', label: 'Releases', icon: Rocket },
 ];
 
 export function AdminTabs() {

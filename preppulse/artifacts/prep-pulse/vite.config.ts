@@ -1,9 +1,20 @@
 import path from 'path';
+import { execSync } from 'node:child_process';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
+
+function gitSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'dev';
+  }
+}
 
 const rawPort = process.env.PORT ?? '3000';
 
@@ -46,6 +57,9 @@ export default defineConfig({
       ),
     },
     dedupe: ['react', 'react-dom'],
+  },
+  define: {
+    __GIT_SHA__: JSON.stringify(gitSha()),
   },
   root: path.resolve(import.meta.dirname),
   build: {

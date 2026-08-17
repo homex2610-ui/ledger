@@ -806,6 +806,10 @@ body::before {
 .pp-eq span:nth-child(3) { animation-delay: .24s; }
 .pp-eq span:nth-child(4) { animation-delay: .36s; }
 @keyframes pp-eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+.pp-draw-line { stroke-dasharray: 1200; stroke-dashoffset: 1200; animation: pp-draw 1s ease-out forwards; }
+@keyframes pp-draw { to { stroke-dashoffset: 0; } }
+.pp-rise-dot { animation: pp-rise-dot .6s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pp-rise-dot { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
