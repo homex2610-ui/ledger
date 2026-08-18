@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, ne } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   circleConnectionsTable,
@@ -212,7 +212,9 @@ export async function toProfileShape(userId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Circle + group pulse helpers (minutes + topics moved over the current week)
+// Circle + group pulse helpers (minutes studied over the current week).
+// Ranking counts tracked time only (focus mode + timer/study-room sessions);
+// self-logged "manual" sessions are excluded because they can be gamed.
 // ---------------------------------------------------------------------------
 
 export async function weeklyPulseForUsers(
@@ -228,7 +230,14 @@ export async function weeklyPulseForUsers(
       minutes: studySessionsTable.minutes,
     })
     .from(studySessionsTable)
-    .where(and(inArray(studySessionsTable.userId, userIds), gte(studySessionsTable.createdAt, weekStart), lt(studySessionsTable.createdAt, weekEnd)));
+    .where(
+      and(
+        inArray(studySessionsTable.userId, userIds),
+        ne(studySessionsTable.source, "manual"),
+        gte(studySessionsTable.createdAt, weekStart),
+        lt(studySessionsTable.createdAt, weekEnd),
+      ),
+    );
 
   const topicRows = await db
     .select({ userId: topicProgressTable.userId })

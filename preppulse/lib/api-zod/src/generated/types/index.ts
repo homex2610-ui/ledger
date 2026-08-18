@@ -77,6 +77,8 @@ export * from './forgotPasswordInput';
 export * from './getAdminAuditParams';
 export * from './getAuthDiscordAuthorizeParams';
 export * from './getCirclesParams';
+export * from './getCohortsLeaderboardParams';
+export * from './getCohortsLeaderboardPeriod';
 export * from './getCohortsParams';
 export * from './getDashboardParams';
 export * from './getLeaderboardParams';

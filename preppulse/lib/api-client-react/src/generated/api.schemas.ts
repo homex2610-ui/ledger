@@ -1228,6 +1228,21 @@ export type GetCohortsParams = {
 tz?: string;
 };
 
+export type GetCohortsLeaderboardParams = {
+/**
+ * week = time studied in the current open period, today = time studied since local midnight (live, no snapshot history)
+ */
+period?: GetCohortsLeaderboardPeriod;
+};
+
+export type GetCohortsLeaderboardPeriod = typeof GetCohortsLeaderboardPeriod[keyof typeof GetCohortsLeaderboardPeriod];
+
+
+export const GetCohortsLeaderboardPeriod = {
+  week: 'week',
+  today: 'today',
+} as const;
+
 export type DiscoverGroupsParams = {
 q?: string;
 };

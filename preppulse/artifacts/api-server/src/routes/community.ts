@@ -95,7 +95,12 @@ async function groupSummaryFor(userId: string, group: typeof groupsTable.$inferS
     createdAt: group.createdAt,
   };
 }
-async function leaderboardFor(userIds: string[], currentUserId: string, scope?: { scopeType: PeriodScopeType; scopeId: string }) {
+async function leaderboardFor(
+  userIds: string[],
+  currentUserId: string,
+  scope?: { scopeType: PeriodScopeType; scopeId: string },
+  window?: { from: Date; to: Date },
+) {
   const [profile, profileRows, excludedRows, adjustmentRows] = await Promise.all([
     db.select().from(profilesTable).where(eq(profilesTable.userId, currentUserId)).limit(1),
     db.select().from(profilesTable).where(inArray(profilesTable.userId, userIds)),
@@ -107,14 +112,14 @@ async function leaderboardFor(userIds: string[], currentUserId: string, scope?: 
   const excludedIds = new Set(excludedRows.map((row) => row.userId));
   const adjustmentByUser = new Map<string, number>();
   for (const row of adjustmentRows) adjustmentByUser.set(row.userId, (adjustmentByUser.get(row.userId) ?? 0) + row.amount);
-  const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(userIds);
+  const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(userIds, window);
   const handles = await userHandlesById(userIds);
-  const history = scope ? await rankHistoryForScope(scope.scopeType, scope.scopeId, userIds) : undefined;
+  const history = scope && !window ? await rankHistoryForScope(scope.scopeType, scope.scopeId, userIds) : undefined;
 
-  const cohortTopN = scope?.scopeType === "cohort" ? await leaderboardTopNFor(scope.scopeId) : null;
+  const cohortTopN = scope?.scopeType === "cohort" && !window ? await leaderboardTopNFor(scope.scopeId) : null;
   const topN = cohortTopN ?? LEADERBOARD_TOP_N_DEFAULT;
 
-  const period = scope ? await ensureOpenPeriod(scope.scopeType, scope.scopeId) : undefined;
+  const period = scope && !window ? await ensureOpenPeriod(scope.scopeType, scope.scopeId) : undefined;
 
   const visibleIds = userIds.filter((id) => {
     if (excludedIds.has(id)) return false;
@@ -134,7 +139,7 @@ async function leaderboardFor(userIds: string[], currentUserId: string, scope?: 
         handle: info.handle,
         initials: info.initials,
         avatarUrl: info.avatarUrl,
-        score: Math.round(minutes + topics * 30 + (adjustmentByUser.get(id) ?? 0)),
+        score: Math.round(minutes + (adjustmentByUser.get(id) ?? 0)),
         hours: Math.round((minutes / 60) * 10) / 10,
         topics,
         isCurrentUser: id === currentUserId,
@@ -462,11 +467,20 @@ router.get("/cohorts/leaderboard", async (req, res) => {
     return;
   }
   const memberIds = await cohortUserIdsFor(req.userId);
+  const period = req.query.period === "today" ? "today" : "week";
+  const window = period === "today" ? { from: startOfDay(new Date()), to: new Date() } : undefined;
   const { entries, focused, weekEnd } = await leaderboardFor(memberIds ?? [], req.userId, {
     scopeType: "cohort",
     scopeId: membership[0].cohortId,
-  });
-  res.json(GetCohortsLeaderboardResponse.parse({ weekLabel: weekLabel(), weekEnd, entries, focused }));
+  }, window);
+  res.json(
+    GetCohortsLeaderboardResponse.parse({
+      weekLabel: period === "today" ? "Today" : weekLabel(),
+      weekEnd,
+      entries,
+      focused,
+    }),
+  );
 });
 
 router.get("/cohorts/leaderboard/sparkline", async (req, res) => {

@@ -19,18 +19,18 @@ test("rankPeriodEntries orders by pulse descending and ties share a rank", () =>
       { userId: "a", rank: 1, pulse: 100 },
       { userId: "b", rank: 1, pulse: 100 },
       { userId: "c", rank: 3, pulse: 30 },
-      { userId: "d", rank: 3, pulse: 30 },
+      { userId: "d", rank: 4, pulse: 0 },
     ],
   );
 });
 
-test("rankPeriodEntries applies 30 pulse per topic moved", () => {
+test("rankPeriodEntries ignores topics moved - pulse is pure study time", () => {
   const ranked = rankPeriodEntries([e("a", 10, 3), e("b", 100, 0)]);
   assert.deepEqual(
     ranked.map(({ userId, pulse }) => ({ userId, pulse })),
     [
-      { userId: "a", pulse: 100 },
       { userId: "b", pulse: 100 },
+      { userId: "a", pulse: 10 },
     ],
   );
 });
@@ -47,7 +47,7 @@ test("rankPeriodEntries returns empty for no entries", () => {
 
 test("rankPeriodEntries rounds pulse to integers", () => {
   const ranked = rankPeriodEntries([e("a", 59.5, 1)]);
-  assert.equal(ranked[0].pulse, 90);
+  assert.equal(ranked[0].pulse, 60);
 });
 
 test("rankPeriodEntries applies pulse adjustments before ranking", () => {

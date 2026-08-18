@@ -65,6 +65,7 @@ import type {
   GetAdminAuditParams,
   GetAuthDiscordAuthorizeParams,
   GetCirclesParams,
+  GetCohortsLeaderboardParams,
   GetCohortsParams,
   GetDashboardParams,
   GetLeaderboardParams,
@@ -3726,20 +3727,27 @@ export function useGetCohorts<TData = Awaited<ReturnType<typeof getCohorts>>, TE
 
 
 
-export const getGetCohortsLeaderboardUrl = () => {
+export const getGetCohortsLeaderboardUrl = (params?: GetCohortsLeaderboardParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/cohorts/leaderboard`
+  return stringifiedParams.length > 0 ? `/api/cohorts/leaderboard?${stringifiedParams}` : `/api/cohorts/leaderboard`
 }
 
 /**
- * @summary Weekly pulse leaderboard for my study cohort
+ * @summary Pulse leaderboard for my study cohort (weekly or today's)
  */
-export const getCohortsLeaderboard = async ( options?: Parameters<typeof customFetch>[1]): Promise<Leaderboard> => {
+export const getCohortsLeaderboard = async (params?: GetCohortsLeaderboardParams, options?: Parameters<typeof customFetch>[1]): Promise<Leaderboard> => {
 
-  return customFetch<Leaderboard>(getGetCohortsLeaderboardUrl(),
+  return customFetch<Leaderboard>(getGetCohortsLeaderboardUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3752,23 +3760,23 @@ export const getCohortsLeaderboard = async ( options?: Parameters<typeof customF
 
 
 
-export const getGetCohortsLeaderboardQueryKey = () => {
+export const getGetCohortsLeaderboardQueryKey = (params?: GetCohortsLeaderboardParams,) => {
     return [
-    `/api/cohorts/leaderboard`
+    `/api/cohorts/leaderboard`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetCohortsLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetCohortsLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError = ErrorType<void>>(params?: GetCohortsLeaderboardParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetCohortsLeaderboardQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortsLeaderboardQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortsLeaderboard>>> = ({ signal }) => getCohortsLeaderboard({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortsLeaderboard>>> = ({ signal }) => getCohortsLeaderboard(params, { signal, ...requestOptions });
 
 
 
@@ -3782,15 +3790,15 @@ export type GetCohortsLeaderboardQueryError = ErrorType<void>
 
 
 /**
- * @summary Weekly pulse leaderboard for my study cohort
+ * @summary Pulse leaderboard for my study cohort (weekly or today's)
  */
 
 export function useGetCohortsLeaderboard<TData = Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetCohortsLeaderboardParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetCohortsLeaderboardQueryOptions(options)
+  const queryOptions = getGetCohortsLeaderboardQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

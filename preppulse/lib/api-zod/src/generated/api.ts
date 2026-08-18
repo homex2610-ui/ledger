@@ -1279,8 +1279,14 @@ export const GetCohortsResponse = zod.object({
 
 
 /**
- * @summary Weekly pulse leaderboard for my study cohort
+ * @summary Pulse leaderboard for my study cohort (weekly or today's)
  */
+export const getCohortsLeaderboardQueryPeriodDefault = `week`;
+
+export const GetCohortsLeaderboardQueryParams = zod.object({
+  "period": zod.enum(['week', 'today']).default(getCohortsLeaderboardQueryPeriodDefault).describe('week = time studied in the current open period, today = time studied since local midnight (live, no snapshot history)')
+})
+
 export const GetCohortsLeaderboardResponse = zod.object({
   "weekLabel": zod.string(),
   "weekEnd": zod.coerce.date().nullish().describe('End of the current open weekly period (countdown target). Null on private-circle leaderboards.'),

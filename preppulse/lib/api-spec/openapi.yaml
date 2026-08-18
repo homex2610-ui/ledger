@@ -889,7 +889,16 @@ paths:
     get:
       operationId: getCohortsLeaderboard
       tags: [community]
-      summary: Weekly pulse leaderboard for my study cohort
+      summary: Pulse leaderboard for my study cohort (weekly or today's)
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [week, today]
+            default: week
+          description: "week = time studied in the current open period, today = time studied since local midnight (live, no snapshot history)"
       responses:
         "200":
           description: Cohort leaderboard

@@ -41,7 +41,7 @@ export const groupsTable = pgTable(
 export const cohortsTable = pgTable("cohorts", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name"),
-  capacity: integer("capacity").notNull().default(20),
+  capacity: integer("capacity").notNull().default(25),
   leaderboardTopN: integer("leaderboard_top_n").notNull().default(3),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
