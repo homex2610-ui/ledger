@@ -5,13 +5,17 @@ import { runWeeklyReset } from "../lib/periods.js";
 const router: IRouter = Router();
 
 function isAuthorized(req: { headers: Record<string, string | string[] | undefined> }): boolean {
-  if (req.headers["x-vercel-cron"] === "1") return true;
   const secret = process.env["CRON_SECRET"];
   if (secret) {
     const header = req.headers["authorization"];
-    return typeof header === "string" && header === `Bearer ${secret}`;
+    if (typeof header === "string" && header === `Bearer ${secret}`) return true;
   }
-  return false;
+  const userAgent = req.headers["user-agent"];
+  return (
+    typeof userAgent === "string" &&
+    userAgent === "vercel-cron/1.0" &&
+    req.headers["x-vercel-cron-schedule"] !== undefined
+  );
 }
 
 /**
