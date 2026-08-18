@@ -3,6 +3,8 @@ export interface RankSnapshotPoint {
   rank: number;
 }
 
+const WEEK_MS = 7 * 86_400_000;
+
 export interface RankHistory {
   /** Snapshots newest-first. */
   points: RankSnapshotPoint[];
@@ -16,6 +18,9 @@ export interface RankHistory {
 export function computeStreakFromSnapshots(points: RankSnapshotPoint[], topN: number): number {
   let streak = 0;
   for (let i = 0; i < points.length; i += 1) {
+    if (i > 0 && points[i - 1].weekStart.getTime() - points[i].weekStart.getTime() !== WEEK_MS) {
+      break;
+    }
     if (points[i].rank <= topN) {
       streak += 1;
     } else {

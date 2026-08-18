@@ -7,6 +7,14 @@ export function generateProfileCode(): string {
   return code;
 }
 
+/** True when the error is a Postgres unique-violation, optionally for one constraint. */
+export function isUniqueViolation(error: unknown, constraint?: string): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const err = error as { code?: unknown; constraint?: unknown };
+  if (err.code !== "23505") return false;
+  return constraint === undefined || err.constraint === constraint;
+}
+
 export function generateInviteCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";

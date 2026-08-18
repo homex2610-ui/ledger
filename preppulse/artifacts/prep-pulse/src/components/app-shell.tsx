@@ -29,6 +29,7 @@ import { Avatar } from '@/components/avatar';
 import { BrandMark } from '@/components/brand-mark';
 import { OnboardingModal } from '@/components/onboarding';
 import { initialsFor } from '@/lib/utils';
+import { DISCORD_INVITE_URL } from '@/lib/config';
 import { useFocusReminder } from '@/lib/reminder-prefs';
 import { clearShareRef, readShareRef } from '@/lib/share';
 
@@ -154,7 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
 
           <a
-            href="https://discord.gg/6nf5BrEfHU"
+            href={DISCORD_INVITE_URL}
             target="_blank"
             rel="noreferrer"
             data-testid="link-discord"

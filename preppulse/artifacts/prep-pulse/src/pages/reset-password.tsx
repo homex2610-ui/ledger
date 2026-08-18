@@ -111,7 +111,7 @@ export default function ResetPasswordPage({ onAuthed }: { onAuthed: (auth: AuthR
                   disabled={resetPassword.isPending}
                   className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity disabled:opacity-60"
                 >
-                  {resetPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Settingâ€¦</span> : 'Set password'}
+                  {resetPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Setting…</span> : 'Set password'}
                 </button>
               </form>
 

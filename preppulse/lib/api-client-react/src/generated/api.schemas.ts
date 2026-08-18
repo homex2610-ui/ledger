@@ -569,7 +569,10 @@ export const FocusSessionUpdateStatus = {
 
 export interface FocusSessionUpdate {
   status: FocusSessionUpdateStatus;
-  /** @minimum 0 */
+  /**
+     * @minimum 0
+     * @maximum 300
+     */
   actualMinutes: number;
   taskId?: string | null;
 }

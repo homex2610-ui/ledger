@@ -1,7 +1,7 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { authSessionsTable, usersTable } from "@workspace/db/schema";
+import { authSessionsTable, usersTable, type User } from "@workspace/db/schema";
 import {
   ChangePasswordBody,
   ChangePasswordResponse,
@@ -17,7 +17,8 @@ import {
 } from "@workspace/api-zod";
 import { createSession, currentTokenHash, destroySession, hashPassword, requireAuth, setSessionCookie, verifyPassword, clearSessionCookie } from "../lib/auth.js";
 import { toProfileShape } from "../lib/prep-stats.js";
-import { createUserWithProfile } from "../lib/oauth/users.js";
+import { createUserWithProfile, uniqueHandle } from "../lib/oauth/users.js";
+import { isUniqueViolation } from "../lib/utils.js";
 import { sendRecoveryEmail, supabaseAuthConfigured, verifyRecoveryToken } from "../lib/supabase-auth.js";
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
@@ -54,22 +55,31 @@ const router: IRouter = Router();
 router.post("/signup", authRateLimit, async (req, res) => {
   const body = SignUpBody.parse(req.body);
 
-  const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, body.email)).limit(1);
-  if (existing[0]) {
-    res.status(409).json({ error: "An account with this email already exists" });
-    return;
-  }
-
   const email = body.email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ error: "Enter a valid email address" });
     return;
   }
 
-  const handle = body.handle?.trim() || email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 24) || "learner";
+  const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (existing[0]) {
+    res.status(409).json({ error: "An account with this email already exists" });
+    return;
+  }
+
+  const handle = await uniqueHandle(body.handle?.trim() || email.split("@")[0] || "learner");
   const passwordHash = await hashPassword(body.password);
 
-  const user = await createUserWithProfile({ email, handle, passwordHash });
+  let user: User;
+  try {
+    user = await createUserWithProfile({ email, handle, passwordHash });
+  } catch (error) {
+    if (isUniqueViolation(error, "users_email_unique")) {
+      res.status(409).json({ error: "An account with this email already exists" });
+      return;
+    }
+    throw error;
+  }
 
   const { token, expiresAt } = await createSession(user.id);
   setSessionCookie(res, token, expiresAt);

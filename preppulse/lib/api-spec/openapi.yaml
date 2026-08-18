@@ -2551,6 +2551,7 @@ components:
         actualMinutes:
           type: number
           minimum: 0
+          maximum: 300
         taskId:
           type: string
           nullable: true

@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { oauthAccountsTable, profilesTable, usersTable, type User } from "@workspace/db/schema";
 import { assignUserToCohort } from "../cohorts.js";
-import { generateProfileCode } from "../utils.js";
+import { generateProfileCode, isUniqueViolation } from "../utils.js";
 
 export type OAuthProvider = "google" | "discord";
 
@@ -41,34 +41,43 @@ export async function createUserWithProfile(values: {
   passwordHash?: string | null;
   avatarUrl?: string | null;
 }): Promise<User> {
-  return db.transaction(async (tx) => {
-    const user = (
-      await tx
-        .insert(usersTable)
-        .values({
-          id: values.id ?? undefined,
-          email: values.email,
-          handle: values.handle,
-          passwordHash: values.passwordHash ?? null,
-          avatarUrl: values.avatarUrl ?? null,
-        })
-        .returning()
-    )[0];
+  // The profile code is drawn from a small alphabet; on the rare collision the
+  // whole transaction retries with a fresh code instead of surfacing a 500.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await db.transaction(async (tx) => {
+        const user = (
+          await tx
+            .insert(usersTable)
+            .values({
+              id: values.id ?? undefined,
+              email: values.email,
+              handle: values.handle,
+              passwordHash: values.passwordHash ?? null,
+              avatarUrl: values.avatarUrl ?? null,
+            })
+            .returning()
+        )[0];
 
-    const targetYear = new Date().getFullYear() + 1;
-    await tx.insert(profilesTable).values({
-      userId: user.id,
-      targetYear,
-      examDate: defaultExamDate(targetYear),
-      profileCode: generateProfileCode(),
-    });
+        const targetYear = new Date().getFullYear() + 1;
+        await tx.insert(profilesTable).values({
+          userId: user.id,
+          targetYear,
+          examDate: defaultExamDate(targetYear),
+          profileCode: generateProfileCode(),
+        });
 
-    await assignUserToCohort(tx, user.id);
-    return user;
-  });
+        await assignUserToCohort(tx, user.id);
+        return user;
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error, "profiles_profile_code_unique")) throw error;
+    }
+  }
+  throw new Error("Could not allocate a unique profile code");
 }
 
-async function uniqueHandle(base: string): Promise<string> {
+export async function uniqueHandle(base: string): Promise<string> {
   const cleaned =
     base
       .toLowerCase()

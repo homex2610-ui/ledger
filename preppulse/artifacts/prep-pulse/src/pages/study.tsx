@@ -249,12 +249,17 @@ export default function Study() {
   };
   const finishTimer = () => {
     const secs = secondsRef.current;
-    const elapsed = Math.max(1, Math.round(modeRef.current === 'flow' ? secs / 60 : (25 * 60 - secs) / 60));
+    const inBreak = modeRef.current === 'pomodoro' && phaseRef.current !== 'focus';
+    const elapsed = inBreak ? 0 : Math.max(1, Math.round(modeRef.current === 'flow' ? secs / 60 : (25 * 60 - secs) / 60));
     const finalSubject = subjectRef.current;
-    logSession(elapsed, 'timer', finalSubject, resetTimer);
+    if (elapsed > 0) {
+      logSession(elapsed, 'timer', finalSubject, resetTimer);
+      sendBlockNotification(`${finalSubject} — ${elapsed} ${elapsed === 1 ? 'minute' : 'minutes'} logged.`);
+    } else {
+      resetTimer();
+    }
     completeTask();
     playReward();
-    sendBlockNotification(`${finalSubject} — ${elapsed} ${elapsed === 1 ? 'minute' : 'minutes'} logged.`);
   };
   const selectMode = (next: 'pomodoro' | 'flow') => {
     setMode(next);

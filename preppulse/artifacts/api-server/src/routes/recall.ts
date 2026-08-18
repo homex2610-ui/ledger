@@ -236,6 +236,7 @@ router.get("/cards/stats", async (req, res) => {
   let reviewStreak = 0;
   if (reviewedDates.has(todayStr) || reviewedDates.has(yesterdayStr)) {
     const cursor = new Date(today);
+    if (!reviewedDates.has(todayStr)) cursor.setDate(cursor.getDate() - 1);
     while (reviewedDates.has(toISODate(cursor))) {
       reviewStreak += 1;
       cursor.setDate(cursor.getDate() - 1);

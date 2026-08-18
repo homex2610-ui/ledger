@@ -26,6 +26,25 @@ test("computeStreakFromSnapshots is zero with no snapshots", () => {
   assert.equal(computeStreakFromSnapshots([], 3), 0);
 });
 
+test("computeStreakFromSnapshots breaks at a missing week", () => {
+  const points: RankSnapshotPoint[] = [
+    { weekStart: week(0), rank: 1 },
+    { weekStart: week(2), rank: 1 },
+    { weekStart: week(3), rank: 1 },
+  ];
+  assert.equal(computeStreakFromSnapshots(points, 3), 1);
+});
+
+test("computeStreakFromSnapshots breaks at a gap before ranking breaks", () => {
+  const points: RankSnapshotPoint[] = [
+    { weekStart: week(0), rank: 2 },
+    { weekStart: week(1), rank: 9 },
+    { weekStart: week(3), rank: 1 },
+    { weekStart: week(4), rank: 1 },
+  ];
+  assert.equal(computeStreakFromSnapshots(points, 3), 1);
+});
+
 test("computeBestRank returns lowest rank or null", () => {
   const points: RankSnapshotPoint[] = [
     { weekStart: week(0), rank: 5 },

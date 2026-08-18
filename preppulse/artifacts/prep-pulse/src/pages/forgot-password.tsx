@@ -84,7 +84,7 @@ export default function ForgotPasswordPage() {
                   disabled={forgotPassword.isPending}
                   className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity disabled:opacity-60"
                 >
-                  {forgotPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Sendingâ€¦</span> : 'Send reset link'}
+                  {forgotPassword.isPending ? <span className="inline-flex items-center gap-2"><LoaderCircle size={14} className="animate-spin" /> Sending…</span> : 'Send reset link'}
                 </button>
               </form>
 

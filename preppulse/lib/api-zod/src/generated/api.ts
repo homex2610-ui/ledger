@@ -732,12 +732,13 @@ export const UpdateFocusSessionParams = zod.object({
 })
 
 export const updateFocusSessionBodyActualMinutesMin = 0;
+export const updateFocusSessionBodyActualMinutesMax = 300;
 
 
 
 export const UpdateFocusSessionBody = zod.object({
   "status": zod.enum(['completed', 'abandoned']),
-  "actualMinutes": zod.number().min(updateFocusSessionBodyActualMinutesMin),
+  "actualMinutes": zod.number().min(updateFocusSessionBodyActualMinutesMin).max(updateFocusSessionBodyActualMinutesMax),
   "taskId": zod.string().nullish()
 })
 

@@ -158,13 +158,13 @@ export async function computeStreak(userId: string, timeZone?: string): Promise<
   const days = new Set(rows.map((row) => dayKeyIn(row.createdAt, timeZone)));
   if (days.size === 0) return 0;
   const today = dayKeyIn(new Date(), timeZone);
-  if (!days.has(today)) {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (!days.has(dayKeyIn(yesterday, timeZone))) return 0;
-  }
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = dayKeyIn(yesterday, timeZone);
+  if (!days.has(today) && !days.has(yesterdayKey)) return 0;
   let streak = 0;
   const cursor = new Date();
+  if (!days.has(dayKeyIn(cursor, timeZone))) cursor.setDate(cursor.getDate() - 1);
   while (days.has(dayKeyIn(cursor, timeZone))) {
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
@@ -206,6 +206,7 @@ export async function streaksForUsers(userIds: string[], timeZone?: string): Pro
     }
     let streak = 0;
     const cursor = new Date();
+    if (!days.has(dayKeyIn(cursor, timeZone))) cursor.setDate(cursor.getDate() - 1);
     while (days.has(dayKeyIn(cursor, timeZone))) {
       streak += 1;
       cursor.setDate(cursor.getDate() - 1);
