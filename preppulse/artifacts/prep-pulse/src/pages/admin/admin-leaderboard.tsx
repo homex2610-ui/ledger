@@ -29,6 +29,10 @@ export function AdminLeaderboard() {
   const submitAdjustment = () => {
     const amount = Number(adjustAmount);
     if (!adjustUserId.trim() || !Number.isFinite(amount) || amount === 0 || !adjustReason.trim()) return;
+    if (!Number.isInteger(amount) || amount < -1000 || amount > 1000) {
+      setAdjustmentError('Amount must be a whole number between -1000 and 1000.');
+      return;
+    }
     setAdjustmentError(null);
     createAdjustment.mutate(
       { data: { userId: adjustUserId.trim(), amount, reason: adjustReason.trim() } },

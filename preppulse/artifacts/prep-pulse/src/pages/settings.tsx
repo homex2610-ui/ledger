@@ -178,6 +178,10 @@ export default function Settings() {
       setPwError('Choose a password of at least 8 characters');
       return;
     }
+    if (pwNext.length > 72) {
+      setPwError('Password must be 72 characters or fewer');
+      return;
+    }
     if (pwNext !== pwConfirm) {
       setPwError('Passwords do not match');
       return;

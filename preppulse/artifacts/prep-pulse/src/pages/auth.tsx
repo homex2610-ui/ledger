@@ -57,6 +57,10 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
       setError('Password must be at least 8 characters');
       return;
     }
+    if (password.length > (mode === 'login' ? 256 : 72)) {
+      setError(mode === 'login' ? 'That password is too long' : 'Password must be 72 characters or fewer');
+      return;
+    }
     if (mode === 'signup' && handle.trim().length < 2) {
       setError('Choose a handle at least 2 characters long');
       return;

@@ -33,6 +33,10 @@ export default function ResetPasswordPage({ onAuthed }: { onAuthed: (auth: AuthR
       setError('Choose a password of at least 8 characters');
       return;
     }
+    if (password.length > 72) {
+      setError('Password must be 72 characters or fewer');
+      return;
+    }
     if (password !== confirm) {
       setError('Passwords do not match');
       return;
