@@ -16,6 +16,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use("/auth", authRouter);
 router.use("/auth", oauthRouter);
+router.use(sharesRouter);
 router.use(prepRouter);
 router.use(studyRouter);
 router.use(recallRouter);
@@ -23,6 +24,5 @@ router.use(communityRouter);
 router.use(statsRouter);
 router.use(announcementsRouter);
 router.use(adminRouter);
-router.use(sharesRouter);
 
 export default router;
