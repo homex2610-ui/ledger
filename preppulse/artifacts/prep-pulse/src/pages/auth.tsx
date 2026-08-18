@@ -65,6 +65,14 @@ export default function AuthPage({ onAuthed }: { onAuthed: (auth: AuthResponse) 
       setError('Choose a handle at least 2 characters long');
       return;
     }
+    if (mode === 'signup' && handle.trim().length > 24) {
+      setError('Keep your handle to 24 characters or fewer');
+      return;
+    }
+    if (mode === 'signup' && !/^[a-zA-Z0-9._-]+$/.test(handle.trim())) {
+      setError('Handle can only contain letters, numbers, dots, dashes, and underscores');
+      return;
+    }
     setFormBusy(true);
     if (mode === 'login') {
       logIn.mutate(

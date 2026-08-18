@@ -226,15 +226,15 @@ export default function Settings() {
           <Field label="Handle" value={profile.handle} onCommit={(value) => updateField('handle')(value)} placeholder="your handle" testId="input-profile-handle" />
           <label className="block"><span className="mb-1.5 block text-xs font-bold">Exam track</span><Select value={profile.examTrack} onChange={(event) => updateField('examTrack')(event.target.value)} data-testid="select-profile-exam">{EXAM_TRACKS.map((track) => <option key={track.value} value={track.value}>{track.label}</option>)}</Select></label>
           <label className="block"><span className="mb-1.5 block text-xs font-bold">Stage</span><Select value={profile.stage} onChange={(event) => updateField('stage')(event.target.value)} data-testid="select-profile-stage"><option value="class_11">Class 11</option><option value="class_12">Class 12</option><option value="dropper">Dropper</option></Select></label>
-          <label className="block"><span className="mb-1.5 block text-xs font-bold">Target year</span><NumberField value={profile.targetYear} min={new Date().getFullYear()} max={new Date().getFullYear() + 3} onCommit={(value) => updateField('targetYear')(value)} testId="input-profile-year" /></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">Target year</span><NumberField value={profile.targetYear} min={new Date().getFullYear()} max={new Date().getFullYear() + 6} onCommit={(value) => updateField('targetYear')(value)} testId="input-profile-year" /></label>
         </div>
       </Card>
 
       <Card className="p-5 md:p-7">
         <SectionTitle eyebrow="Daily targets" title="Sensible goals, not fantasy" action={<SavingLabel pending={updateProfile.isPending} />} />
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label className="block"><span className="mb-1.5 block text-xs font-bold">Daily goal (minutes)</span><NumberField value={profile.dailyGoalMinutes} min={1} max={720} onCommit={(value) => updateField('dailyGoalMinutes')(value)} testId="input-profile-daily" /></label>
-          <label className="block"><span className="mb-1.5 block text-xs font-bold">Weekly goal (minutes)</span><NumberField value={profile.weeklyGoalMinutes} min={1} max={5040} onCommit={(value) => updateField('weeklyGoalMinutes')(value)} testId="input-profile-weekly" /></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">Daily goal (minutes)</span><NumberField value={profile.dailyGoalMinutes} min={1} max={1440} onCommit={(value) => updateField('dailyGoalMinutes')(value)} testId="input-profile-daily" /></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">Weekly goal (minutes)</span><NumberField value={profile.weeklyGoalMinutes} min={1} max={10080} onCommit={(value) => updateField('weeklyGoalMinutes')(value)} testId="input-profile-weekly" /></label>
         </div>
         <p className="mt-4 rounded-xl border border-border/70 bg-secondary/35 px-4 py-3 font-mono-custom text-[11px] leading-relaxed text-muted-foreground" data-testid="goal-readout">{formatMinutes(profile.dailyGoalMinutes)} a day · {formatMinutes(profile.weeklyGoalMinutes)} a week · {formatPace(profile.weeklyGoalMinutes, 7)} across 7 days · {formatWeekShare(profile.weeklyGoalMinutes)}</p>
       </Card>
@@ -465,10 +465,12 @@ function Field({ label, value, onCommit, placeholder, testId }: { label: string;
   const commit = () => {
     const next = draft.trim();
     if (next.length < 2) { setError('Needs at least 2 characters'); return; }
+    if (next.length > 24) { setError('Keep it to 24 characters or fewer'); return; }
+    if (!/^[a-zA-Z0-9._-]+$/.test(next)) { setError('Only letters, numbers, dots, dashes, and underscores'); return; }
     setError(null);
     if (next !== value) onCommit(next);
   };
-  return <label className="block"><span className="mb-1.5 block text-xs font-bold">{label}</span><div className="flex gap-2"><input value={draft} onChange={(event) => { setDraft(event.target.value); if (error) setError(null); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onBlur={commit} placeholder={placeholder} className="h-10 w-full rounded-xl border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid={testId} /><button type="button" onClick={commit} className="rounded-xl border border-border px-3 text-xs font-bold hover:bg-secondary" data-testid={`${testId}-save`}>Save</button></div>{error && <p className="mt-1 text-[11px] font-semibold text-accent">{error}</p>}</label>;
+  return <label className="block"><span className="mb-1.5 block text-xs font-bold">{label}</span><div className="flex gap-2"><input maxLength={24} value={draft} onChange={(event) => { setDraft(event.target.value); if (error) setError(null); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onBlur={commit} placeholder={placeholder} className="h-10 w-full rounded-xl border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid={testId} /><button type="button" onClick={commit} className="rounded-xl border border-border px-3 text-xs font-bold hover:bg-secondary" data-testid={`${testId}-save`}>Save</button></div>{error && <p className="mt-1 text-[11px] font-semibold text-accent">{error}</p>}</label>;
 }
 
 function SettingRow({ icon, title, detail, enabled, onToggle, testId }: { icon: ReactNode; title: string; detail: string; enabled: boolean; onToggle: () => void; testId: string }) {
