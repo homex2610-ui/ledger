@@ -35,6 +35,7 @@ import {
 import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle, StatTile } from '@/components/ui-elements';
 import { Avatar, avatarColorFor } from '@/components/avatar';
 import { browserTimeZone } from '@/lib/utils';
+import { formatMinutes } from '@/lib/format-duration';
 
 type Tab = 'board' | 'groups';
 type Scope = 'private' | 'cohort';
@@ -362,7 +363,7 @@ function RankedBoard({ entries, weekLabel, weekEnd, focused, streakByHandle, ava
           )}
         </div>
       </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week.</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">Ranked by time studied — focus-mode sessions and study-room timers count; manual logs don't.</p>
       {entries.length ? (
         <>
           <Podium entries={entries.slice(0, 3)} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} metaByHandle={metaByHandle} />
@@ -418,11 +419,11 @@ function PodiumCard({ entry, tier, streak, avatarClass, meta, animate, delay }: 
       <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-muted-foreground">Rank {String(entry.rank).padStart(2, '0')}</p>
       <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-3 h-14 w-14 text-base md:h-16 md:w-16 md:text-lg ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
       <p className="mt-2.5 truncate text-sm font-bold text-foreground md:mt-3 md:text-base">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
-      <p className="mt-0.5 text-lg font-extrabold text-foreground md:mt-1 md:text-2xl" title="Pulse = minutes studied + 30 × topics moved this week">{score}</p>
+      <p className="mt-0.5 text-lg font-extrabold text-foreground md:mt-1 md:text-2xl" title="Time studied this period - focus sessions and timers count, manual logs don't">{formatMinutes(score)}</p>
       <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground md:mt-1">
         {streak > 0 && <span className={`inline-flex items-center gap-0.5 ${tier.flame} ${isFirst ? 'flame-breathe' : ''}`} title={`${streak}-day streak`}><Flame size={11} fill="currentColor" />{streak}</span>}
         {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : null}
-        <span>{entry.hours}h · {entry.topics} topics</span>
+        <span>{entry.topics} topics moved</span>
       </p>
       <div className="mt-1 flex items-center justify-center gap-2">
         <DeltaBadge delta={meta?.rankDelta ?? null} />
@@ -515,7 +516,7 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, meta, sparkline
           {entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}
           {isOwner && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary" data-testid={`owner-badge-${entry.handle}`}>Owner</span>}
         </p>
-        <p className="text-[11px] text-muted-foreground">{entry.hours}h · {entry.topics} topics</p>
+        <p className="text-[11px] text-muted-foreground">{entry.topics} topics moved</p>
       </div>
       {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
         <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta > 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
@@ -525,7 +526,7 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, meta, sparkline
       {removable && onRemove && (
         <button type="button" onClick={() => onRemove(removable.userId)} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label={`Remove ${entry.handle}`} data-testid={`button-remove-circle-${entry.handle}`}><Trash2 size={14} /></button>
       )}
-      <span className="text-sm font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{entry.score}</span>
+      <span className="text-sm font-extrabold text-foreground" title="Time studied this period - focus sessions and timers count, manual logs don't">{formatMinutes(entry.score)}</span>
     </div>
   );
 }
@@ -553,7 +554,7 @@ function PinnedRow({ entry, streak, delta, meta, sparkline, avatarClass }: { ent
       )}
       {sparkline && <Sparkline ranks={sparkline} />}
       {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streak} />}
-      <span className="text-sm font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{entry.score}</span>
+      <span className="text-sm font-extrabold text-foreground" title="Time studied this period - focus sessions and timers count, manual logs don't">{formatMinutes(entry.score)}</span>
     </div>
   );
 }
@@ -577,13 +578,13 @@ function BoardStats({ entries, streak, meta }: { entries: LeaderboardEntry[]; st
   const tiles: { label: string; value: string; detail: string; accent: boolean }[] = [];
   if (streak && streak > 0) tiles.push({ label: 'Streak', value: `${streak}d`, detail: 'days studied in a row', accent: false });
   if (self) {
-    tiles.push({ label: 'Pulse this week', value: `${self.score}`, detail: 'minutes + 30 × topics moved', accent: true });
+    tiles.push({ label: 'Time this week', value: formatMinutes(self.score), detail: 'focus + timer time, no manual logs', accent: true });
     if (meta) {
       const deltaDetail = meta.rankDelta === null || meta.rankDelta === 0 ? 'holding steady vs last week' : meta.rankDelta > 0 ? `up ${meta.rankDelta} vs last week` : `down ${-meta.rankDelta} vs last week`;
       tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail: deltaDetail, accent: false });
       if (meta.pb) tiles.push({ label: 'Personal best', value: `#${meta.pb}`, detail: 'best rank ever on this board', accent: false });
       if (meta.gapState === 'leading') tiles.push({ label: 'Board lead', value: 'Top spot', detail: 'you are rank 1 this week', accent: false });
-      else if (meta.gapState === 'active' && meta.gapToNext !== null) tiles.push({ label: 'To the next rank', value: `${meta.gapToNext}`, detail: 'pulse points away', accent: false });
+      else if (meta.gapState === 'active' && meta.gapToNext !== null) tiles.push({ label: 'To the next rank', value: formatMinutes(meta.gapToNext), detail: 'studied time away', accent: false });
     } else {
       const detail = delta === null || delta === 0 ? 'holding steady' : delta < 0 ? `up ${-delta} since your last visit` : `down ${delta} since your last visit`;
       tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail, accent: false });
@@ -718,7 +719,7 @@ function PrivateTab() {
           emptyDetail="Your study time decides the score — focus sessions and timers count, manual logs don't. Invite a friend to fill the board."
         />
       )}
-      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week. Circle only — no strangers.</p>
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Ranked by time studied this week — focus sessions and study-room timers count, manual logs don't. Circle only — no strangers.</p>
       </div>
       <aside className="min-w-0 xl:sticky xl:top-24" aria-label="Circle activity sidebar">
         {!alone && <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />}
@@ -1153,7 +1154,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
                     {meta ? <DeltaBadge delta={meta.rankDelta} /> : null}
                     {sparklineByHandle.get(entry.handle) && <Sparkline ranks={sparklineByHandle.get(entry.handle) ?? []} />}
                     {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : null}
-                    <p className="font-display font-bold">{entry.score}</p>
+                    <p className="font-display font-bold">{formatMinutes(entry.score)}</p>
                   </div>
                 );
               })}

@@ -140,7 +140,7 @@ async function leaderboardFor(
         handle: info.handle,
         initials: info.initials,
         avatarUrl: info.avatarUrl,
-        score: Math.round(minutes + topics * 30 + (adjustmentByUser.get(id) ?? 0)),
+        score: Math.round(minutes + (adjustmentByUser.get(id) ?? 0)),
         hours: Math.round((minutes / 60) * 10) / 10,
         topics,
         isCurrentUser: id === currentUserId,
