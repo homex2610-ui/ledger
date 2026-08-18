@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, ChevronDown, Clock, Copy, EyeOff, Flame, Link2, Lock, Search, ShieldCheck, Sparkles, Trash2, Trophy, UserRoundPlus, Users } from 'lucide-react';
+import { Check, ChevronDown, Clock, Copy, Crown, EyeOff, Flame, Link2, Lock, Search, ShieldCheck, Sparkles, Timer, Trash2, Trophy, UserRoundPlus, Users } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
@@ -15,9 +15,11 @@ import {
   useGetCohorts,
   useGetCohortsFeed,
   useGetCohortsLeaderboard,
+  useGetCohortsLeaderboardSparkline,
   useGetGroup,
   useGetGroupActivity,
   useGetGroupLeaderboard,
+  useGetGroupLeaderboardSparkline,
   useGetLeaderboard,
   useJoinGroupByCode,
   useLeaveGroup,
@@ -218,12 +220,123 @@ function useCountUp(value: number, animate: boolean): number {
   return display;
 }
 
-function RankedBoard({ entries, weekLabel, focused, streakByHandle, avatarColorByHandle, loading, error, onRetry, removableByHandle, onRemove, ownerHandle, emptyTitle, emptyDetail }: {
+interface BoardMeta {
+  rankDelta: number | null;
+  streak: number;
+  pb: number | null;
+  gapToNext: number | null;
+  gapState: 'active' | 'leading' | 'empty';
+}
+
+const TOP_N_CELEBRATED = 3;
+
+function useCountdown(weekEnd: string | null | undefined): { total: number } | null {
+  const [remaining, setRemaining] = useState<number | null>(null);
+  useEffect(() => {
+    if (!weekEnd) { setRemaining(null); return; }
+    const end = new Date(weekEnd).getTime();
+    if (Number.isNaN(end)) { setRemaining(null); return; }
+    const tick = () => setRemaining(Math.max(0, end - Date.now()));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [weekEnd]);
+  if (remaining === null) return null;
+  return { total: remaining };
+}
+
+function formatCountdown(total: number): string {
+  const days = Math.floor(total / 86_400_000);
+  const hours = Math.floor((total % 86_400_000) / 3_600_000);
+  const minutes = Math.floor((total % 3_600_000) / 60_000);
+  const seconds = Math.floor((total % 60_000) / 1000);
+  if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function CountdownBadge({ weekEnd }: { weekEnd?: string | null }) {
+  const countdown = useCountdown(weekEnd);
+  if (!countdown) return null;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-bold tabular-nums text-muted-foreground" title="Time left in this week's board" data-testid="countdown">
+      <Timer size={12} className="text-primary" />{formatCountdown(countdown.total)}
+    </span>
+  );
+}
+
+function DeltaBadge({ delta }: { delta: number | null }) {
+  if (delta === null) return null;
+  if (delta === 0) return <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Same rank as last week">–</span>;
+  return (
+    <span className={`shrink-0 text-[10px] font-bold ${delta > 0 ? 'text-success' : 'text-accent'}`} title={delta > 0 ? `Up ${delta} from last week` : `Down ${-delta} from last week`}>
+      {delta > 0 ? '↑' : '↓'}{Math.abs(delta)}
+    </span>
+  );
+}
+
+function WeeklyStreakChip({ streak }: { streak: number }) {
+  if (streak < 2) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold text-amber-600" title={`${streak} weeks in the top of this board`} data-testid="weekly-streak">
+      <Trophy size={10} fill="currentColor" />{streak}
+    </span>
+  );
+}
+
+function Sparkline({ ranks }: { ranks: number[] }) {
+  if (ranks.length < 2) return null;
+  const width = 64;
+  const height = 20;
+  const max = Math.max(1, ...ranks);
+  const points = ranks.map((rank, index) => `${(index / (ranks.length - 1)) * width},${4 + (rank / max) * (height - 8)}`).join(' ');
+  const latest = ranks[ranks.length - 1];
+  const rising = latest <= (ranks[ranks.length - 2] ?? latest);
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0" aria-hidden data-testid="sparkline">
+      <polyline points={points} fill="none" stroke={rising ? 'var(--color-success)' : 'var(--color-accent)'} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CelebrationCard({ rank, meta, weekEnd }: { rank: number; meta: BoardMeta; weekEnd?: string | null }) {
+  const [dismissed, setDismissed] = useState(false);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (!weekEnd) return;
+    try {
+      const key = `pp-celebrate-${weekEnd}`;
+      if (sessionStorage.getItem(key)) { setSeen(true); return; }
+      sessionStorage.setItem(key, '1');
+    } catch { /* storage unavailable */ }
+  }, [weekEnd]);
+  if (!weekEnd || dismissed || seen) return null;
+  const leading = meta.gapState === 'leading' && rank === 1;
+  const enteredTop = rank <= TOP_N_CELEBRATED;
+  if (!leading && !enteredTop) return null;
+  return (
+    <section className="rounded-xl border border-amber-400/40 bg-gradient-to-br from-amber-400/15 via-card to-card p-4 md:p-5" data-testid="celebration">
+      <div className="flex items-start gap-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-500"><Crown size={17} /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-extrabold text-foreground">{leading ? "You're leading this week's board!" : `You're in the top ${rank} this week!`}</p>
+          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{leading ? "Keep showing up — the board resets next week." : "Keep showing up — the board resets next week."}</p>
+        </div>
+        <button type="button" onClick={() => setDismissed(true)} className="rounded-lg px-2 py-1 text-xs font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label="Dismiss celebration">Dismiss</button>
+      </div>
+    </section>
+  );
+}
+
+
+function RankedBoard({ entries, weekLabel, weekEnd, focused, streakByHandle, avatarColorByHandle, metaByHandle, sparklineByHandle, loading, error, onRetry, removableByHandle, onRemove, ownerHandle, emptyTitle, emptyDetail }: {
   entries: LeaderboardEntry[];
   weekLabel?: string;
+  weekEnd?: string | null;
   focused: boolean;
   streakByHandle: Map<string, number>;
   avatarColorByHandle: Map<string, string>;
+  metaByHandle?: Map<string, BoardMeta>;
+  sparklineByHandle?: Map<string, number[]>;
   loading: boolean;
   error: boolean;
   onRetry: () => void;
@@ -242,15 +355,18 @@ function RankedBoard({ entries, weekLabel, focused, streakByHandle, avatarColorB
           <h2 className="text-sm font-extrabold text-foreground">Leaderboard</h2>
           {weekLabel && <p className="mt-0.5 text-xs font-medium text-muted-foreground">{weekRange(weekLabel)}</p>}
         </div>
-        {focused && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-bold text-accent" data-testid="notice-focus-mode"><EyeOff size={12} /> Focus mode on</span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <CountdownBadge weekEnd={weekEnd} />
+          {focused && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-bold text-accent" data-testid="notice-focus-mode"><EyeOff size={12} /> Focus mode on</span>
+          )}
+        </div>
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">Pulse = minutes studied + 30 × topics moved this week.</p>
       {entries.length ? (
         <>
-          <Podium entries={entries.slice(0, 3)} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} />
-          <RankedList entries={entries} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removableByHandle={removableByHandle} onRemove={onRemove} ownerHandle={ownerHandle} />
+          <Podium entries={entries.slice(0, 3)} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} metaByHandle={metaByHandle} />
+          <RankedList entries={entries} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} metaByHandle={metaByHandle} sparklineByHandle={sparklineByHandle} removableByHandle={removableByHandle} onRemove={onRemove} ownerHandle={ownerHandle} />
         </>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-border/80 px-4 py-8 text-center">
@@ -270,7 +386,7 @@ const PODIUM_TIERS: Record<number, { card: string; flame: string }> = {
 
 const PODIUM_DELAY: Record<number, number> = { 3: 0, 2: 60, 1: 120 };
 
-function Podium({ entries, streakByHandle, avatarColorByHandle }: { entries: LeaderboardEntry[]; streakByHandle: Map<string, number>; avatarColorByHandle: Map<string, string> }) {
+function Podium({ entries, streakByHandle, avatarColorByHandle, metaByHandle }: { entries: LeaderboardEntry[]; streakByHandle: Map<string, number>; avatarColorByHandle: Map<string, string>; metaByHandle?: Map<string, BoardMeta> }) {
   const animate = !podiumStagedOnce && !prefersReducedMotion();
   useEffect(() => { podiumStagedOnce = true; }, []);
   const byRank = new Map<number, LeaderboardEntry>();
@@ -281,13 +397,13 @@ function Podium({ entries, streakByHandle, avatarColorByHandle }: { entries: Lea
   return (
     <ol aria-label="Top 3" className={`mx-auto mt-5 grid ${grid} gap-2 md:gap-3`}>
       {present.map((entry) => (
-        <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} tier={PODIUM_TIERS[entry.rank] ?? PODIUM_TIERS[1]} streak={streakByHandle.get(entry.handle) ?? 0} avatarClass={avatarColorByHandle.get(entry.handle)} animate={animate} delay={PODIUM_DELAY[entry.rank] ?? 0} />
+        <PodiumCard key={`${entry.rank}-${entry.handle}`} entry={entry} tier={PODIUM_TIERS[entry.rank] ?? PODIUM_TIERS[1]} streak={streakByHandle.get(entry.handle) ?? 0} avatarClass={avatarColorByHandle.get(entry.handle)} meta={metaByHandle?.get(entry.handle)} animate={animate} delay={PODIUM_DELAY[entry.rank] ?? 0} />
       ))}
     </ol>
   );
 }
 
-function PodiumCard({ entry, tier, streak, avatarClass, animate, delay }: { entry: LeaderboardEntry; tier: { card: string; flame: string }; streak: number; avatarClass?: string; animate: boolean; delay: number }) {
+function PodiumCard({ entry, tier, streak, avatarClass, meta, animate, delay }: { entry: LeaderboardEntry; tier: { card: string; flame: string }; streak: number; avatarClass?: string; meta?: BoardMeta; animate: boolean; delay: number }) {
   const [staged, setStaged] = useState(() => !animate);
   useEffect(() => {
     if (!animate) return;
@@ -305,16 +421,23 @@ function PodiumCard({ entry, tier, streak, avatarClass, animate, delay }: { entr
       <p className="mt-0.5 text-lg font-extrabold text-foreground md:mt-1 md:text-2xl" title="Pulse = minutes studied + 30 × topics moved this week">{score}</p>
       <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground md:mt-1">
         {streak > 0 && <span className={`inline-flex items-center gap-0.5 ${tier.flame} ${isFirst ? 'flame-breathe' : ''}`} title={`${streak}-day streak`}><Flame size={11} fill="currentColor" />{streak}</span>}
+        {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : null}
         <span>{entry.hours}h · {entry.topics} topics</span>
       </p>
+      <div className="mt-1 flex items-center justify-center gap-2">
+        <DeltaBadge delta={meta?.rankDelta ?? null} />
+        {meta?.pb && <span className="text-[10px] font-bold text-muted-foreground" title="Best rank ever on this board">PB #{meta.pb}</span>}
+      </div>
     </li>
   );
 }
 
-function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByHandle, onRemove, ownerHandle }: {
+function RankedList({ entries, streakByHandle, avatarColorByHandle, metaByHandle, sparklineByHandle, removableByHandle, onRemove, ownerHandle }: {
   entries: LeaderboardEntry[];
   streakByHandle: Map<string, number>;
   avatarColorByHandle: Map<string, string>;
+  metaByHandle?: Map<string, BoardMeta>;
+  sparklineByHandle?: Map<string, number[]>;
   removableByHandle?: Map<string, { userId: string }>;
   onRemove?: (userId: string) => void;
   ownerHandle?: string | null;
@@ -335,7 +458,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
     <ol className="mt-4 divide-y divide-border/40" aria-label="Ranked leaderboard">
       {visibleTop.map((entry) => (
         <li key={`${entry.rank}-${entry.handle}`}>
-          <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
+          <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} meta={metaByHandle?.get(entry.handle)} sparkline={sparklineByHandle?.get(entry.handle)} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
         </li>
       ))}
       {extras.length > 0 && (
@@ -356,7 +479,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
           <ol aria-label="Remaining ranks" className={`min-h-0 divide-y divide-border/40 overflow-hidden ${expanded ? '' : 'invisible'}`} aria-hidden={!expanded}>
             {extras.map((entry) => (
               <li key={`${entry.rank}-${entry.handle}`}>
-                <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
+                <RankedRow entry={entry} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} meta={metaByHandle?.get(entry.handle)} sparkline={sparklineByHandle?.get(entry.handle)} removable={removableByHandle?.get(entry.handle)} onRemove={onRemove} isOwner={entry.handle === ownerHandle} delta={entry.isCurrentUser ? delta : undefined} />
               </li>
             ))}
           </ol>
@@ -364,17 +487,19 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, removableByH
       </li>
       {pinSelf && self && (
         <li>
-          <PinnedRow entry={self} streak={streakByHandle.get(self.handle)} delta={delta} avatarClass={avatarColorByHandle.get(self.handle)} />
+          <PinnedRow entry={self} streak={streakByHandle.get(self.handle)} delta={delta} meta={metaByHandle?.get(self.handle)} sparkline={sparklineByHandle?.get(self.handle)} avatarClass={avatarColorByHandle.get(self.handle)} />
         </li>
       )}
     </ol>
   );
 }
 
-function RankedRow({ entry, streakByHandle, avatarColorByHandle, removable, onRemove, isOwner, delta }: {
+function RankedRow({ entry, streakByHandle, avatarColorByHandle, meta, sparkline, removable, onRemove, isOwner, delta }: {
   entry: LeaderboardEntry;
   streakByHandle: Map<string, number>;
   avatarColorByHandle: Map<string, string>;
+  meta?: BoardMeta;
+  sparkline?: number[];
   removable?: { userId: string };
   onRemove?: (userId: string) => void;
   isOwner: boolean;
@@ -392,10 +517,11 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, removable, onRe
         </p>
         <p className="text-[11px] text-muted-foreground">{entry.hours}h · {entry.topics} topics</p>
       </div>
-      {delta !== undefined && delta !== null && delta !== 0 && (
+      {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
         <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
       )}
-      <StreakChip streak={streakByHandle.get(entry.handle)} />
+      {sparkline && <Sparkline ranks={sparkline} />}
+      {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streakByHandle.get(entry.handle)} />}
       {removable && onRemove && (
         <button type="button" onClick={() => onRemove(removable.userId)} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label={`Remove ${entry.handle}`} data-testid={`button-remove-circle-${entry.handle}`}><Trash2 size={14} /></button>
       )}
@@ -404,7 +530,7 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, removable, onRe
   );
 }
 
-function PinnedRow({ entry, streak, delta, avatarClass }: { entry: LeaderboardEntry; streak?: number; delta?: number | null; avatarClass?: string }) {
+function PinnedRow({ entry, streak, delta, meta, sparkline, avatarClass }: { entry: LeaderboardEntry; streak?: number; delta?: number | null; meta?: BoardMeta; sparkline?: number[]; avatarClass?: string }) {
   const animate = !pinnedDrawnOnce && !prefersReducedMotion();
   const [drawn, setDrawn] = useState(() => !animate);
   useEffect(() => {
@@ -422,10 +548,11 @@ function PinnedRow({ entry, streak, delta, avatarClass }: { entry: LeaderboardEn
         <p className="truncate text-sm font-bold text-foreground">{entry.handle}</p>
         <p className="text-[11px] font-semibold text-accent">Your rank</p>
       </div>
-      {delta !== undefined && delta !== null && delta !== 0 && (
+      {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
         <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
       )}
-      <StreakChip streak={streak} />
+      {sparkline && <Sparkline ranks={sparkline} />}
+      {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streak} />}
       <span className="text-sm font-extrabold text-foreground" title="Pulse = minutes studied + 30 × topics moved this week">{entry.score}</span>
     </div>
   );
@@ -444,15 +571,23 @@ function BoardSkeleton() {
   );
 }
 
-function BoardStats({ entries, streak }: { entries: LeaderboardEntry[]; streak: number | undefined }) {
+function BoardStats({ entries, streak, meta }: { entries: LeaderboardEntry[]; streak: number | undefined; meta?: BoardMeta }) {
   const self = entries.find((entry) => entry.isCurrentUser);
   const delta = useRankDelta(self?.handle, self?.rank);
   const tiles: { label: string; value: string; detail: string; accent: boolean }[] = [];
   if (streak && streak > 0) tiles.push({ label: 'Streak', value: `${streak}d`, detail: 'days studied in a row', accent: false });
   if (self) {
     tiles.push({ label: 'Pulse this week', value: `${self.score}`, detail: 'minutes + 30 × topics moved', accent: true });
-    const detail = delta === null || delta === 0 ? 'holding steady' : delta < 0 ? `up ${-delta} since your last visit` : `down ${delta} since your last visit`;
-    tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail, accent: false });
+    if (meta) {
+      const deltaDetail = meta.rankDelta === null || meta.rankDelta === 0 ? 'holding steady vs last week' : meta.rankDelta > 0 ? `up ${meta.rankDelta} vs last week` : `down ${-meta.rankDelta} vs last week`;
+      tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail: deltaDetail, accent: false });
+      if (meta.pb) tiles.push({ label: 'Personal best', value: `#${meta.pb}`, detail: 'best rank ever on this board', accent: false });
+      if (meta.gapState === 'leading') tiles.push({ label: 'Board lead', value: 'Top spot', detail: 'you are rank 1 this week', accent: false });
+      else if (meta.gapState === 'active' && meta.gapToNext !== null) tiles.push({ label: 'To the next rank', value: `${meta.gapToNext}`, detail: 'pulse points away', accent: false });
+    } else {
+      const detail = delta === null || delta === 0 ? 'holding steady' : delta < 0 ? `up ${-delta} since your last visit` : `down ${delta} since your last visit`;
+      tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail, accent: false });
+    }
   }
   if (!tiles.length) return null;
   return (
@@ -595,6 +730,7 @@ function PrivateTab() {
 function CohortTab() {
   const query = useGetCohorts({ tz: browserTimeZone() });
   const leaderboardQuery = useGetCohortsLeaderboard();
+  const sparklineQuery = useGetCohortsLeaderboardSparkline();
   const feedQuery = useGetCohortsFeed();
 
   if (query.isLoading) return <LoadingBlock className="h-80" />;
@@ -617,13 +753,31 @@ function CohortTab() {
   const streakByHandle = new Map(members.map((member: CohortMemberRow) => [member.handle, member.streak ?? 0]));
   const avatarColorByHandle = new Map(members.map((member: CohortMemberRow) => [member.handle, avatarColorFor(member.userId)]));
   const board = leaderboardQuery.data;
+  const memberIdByHandle = new Map(members.map((member: CohortMemberRow) => [member.handle, member.userId]));
+  const sparklineByHandle = new Map<string, number[]>();
+  for (const row of sparklineQuery.data ?? []) {
+    for (const [handle, userId] of memberIdByHandle) {
+      if (userId === row.userId) sparklineByHandle.set(handle, row.ranks);
+    }
+  }
+  const metaByHandle = new Map<string, BoardMeta>();
+  for (const entry of board?.entries ?? []) {
+    metaByHandle.set(entry.handle, {
+      rankDelta: entry.rankDelta ?? null,
+      streak: entry.streak ?? 0,
+      pb: entry.pb ?? null,
+      gapToNext: entry.gapToNext ?? null,
+      gapState: entry.gapState ?? 'empty',
+    });
+  }
   const alone = memberCount <= 1;
   const selfEntry = board?.entries.find((entry) => entry.isCurrentUser);
 
   return (
     <div role="tabpanel" id="panel-cohort" aria-labelledby="tab-cohort" className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start" data-testid="cohort-section">
       <div className="min-w-0 space-y-4">
-        <BoardStats entries={board?.entries ?? []} streak={selfEntry ? streakByHandle.get(selfEntry.handle) : undefined} />
+        <BoardStats entries={board?.entries ?? []} streak={selfEntry ? streakByHandle.get(selfEntry.handle) : undefined} meta={selfEntry ? metaByHandle.get(selfEntry.handle) : undefined} />
+        {selfEntry && <CelebrationCard rank={selfEntry.rank} meta={metaByHandle.get(selfEntry.handle) ?? { rankDelta: null, streak: 0, pb: null, gapToNext: null, gapState: 'empty' }} weekEnd={board?.weekEnd} />}
         <section className="rounded-xl border border-border/70 bg-background/60 p-4" data-testid="cohort-card">
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-1.5 text-sm font-extrabold text-foreground"><Users size={14} className="text-primary" /> Cohort size</h2>
@@ -644,9 +798,12 @@ function CohortTab() {
         <RankedBoard
           entries={board?.entries ?? []}
           weekLabel={board?.weekLabel}
+          weekEnd={board?.weekEnd}
           focused={board?.focused ?? false}
           streakByHandle={streakByHandle}
           avatarColorByHandle={avatarColorByHandle}
+          metaByHandle={metaByHandle}
+          sparklineByHandle={sparklineByHandle}
           loading={leaderboardQuery.isLoading}
           error={leaderboardQuery.isError}
           onRetry={() => leaderboardQuery.refetch()}
@@ -908,6 +1065,7 @@ function DiscoverGroups({ onPick }: { onPick: (group: GroupSummary) => void }) {
 function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh: () => void; onLeave: () => void }) {
   const detailQuery = useGetGroup(group.id);
   const leaderboardQuery = useGetGroupLeaderboard(group.id);
+  const sparklineQuery = useGetGroupLeaderboardSparkline(group.id);
   const activityQuery = useGetGroupActivity(group.id);
   const updateGroup = useUpdateGroup();
   const deleteGroup = useDeleteGroup();
@@ -919,6 +1077,25 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
   const detail = detailQuery.data;
   const isOwner = group.myRole === 'owner';
   const avatarColorByHandle = new Map(detail.members.map((member) => [member.handle, avatarColorFor(member.userId)]));
+  const memberIdByHandle = new Map(detail.members.map((member) => [member.handle, member.userId]));
+  const sparklineByHandle = new Map<string, number[]>();
+  for (const row of sparklineQuery.data ?? []) {
+    for (const [handle, userId] of memberIdByHandle) {
+      if (userId === row.userId) sparklineByHandle.set(handle, row.ranks);
+    }
+  }
+  const board = leaderboardQuery.data;
+  const metaByHandle = new Map<string, BoardMeta>();
+  for (const entry of board?.entries ?? []) {
+    metaByHandle.set(entry.handle, {
+      rankDelta: entry.rankDelta ?? null,
+      streak: entry.streak ?? 0,
+      pb: entry.pb ?? null,
+      gapToNext: entry.gapToNext ?? null,
+      gapState: entry.gapState ?? 'empty',
+    });
+  }
+  const selfEntry = board?.entries.find((entry) => entry.isCurrentUser);
 
   const toggleDiscoverable = () => {
     updateGroup.mutate({ groupId: group.id, data: { name: group.name, isDiscoverable: !group.isDiscoverable } }, { onSuccess: refresh });
@@ -951,18 +1128,28 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
             ))}
           </div>
         </Card>
-        <Card className="p-5 md:p-6">
-          <SectionTitle eyebrow={leaderboardQuery.data?.weekLabel} title="Group board" action={<Trophy size={17} className="text-primary" />} />
-          {leaderboardQuery.data?.entries.length ? (
+<Card className="p-5 md:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionTitle eyebrow={leaderboardQuery.data?.weekLabel} title="Group board" action={<Trophy size={17} className="text-primary" />} />
+            <CountdownBadge weekEnd={board?.weekEnd} />
+          </div>
+          {selfEntry && <div className="mt-3"><CelebrationCard rank={selfEntry.rank} meta={metaByHandle.get(selfEntry.handle) ?? { rankDelta: null, streak: 0, pb: null, gapToNext: null, gapState: 'empty' }} weekEnd={board?.weekEnd} /></div>}
+          {board?.entries.length ? (
             <div className="mt-3 divide-y divide-border/70">
-              {leaderboardQuery.data.entries.map((entry) => (
-                <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
-                  <span className="w-6 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
-                  <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarColorByHandle.get(entry.handle) ?? 'bg-secondary'}`} title={entry.handle} />
-                  <p className="min-w-0 flex-1 truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && ' (you)'}</p>
-                  <p className="font-display font-bold">{entry.score}</p>
-                </div>
-              ))}
+              {board.entries.map((entry) => {
+                const meta = metaByHandle.get(entry.handle);
+                return (
+                  <div key={`${entry.rank}-${entry.handle}`} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
+                    <span className="w-6 font-display text-base font-bold text-muted-foreground">{entry.rank}</span>
+                    <Avatar src={entry.avatarUrl} initials={entry.initials} className={`h-9 w-9 text-xs ${avatarColorByHandle.get(entry.handle) ?? 'bg-secondary'}`} title={entry.handle} />
+                    <p className="min-w-0 flex-1 truncate text-sm font-bold">{entry.handle}{entry.isCurrentUser && ' (you)'}</p>
+                    {meta ? <DeltaBadge delta={meta.rankDelta} /> : null}
+                    {sparklineByHandle.get(entry.handle) && <Sparkline ranks={sparklineByHandle.get(entry.handle) ?? []} />}
+                    {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : null}
+                    <p className="font-display font-bold">{entry.score}</p>
+                  </div>
+                );
+              })}
             </div>
           ) : <p className="mt-3 text-sm text-muted-foreground">The board fills as members study.</p>}
         </Card>
