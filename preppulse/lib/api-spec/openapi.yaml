@@ -1551,6 +1551,36 @@ paths:
         "404":
           description: Not an admin
 
+  /admin/analytics:
+    get:
+      operationId: getAdminAnalytics
+      tags: [admin]
+      summary: Engagement analytics (actives, cohort heatmap, retention trend)
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAnalyticsResponse"
+        "404":
+          description: Not an admin
+
+  /admin/health:
+    get:
+      operationId: getAdminHealth
+      tags: [admin]
+      summary: Platform health with per-metric degradation
+      responses:
+        "200":
+          description: Health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminHealthResponse"
+        "404":
+          description: Not an admin
+
   /admin/cohorts/members/{userId}/move:
     post:
       operationId: moveCohortMember
@@ -3466,6 +3496,71 @@ components:
           items:
             $ref: "#/components/schemas/AdminAuditEntry"
       required: [entries]
+
+    AdminAnalyticsResponse:
+      type: object
+      properties:
+        activeUsers:
+          type: object
+          properties:
+            d1:
+              type: number
+            d7:
+              type: number
+            d30:
+              type: number
+          required: [d1, d7, d30]
+        cohortHeatmap:
+          type: array
+          items:
+            type: object
+            properties:
+              cohortId:
+                type: string
+              date:
+                type: string
+              minutes:
+                type: number
+            required: [cohortId, date, minutes]
+        retention:
+          type: array
+          items:
+            type: object
+            properties:
+              weekStart:
+                type: string
+              activeUsers:
+                type: number
+              retainedFromPrevious:
+                type: number
+                nullable: true
+            required: [weekStart, activeUsers, retainedFromPrevious]
+      required: [activeUsers, cohortHeatmap, retention]
+
+    HealthMetric:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        value:
+          oneOf:
+            - type: number
+            - type: string
+            - type: "null"
+      required: [ok, value]
+
+    AdminHealthResponse:
+      type: object
+      properties:
+        pgErrors:
+          $ref: "#/components/schemas/HealthMetric"
+        activeSessions:
+          $ref: "#/components/schemas/HealthMetric"
+        lastHealthz:
+          $ref: "#/components/schemas/HealthMetric"
+        lastDeploy:
+          $ref: "#/components/schemas/HealthMetric"
+      required: [pgErrors, activeSessions, lastHealthz, lastDeploy]
 
     CohortMemberMove:
       type: object

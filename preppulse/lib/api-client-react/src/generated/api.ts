@@ -21,10 +21,12 @@ import type {
 
 import type {
   ActiveAnnouncementResponse,
+  AdminAnalyticsResponse,
   AdminAuditResponse,
   AdminCohortDetail,
   AdminCohortSummary,
   AdminCohortUpdate,
+  AdminHealthResponse,
   AdminSet,
   AdminStatsResponse,
   AdminUserDetail,
@@ -6266,6 +6268,160 @@ export function useGetAdminAudit<TData = Awaited<ReturnType<typeof getAdminAudit
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAdminAuditQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminAnalyticsUrl = () => {
+
+
+
+
+  return `/api/admin/analytics`
+}
+
+/**
+ * @summary Engagement analytics (actives, cohort heatmap, retention trend)
+ */
+export const getAdminAnalytics = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminAnalyticsResponse> => {
+
+  return customFetch<AdminAnalyticsResponse>(getGetAdminAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAnalyticsQueryKey = () => {
+    return [
+    `/api/admin/analytics`
+    ] as const;
+    }
+
+
+export const getGetAdminAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAnalytics>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAnalytics>>> = ({ signal }) => getAdminAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAnalytics>>>
+export type GetAdminAnalyticsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Engagement analytics (actives, cohort heatmap, retention trend)
+ */
+
+export function useGetAdminAnalytics<TData = Awaited<ReturnType<typeof getAdminAnalytics>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminHealthUrl = () => {
+
+
+
+
+  return `/api/admin/health`
+}
+
+/**
+ * @summary Platform health with per-metric degradation
+ */
+export const getAdminHealth = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminHealthResponse> => {
+
+  return customFetch<AdminHealthResponse>(getGetAdminHealthUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminHealthQueryKey = () => {
+    return [
+    `/api/admin/health`
+    ] as const;
+    }
+
+
+export const getGetAdminHealthQueryOptions = <TData = Awaited<ReturnType<typeof getAdminHealth>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminHealthQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminHealth>>> = ({ signal }) => getAdminHealth({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminHealth>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminHealthQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminHealth>>>
+export type GetAdminHealthQueryError = ErrorType<void>
+
+
+/**
+ * @summary Platform health with per-metric degradation
+ */
+
+export function useGetAdminHealth<TData = Awaited<ReturnType<typeof getAdminHealth>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminHealthQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Megaphone, RefreshCw, ShieldCheck, UsersRound } from 'lucide-react';
-import { getGetAdminStatsQueryKey, getGetActiveAnnouncementQueryKey, useGetAdminStats, useRunWeeklyReset } from '@workspace/api-client-react';
+import { EyeOff, Megaphone, RefreshCw, ShieldCheck, UsersRound } from 'lucide-react';
+import { getGetAdminStatsQueryKey, getGetActiveAnnouncementQueryKey, useGetAdminHealth, useGetAdminStats, useRunWeeklyReset } from '@workspace/api-client-react';
 import { AdminGate, AdminPageHeader, timeAgo } from '@/pages/admin/admin-shell';
 import { Card, EmptyState, ErrorState, LoadingBlock } from '@/components/ui-elements';
 
@@ -32,6 +32,49 @@ function StatTile({ icon, label, value, detail, accent = false }: { icon: ReactN
       <p className="mt-3 truncate text-2xl font-medium tracking-tight">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
+  );
+}
+
+function HealthRow({ label, metric }: { label: string; metric: { ok: boolean; value: string | number | null } }) {
+  return (
+    <li className="flex items-center gap-3 py-2 text-sm">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${metric.ok ? 'bg-emerald-500' : 'bg-destructive'}`} />
+      <span className="min-w-0 flex-1 font-semibold">{label}</span>
+      <span className={`shrink-0 font-mono-custom text-xs ${metric.ok ? 'text-foreground' : 'text-destructive'}`}>
+        {metric.ok ? String(metric.value) : 'Unavailable'}
+      </span>
+    </li>
+  );
+}
+
+function HealthWidget() {
+  const { data: health, isPending, isError, refetch } = useGetAdminHealth();
+
+  if (isPending) return <Card className="mt-6 p-5"><LoadingBlock className="h-40" /></Card>;
+  if (isError) return <Card className="mt-6 p-5"><ErrorState onRetry={() => refetch()} /></Card>;
+
+  return (
+    <Card className="mt-6 p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="mb-1 font-mono-custom text-[10px] uppercase tracking-[.18em] text-primary">Health</p>
+          <h2 className="font-display text-lg font-bold tracking-tight">Platform status</h2>
+        </div>
+        <button type="button" onClick={() => refetch()} data-testid="button-refresh-health" className="flex items-center gap-1.5 rounded-lg border border-border/80 px-3 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <RefreshCw size={12} /> Refresh now
+        </button>
+      </div>
+      <ul className="divide-y divide-border/70">
+        <HealthRow label="PG errors · last 15m" metric={health.pgErrors} />
+        <HealthRow label="Active sessions" metric={health.activeSessions} />
+        <HealthRow label="Last healthz" metric={health.lastHealthz} />
+        <HealthRow label="Last deploy commit" metric={health.lastDeploy} />
+      </ul>
+      <div className="mt-4 flex items-start gap-2 rounded-xl bg-secondary/40 p-3 text-xs text-muted-foreground">
+        <EyeOff size={14} className="mt-0.5 shrink-0" />
+        <p><span className="font-bold">Impersonation</span> is intentionally not supported — there is no way to sign in as another user. Contact the user directly through their email instead.</p>
+      </div>
+    </Card>
   );
 }
 
@@ -91,6 +134,8 @@ export function AdminDashboard() {
         <StatTile accent={stats.nearCapacityCohorts > 0} icon={<UsersRound size={20} />} label="Near capacity" value={String(stats.nearCapacityCohorts)} detail="cohorts at 80% or more" />
         <StatTile icon={<Megaphone size={20} />} label="Active announcement" value={stats.activeAnnouncement?.title ?? 'None'} detail={stats.activeAnnouncement ? 'live to all users' : 'nothing live right now'} />
       </div>
+
+      <HealthWidget />
 
       <Card className="mt-6 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">

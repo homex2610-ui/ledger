@@ -17,6 +17,7 @@ import JoinByLink from '@/pages/join-by-link';
 import Settings from '@/pages/settings';
 import NotFound from '@/pages/not-found';
 import AdminDashboard from '@/pages/admin/admin-dashboard';
+import AdminAnalytics from '@/pages/admin/admin-analytics';
 import AdminAnnouncements from '@/pages/admin/admin-announcements';
 import AdminAudit from '@/pages/admin/admin-audit';
 import AdminCohorts from '@/pages/admin/admin-cohorts';
@@ -48,6 +49,7 @@ function Router() {
           <Route path="/stats" component={Stats} />
           <Route path="/compete" component={Compete} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/analytics" component={AdminAnalytics} />
           <Route path="/admin/announcements" component={AdminAnnouncements} />
           <Route path="/admin/cohorts" component={AdminCohorts} />
           <Route path="/admin/leaderboard" component={AdminLeaderboard} />

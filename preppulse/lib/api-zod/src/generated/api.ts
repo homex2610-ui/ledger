@@ -1986,6 +1986,51 @@ export const GetAdminAuditResponse = zod.object({
 
 
 /**
+ * @summary Engagement analytics (actives, cohort heatmap, retention trend)
+ */
+export const GetAdminAnalyticsResponse = zod.object({
+  "activeUsers": zod.object({
+  "d1": zod.number(),
+  "d7": zod.number(),
+  "d30": zod.number()
+}),
+  "cohortHeatmap": zod.array(zod.object({
+  "cohortId": zod.string(),
+  "date": zod.string(),
+  "minutes": zod.number()
+})),
+  "retention": zod.array(zod.object({
+  "weekStart": zod.string(),
+  "activeUsers": zod.number(),
+  "retainedFromPrevious": zod.number().nullable()
+}))
+})
+
+
+/**
+ * @summary Platform health with per-metric degradation
+ */
+export const GetAdminHealthResponse = zod.object({
+  "pgErrors": zod.object({
+  "ok": zod.boolean(),
+  "value": zod.union([zod.number(),zod.string(),zod.null()])
+}),
+  "activeSessions": zod.object({
+  "ok": zod.boolean(),
+  "value": zod.union([zod.number(),zod.string(),zod.null()])
+}),
+  "lastHealthz": zod.object({
+  "ok": zod.boolean(),
+  "value": zod.union([zod.number(),zod.string(),zod.null()])
+}),
+  "lastDeploy": zod.object({
+  "ok": zod.boolean(),
+  "value": zod.union([zod.number(),zod.string(),zod.null()])
+})
+})
+
+
+/**
  * @summary Move a user to another cohort (admin-only, capacity-checked)
  */
 export const MoveCohortMemberParams = zod.object({

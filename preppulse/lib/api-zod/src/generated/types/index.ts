@@ -8,6 +8,10 @@
 
 export * from './activeAnnouncementResponse';
 export * from './activeAnnouncementResponseAnnouncement';
+export * from './adminAnalyticsResponse';
+export * from './adminAnalyticsResponseActiveUsers';
+export * from './adminAnalyticsResponseCohortHeatmapItem';
+export * from './adminAnalyticsResponseRetentionItem';
 export * from './adminAuditEntry';
 export * from './adminAuditEntryAfterState';
 export * from './adminAuditEntryBeforeState';
@@ -16,6 +20,7 @@ export * from './adminCohortDetail';
 export * from './adminCohortMember';
 export * from './adminCohortSummary';
 export * from './adminCohortUpdate';
+export * from './adminHealthResponse';
 export * from './adminSet';
 export * from './adminStatsResponse';
 export * from './adminStatsResponseActiveAnnouncement';
@@ -86,6 +91,7 @@ export * from './groupLeaderboard';
 export * from './groupMemberRow';
 export * from './groupSummary';
 export * from './groupSummaryMyRole';
+export * from './healthMetric';
 export * from './healthStatus';
 export * from './leaderboard';
 export * from './leaderboardEntry';

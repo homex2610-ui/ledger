@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, gt, ilike, lt, or, sql } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
 import { db } from "@workspace/db";
 import {
   adminAuditLogTable,
   announcementsTable,
+  authSessionsTable,
   cohortMembersTable,
   cohortsTable,
   featureFlagsTable,
@@ -13,6 +14,7 @@ import {
   profilesTable,
   pulseAdjustmentsTable,
   studySessionsTable,
+  topicProgressTable,
   usersTable,
 } from "@workspace/db/schema";
 import {
@@ -21,9 +23,11 @@ import {
   CreateLeaderboardExclusionBody,
   CreatePulseAdjustmentBody,
   CreatePulseAdjustmentResponse,
+  GetAdminAnalyticsResponse,
   GetAdminAuditResponse,
   GetAdminCohortParams,
   GetAdminCohortResponse,
+  GetAdminHealthResponse,
   GetAdminStatsResponse,
   GetAdminUserParams,
   GetAdminUserResponse,
@@ -55,6 +59,7 @@ import {
 import { requireAuth } from "../lib/auth.js";
 import { COHORT_CAPACITY } from "../lib/cohorts.js";
 import { invalidateFeatureFlag } from "../lib/feature-flags.js";
+import { getLastHealthz, recentDbErrors, recordDbProbeFailure } from "../lib/health-stats.js";
 import { runWeeklyReset } from "../lib/periods.js";
 
 const router: IRouter = Router();
@@ -128,6 +133,113 @@ router.get("/admin/stats", async (_req, res) => {
         afterState: row.afterState,
         createdAt: row.createdAt,
       })),
+    }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Analytics — SQL-on-read aggregates: actives, cohort heatmap, retention
+// ---------------------------------------------------------------------------
+
+async function distinctActives(days: number, now: Date): Promise<number> {
+  const cutoff = new Date(now.getTime() - days * 86_400_000);
+  const [sessionRows, topicRows] = await Promise.all([
+    db.select({ userId: studySessionsTable.userId }).from(studySessionsTable).where(gte(studySessionsTable.createdAt, cutoff)),
+    db.select({ userId: topicProgressTable.userId }).from(topicProgressTable).where(gte(topicProgressTable.updatedAt, cutoff)),
+  ]);
+  return new Set([...sessionRows.map((row) => row.userId), ...topicRows.map((row) => row.userId)]).size;
+}
+
+router.get("/admin/analytics", async (_req, res) => {
+  const now = new Date();
+  const [d1, d7, d30] = await Promise.all([distinctActives(1, now), distinctActives(7, now), distinctActives(30, now)]);
+
+  const heatmapStart = new Date(now.getTime() - 13 * 86_400_000);
+  const heatmapRows = await db
+    .select({
+      cohortId: cohortMembersTable.cohortId,
+      day: sql<string>`to_char(${studySessionsTable.createdAt}, 'YYYY-MM-DD')`,
+      minutes: sql<number>`coalesce(sum(${studySessionsTable.minutes}), 0)::int`,
+    })
+    .from(cohortMembersTable)
+    .innerJoin(studySessionsTable, eq(studySessionsTable.userId, cohortMembersTable.userId))
+    .where(gte(studySessionsTable.createdAt, heatmapStart))
+    .groupBy(cohortMembersTable.cohortId, sql`to_char(${studySessionsTable.createdAt}, 'YYYY-MM-DD')`);
+
+  const [sessionActivity, topicActivity] = await Promise.all([
+    db
+      .select({
+        userId: studySessionsTable.userId,
+        week: sql<string>`to_char(date_trunc('week', ${studySessionsTable.createdAt}), 'YYYY-MM-DD')`,
+      })
+      .from(studySessionsTable)
+      .where(gte(studySessionsTable.createdAt, new Date(now.getTime() - 56 * 86_400_000))),
+    db
+      .select({
+        userId: topicProgressTable.userId,
+        week: sql<string>`to_char(date_trunc('week', ${topicProgressTable.updatedAt}), 'YYYY-MM-DD')`,
+      })
+      .from(topicProgressTable)
+      .where(gte(topicProgressTable.updatedAt, new Date(now.getTime() - 56 * 86_400_000))),
+  ]);
+
+  const activesByWeek = new Map<string, Set<string>>();
+  for (const row of [...sessionActivity, ...topicActivity]) {
+    let set = activesByWeek.get(row.week);
+    if (!set) {
+      set = new Set();
+      activesByWeek.set(row.week, set);
+    }
+    set.add(row.userId);
+  }
+
+  const retention: Array<{ weekStart: string; activeUsers: number; retainedFromPrevious: number | null }> = [];
+  const weekKeys = [...activesByWeek.keys()].sort();
+  for (let i = 0; i < weekKeys.length; i++) {
+    const current = activesByWeek.get(weekKeys[i]) ?? new Set<string>();
+    let retained: number | null = null;
+    if (i > 0) {
+      const previous = activesByWeek.get(weekKeys[i - 1]) ?? new Set<string>();
+      retained = [...previous].filter((id) => current.has(id)).length;
+    }
+    retention.push({ weekStart: weekKeys[i], activeUsers: current.size, retainedFromPrevious: retained });
+  }
+
+  res.json(
+    GetAdminAnalyticsResponse.parse({
+      activeUsers: { d1, d7, d30 },
+      cohortHeatmap: heatmapRows.map((row) => ({ cohortId: row.cohortId, date: row.day, minutes: row.minutes })),
+      retention,
+    }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Health — per-metric degradation instead of a hard failure
+// ---------------------------------------------------------------------------
+
+router.get("/admin/health", async (_req, res) => {
+  let pgOk = true;
+  try {
+    await db.execute(sql`select 1`);
+  } catch (error) {
+    pgOk = false;
+    recordDbProbeFailure();
+  }
+
+  const [sessionAgg] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(authSessionsTable)
+    .where(gt(authSessionsTable.expiresAt, new Date()));
+
+  const deploySha = process.env["VERCEL_GIT_COMMIT_SHA"] ?? process.env["GIT_SHA"] ?? null;
+
+  res.json(
+    GetAdminHealthResponse.parse({
+      pgErrors: { ok: pgOk, value: recentDbErrors(15 * 60_000) },
+      activeSessions: { ok: true, value: sessionAgg?.count ?? 0 },
+      lastHealthz: { ok: getLastHealthz() !== null, value: getLastHealthz() },
+      lastDeploy: { ok: deploySha !== null, value: deploySha },
     }),
   );
 });

@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Flag, Megaphone, Rocket, ScrollText, ShieldCheck, SlidersHorizontal, Users, UsersRound } from 'lucide-react';
+import { BarChart3, Flag, Megaphone, Rocket, ScrollText, ShieldCheck, SlidersHorizontal, Users, UsersRound } from 'lucide-react';
 import { useGetMe } from '@workspace/api-client-react';
 import { LoadingBlock } from '@/components/ui-elements';
 import NotFound from '@/pages/not-found';
 
 const TABS = [
   { href: '/admin', label: 'Overview', icon: ShieldCheck },
+  { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/admin/cohorts', label: 'Cohorts', icon: UsersRound },
   { href: '/admin/leaderboard', label: 'Leaderboard', icon: SlidersHorizontal },

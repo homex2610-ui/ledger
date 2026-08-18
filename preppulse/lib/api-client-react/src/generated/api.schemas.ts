@@ -1105,6 +1105,42 @@ export interface AdminAuditResponse {
   entries: AdminAuditEntry[];
 }
 
+export type AdminAnalyticsResponseActiveUsers = {
+  d1: number;
+  d7: number;
+  d30: number;
+};
+
+export type AdminAnalyticsResponseCohortHeatmapItem = {
+  cohortId: string;
+  date: string;
+  minutes: number;
+};
+
+export type AdminAnalyticsResponseRetentionItem = {
+  weekStart: string;
+  activeUsers: number;
+  retainedFromPrevious: number | null;
+};
+
+export interface AdminAnalyticsResponse {
+  activeUsers: AdminAnalyticsResponseActiveUsers;
+  cohortHeatmap: AdminAnalyticsResponseCohortHeatmapItem[];
+  retention: AdminAnalyticsResponseRetentionItem[];
+}
+
+export interface HealthMetric {
+  ok: boolean;
+  value: number | string | null;
+}
+
+export interface AdminHealthResponse {
+  pgErrors: HealthMetric;
+  activeSessions: HealthMetric;
+  lastHealthz: HealthMetric;
+  lastDeploy: HealthMetric;
+}
+
 export interface CohortMemberMove {
   toCohortId: string;
 }
