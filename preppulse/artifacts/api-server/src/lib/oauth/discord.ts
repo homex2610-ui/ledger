@@ -6,6 +6,7 @@ export interface DiscordIdentity {
   globalName: string | null;
   email: string | null;
   avatar: string | null;
+  verified: boolean;
 }
 
 export function discordAvatarUrl(id: string, avatar: string | null): string | null {
@@ -84,6 +85,7 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordIden
     global_name?: string | null;
     email?: string | null;
     avatar?: string | null;
+    verified?: boolean;
   };
   if (!json.id) throw new DiscordOAuthError("Discord identity is missing its id");
   return {
@@ -92,6 +94,7 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordIden
     globalName: json.global_name ?? null,
     email: json.email ?? null,
     avatar: json.avatar ?? null,
+    verified: json.verified === true,
   };
 }
 

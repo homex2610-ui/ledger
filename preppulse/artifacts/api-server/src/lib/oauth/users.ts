@@ -10,6 +10,8 @@ export interface OAuthUserContext {
   provider: OAuthProvider;
   providerUserId: string;
   email: string | null;
+  /** The provider verified the user owns the email. Required to auto-link on email match. */
+  emailVerified?: boolean;
   displayName: string;
   avatarUrl?: string | null;
 }
@@ -104,8 +106,10 @@ export async function findOAuthAccount(provider: OAuthProvider, providerUserId: 
 
 /**
  * Logs an OAuth identity in: returns the local user it already maps to, or
- * creates a fresh local account. Never merges an existing account purely
- * because the email matches - that raises OAuthLinkConflictError instead.
+ * creates a fresh local account. When the provider has verified the email and
+ * it matches an existing account, the identity is auto-linked to that account
+ * and the user signs in. An email match without provider verification raises
+ * OAuthLinkConflictError instead.
  */
 export async function resolveOrCreateOAuthUser(context: OAuthUserContext): Promise<{ user: User; created: boolean }> {
   const existing = await findOAuthAccount(context.provider, context.providerUserId);
@@ -121,7 +125,21 @@ export async function resolveOrCreateOAuthUser(context: OAuthUserContext): Promi
   const email = context.email?.trim().toLowerCase() || null;
   if (email) {
     const clash = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-    if (clash[0]) throw new OAuthLinkConflictError();
+    if (clash[0]) {
+      if (context.emailVerified) {
+        await db.insert(oauthAccountsTable).values({
+          userId: clash[0].id,
+          provider: context.provider,
+          providerUserId: context.providerUserId,
+          email,
+        });
+        if (context.avatarUrl) {
+          await db.update(usersTable).set({ avatarUrl: context.avatarUrl }).where(eq(usersTable.id, clash[0].id));
+        }
+        return { user: { ...clash[0], avatarUrl: context.avatarUrl ?? clash[0].avatarUrl }, created: false };
+      }
+      throw new OAuthLinkConflictError();
+    }
   }
 
   const fallbackEmail = `${context.provider}-${context.providerUserId}@local.preppulse`;

@@ -93,7 +93,7 @@ router.post("/google", authRateLimit, async (req, res) => {
   const session = await resolveSession(req);
   if (session) {
     try {
-      await linkOAuthToUser(session.userId, { provider: "google", providerUserId: identity.sub, email: identity.email, displayName: identity.name });
+      await linkOAuthToUser(session.userId, { provider: "google", providerUserId: identity.sub, email: identity.email, emailVerified: true, displayName: identity.name });
     } catch (error) {
       if (error instanceof AlreadyLinkedError) {
         res.status(409).json({ error: "This Google account is already linked to another PrepPulse account", code: "already_linked" });
@@ -110,6 +110,7 @@ router.post("/google", authRateLimit, async (req, res) => {
       provider: "google",
       providerUserId: identity.sub,
       email: identity.email,
+      emailVerified: true,
       displayName: identity.name,
     });
     const { token, expiresAt } = await createSession(user.id);
@@ -143,7 +144,7 @@ router.post("/oauth/link", authRateLimit, requireAuth, async (req, res) => {
   }
 
   try {
-    await linkOAuthToUser(req.userId, { provider: "google", providerUserId: identity.sub, email: identity.email, displayName: identity.name });
+    await linkOAuthToUser(req.userId, { provider: "google", providerUserId: identity.sub, email: identity.email, emailVerified: true, displayName: identity.name });
   } catch (error) {
     if (error instanceof AlreadyLinkedError) {
       res.status(409).json({ error: "This Google account is already linked to another PrepPulse account", code: "already_linked" });
@@ -226,6 +227,7 @@ router.get("/discord/callback", async (req, res) => {
     provider: "discord" as const,
     providerUserId: identity.id,
     email: identity.email,
+    emailVerified: identity.verified,
     displayName: identity.username,
     avatarUrl: discordAvatarUrl(identity.id, identity.avatar),
   };

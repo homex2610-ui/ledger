@@ -98,7 +98,9 @@ function startMockOauth() {
         const token = req.headers.authorization?.replace("Bearer ", "");
         const identity = token === "qa-access-clash"
           ? { id: "discord-user-clash", username: "qa_clash", global_name: "Qa Clash", email: "dc.qa@test.dev", verified: true, avatar: "qa_clash_hash" }
-          : token === "qa-access-other"
+          : token === "qa-access-clash-unverified"
+            ? { id: "discord-user-clash-unverified", username: "qa_clash_uv", global_name: "Qa Clash UV", email: "dc.qa@test.dev", verified: false, avatar: null }
+            : token === "qa-access-other"
             ? { id: "discord-user-other", username: "qa_other", global_name: null, email: null, verified: false, avatar: null }
             : { id: `discord-user-${DISCORD_RUN_SUFFIX}`, username: "qa_discord", global_name: "Qa Discord", email: `discord.${DISCORD_RUN_SUFFIX}.qa@test.dev`, verified: true, avatar: "qa_discord_hash" };
         if (!token) {
@@ -877,22 +879,22 @@ test("Google sign-in creates a local account and repeats reuse it", async () => 
   results.push({ ok: true, label: "google identity reuse" });
 });
 
-test("Google email conflict demands explicit linking", async () => {
+test("Google verified email auto-links to the existing account", async () => {
   const passwordUser = new Client("clash-g.qa@test.dev");
   const signupRes = await passwordUser.signup("ClashGQA");
   passwordUser.userId = signupRes.data.user.id;
   const token = signGoogleJwt({ sub: `google-sub-clash-${Date.now()}`, email: "clash-g.qa@test.dev", email_verified: true, name: "Clashy" });
   const clash = new Client("anon-clash@test.dev");
   clash.addCookie("g_csrf_token", "qa-csrf-1");
-  const conflict = await clash.request("POST", "/auth/google", { credential: token, csrfToken: "qa-csrf-1" });
-  assert.equal(conflict.status, 409, "matching email without a link is a conflict");
-  assert.equal(conflict.data.code, "account_linking_required", "conflict carries the linking code");
+  const autoLinked = await clash.request("POST", "/auth/google", { credential: token, csrfToken: "qa-csrf-1" });
+  assert.equal(autoLinked.status, 200, "verified matching email auto-links and signs in");
+  assert.equal(autoLinked.data.user.id, passwordUser.userId, "auto-link reaches the existing password account");
 
   const link = await passwordUser.request("POST", "/auth/oauth/link", { provider: "google", credential: token, csrfToken: "qa-csrf-1" });
   assert.equal(link.status, 400, "authenticated link without a CSRF cookie is rejected");
   passwordUser.addCookie("g_csrf_token", "qa-csrf-1");
   const linked = await passwordUser.request("POST", "/auth/oauth/link", { provider: "google", credential: token, csrfToken: "qa-csrf-1" });
-  assert.equal(linked.status, 200, "authenticated google link succeeds");
+  assert.equal(linked.status, 200, "already-linked google identity re-links cleanly");
   assert.equal(linked.data.user.id, passwordUser.userId, "link keeps the signed-in account");
   const providers = await passwordUser.request("GET", "/auth/oauth/providers");
   assert.equal(providers.data.google.connected, true, "provider shows as connected after linking");
@@ -957,7 +959,7 @@ test("Discord callback creates and reuses a local account", async () => {
   results.push({ ok: true, label: "discord identity reuse + auto guild join" });
 });
 
-test("Discord failures redirect with error; email conflicts redirect with conflict", async () => {
+test("Discord failures redirect with error; verified email auto-links, unverified conflicts", async () => {
   const errorFlow = new Client("d3.qa@test.dev");
   const authorize = await errorFlow.request("GET", "/auth/discord/authorize");
   const state = new URL(authorize.data.url).searchParams.get("state");
@@ -968,13 +970,23 @@ test("Discord failures redirect with error; email conflicts redirect with confli
   const passwordUser = new Client("dc.qa@test.dev");
   const signupRes = await passwordUser.signup("DcClashQA");
   passwordUser.userId = signupRes.data.user.id;
-  const conflictFlow = new Client("d4.qa@test.dev");
-  const authorize2 = await conflictFlow.request("GET", "/auth/discord/authorize");
-  const state2 = new URL(authorize2.data.url).searchParams.get("state");
-  const conflicted = await conflictFlow.request("GET", `/auth/discord/callback?code=clash&state=${state2}`);
-  assert.equal(conflicted.status, 302, "email conflict still redirects");
-  assert.ok(conflicted.location.includes("oauth=conflict"), "email conflict surfaces oauth=conflict");
-  results.push({ ok: true, label: "discord failures and conflicts" });
+
+  const verifiedFlow = new Client("d4.qa@test.dev");
+  const authorizeV = await verifiedFlow.request("GET", "/auth/discord/authorize");
+  const stateV = new URL(authorizeV.data.url).searchParams.get("state");
+  const verified = await verifiedFlow.request("GET", `/auth/discord/callback?code=clash&state=${stateV}`);
+  assert.equal(verified.status, 302, "verified email clash still redirects");
+  assert.ok(verified.location.includes("oauth=success"), "verified email clash auto-links and signs in");
+  const verifiedUser = await verifiedFlow.request("GET", "/auth/me");
+  assert.equal(verifiedUser.data.user.id, passwordUser.userId, "verified clash session reaches the existing account");
+
+  const unverifiedFlow = new Client("d5.qa@test.dev");
+  const authorizeU = await unverifiedFlow.request("GET", "/auth/discord/authorize");
+  const stateU = new URL(authorizeU.data.url).searchParams.get("state");
+  const conflicted = await unverifiedFlow.request("GET", `/auth/discord/callback?code=clash-unverified&state=${stateU}`);
+  assert.equal(conflicted.status, 302, "unverified email clash still redirects");
+  assert.ok(conflicted.location.includes("oauth=conflict"), "unverified email clash surfaces oauth=conflict");
+  results.push({ ok: true, label: "discord failures, verified auto-link, unverified conflict" });
 });
 
 test("Discord link mode links to the signed-in account", async () => {
