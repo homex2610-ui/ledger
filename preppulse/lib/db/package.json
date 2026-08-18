@@ -12,6 +12,7 @@
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
     "generate": "drizzle-kit generate --config ./drizzle.config.ts",
     "migrate": "drizzle-kit migrate --config ./drizzle.config.ts",
+    "migrate:vercel": "tsx ./scripts/migrate-vercel.ts",
     "seed": "tsx ./src/seed.ts"
   },
   "dependencies": {

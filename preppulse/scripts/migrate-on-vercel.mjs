@@ -7,7 +7,7 @@ if (!process.env.DATABASE_URL) {
 
 console.log('[migrate] DATABASE_URL present — applying pending drizzle migrations');
 try {
-  execSync('pnpm --filter @workspace/db migrate', { stdio: 'inherit' });
+  execSync('pnpm --filter @workspace/db run migrate:vercel', { stdio: 'inherit' });
   console.log('[migrate] done');
 } catch (error) {
   console.error('[migrate] FAILED', error);
