@@ -181,13 +181,6 @@ router.patch("/topics/:topicId/progress", async (req, res) => {
     return;
   }
 
-  const topics = await listSyllabusTopics(req.userId);
-  const current = topics.find((entry) => entry.id === params.topicId);
-  if (current?.locked && body.status !== "not_started") {
-    res.status(400).json({ error: `"${topic.name}" is locked until its prerequisites are practiced` });
-    return;
-  }
-
   const existing = await db
     .select()
     .from(topicProgressTable)
