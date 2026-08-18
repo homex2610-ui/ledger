@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { FEATURE_LEADERBOARD_WEEKLY, isFeatureEnabled } from "../lib/feature-flags.js";
 import { allLeaderboardScopeIds, closeWeeklyPeriod, duePeriods, ensureOpenPeriod } from "../lib/periods.js";
 
 const router: IRouter = Router();
@@ -22,6 +23,11 @@ function isAuthorized(req: { headers: Record<string, string | string[] | undefin
 router.post("/cron/weekly-reset", async (req, res) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
+    res.status(200).json({ scopesChecked: 0, closed: 0, results: [], featureDisabled: true });
     return;
   }
 

@@ -958,6 +958,24 @@ export interface AdminAuditEntry {
   createdAt: string;
 }
 
+export interface FeatureFlag {
+  key: string;
+  enabled: boolean;
+  description: string | null;
+  updatedAt: string;
+}
+
+export interface FeatureFlagToggle {
+  enabled: boolean;
+  /** @minLength 1 */
+  reason: string;
+}
+
+export interface FeatureFlagToggleResponse {
+  key: string;
+  enabled: boolean;
+}
+
 export type AdminStatsResponseActiveAnnouncement = {
   id: string;
   title: string;

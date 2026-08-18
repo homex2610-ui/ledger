@@ -51,6 +51,9 @@ import type {
   DiscoverGroupsParams,
   ErrorResponse,
   ExportMyData,
+  FeatureFlag,
+  FeatureFlagToggle,
+  FeatureFlagToggleResponse,
   FocusSession,
   FocusSessionInput,
   FocusSessionUpdate,
@@ -5368,6 +5371,155 @@ export const useToggleAnnouncement = <TError = ErrorType<void | ErrorResponse>,
         TContext
       > => {
       return useMutation(getToggleAnnouncementMutationOptions(options));
+    }
+
+export const getListFeatureFlagsUrl = () => {
+
+
+
+
+  return `/api/admin/feature-flags`
+}
+
+/**
+ * @summary All feature flags with their enabled state
+ */
+export const listFeatureFlags = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeatureFlag[]> => {
+
+  return customFetch<FeatureFlag[]>(getListFeatureFlagsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFeatureFlagsQueryKey = () => {
+    return [
+    `/api/admin/feature-flags`
+    ] as const;
+    }
+
+
+export const getListFeatureFlagsQueryOptions = <TData = Awaited<ReturnType<typeof listFeatureFlags>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFeatureFlags>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFeatureFlagsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFeatureFlags>>> = ({ signal }) => listFeatureFlags({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFeatureFlags>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFeatureFlagsQueryResult = NonNullable<Awaited<ReturnType<typeof listFeatureFlags>>>
+export type ListFeatureFlagsQueryError = ErrorType<void>
+
+
+/**
+ * @summary All feature flags with their enabled state
+ */
+
+export function useListFeatureFlags<TData = Awaited<ReturnType<typeof listFeatureFlags>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFeatureFlags>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFeatureFlagsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getToggleFeatureFlagUrl = (key: string,) => {
+
+
+
+
+  return `/api/admin/feature-flags/${key}/toggle`
+}
+
+/**
+ * @summary Enable or disable a feature flag (audited, reason required)
+ */
+export const toggleFeatureFlag = async (key: string,
+    featureFlagToggle: FeatureFlagToggle, options?: Parameters<typeof customFetch>[1]): Promise<FeatureFlagToggleResponse> => {
+
+  return customFetch<FeatureFlagToggleResponse>(getToggleFeatureFlagUrl(key),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(featureFlagToggle)
+  }
+);}
+
+
+
+
+
+export const getToggleFeatureFlagMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof toggleFeatureFlag>>, TError,{key: string;data: BodyType<FeatureFlagToggle>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof toggleFeatureFlag>>, TError,{key: string;data: BodyType<FeatureFlagToggle>}, TContext> => {
+
+const mutationKey = ['toggleFeatureFlag'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof toggleFeatureFlag>>, {key: string;data: BodyType<FeatureFlagToggle>}> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  toggleFeatureFlag(key,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ToggleFeatureFlagMutationResult = NonNullable<Awaited<ReturnType<typeof toggleFeatureFlag>>>
+    export type ToggleFeatureFlagMutationBody = BodyType<FeatureFlagToggle>
+    export type ToggleFeatureFlagMutationError = ErrorType<void>
+
+    /**
+ * @summary Enable or disable a feature flag (audited, reason required)
+ */
+export const useToggleFeatureFlag = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof toggleFeatureFlag>>, TError,{key: string;data: BodyType<FeatureFlagToggle>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof toggleFeatureFlag>>,
+        TError,
+        {key: string;data: BodyType<FeatureFlagToggle>},
+        TContext
+      > => {
+      return useMutation(getToggleFeatureFlagMutationOptions(options));
     }
 
 export const getListAdminCohortsUrl = () => {

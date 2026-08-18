@@ -44,6 +44,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth.js";
 import { COHORT_CAPACITY } from "../lib/cohorts.js";
+import { FEATURE_LEADERBOARD_WEEKLY, isFeatureEnabled } from "../lib/feature-flags.js";
 import {
   computeBestRank,
   computeGap,
@@ -425,6 +426,10 @@ router.get("/cohorts", async (req, res) => {
 });
 
 router.get("/cohorts/leaderboard", async (req, res) => {
+  if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
+    res.status(403).json({ error: "feature_disabled" });
+    return;
+  }
   const membership = await db
     .select({ cohortId: cohortMembersTable.cohortId })
     .from(cohortMembersTable)
@@ -443,6 +448,10 @@ router.get("/cohorts/leaderboard", async (req, res) => {
 });
 
 router.get("/cohorts/leaderboard/sparkline", async (req, res) => {
+  if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
+    res.status(403).json({ error: "feature_disabled" });
+    return;
+  }
   const membership = await db
     .select({ cohortId: cohortMembersTable.cohortId })
     .from(cohortMembersTable)
@@ -635,6 +644,10 @@ router.post("/groups/:groupId/leave", async (req, res) => {
 
 router.get("/groups/:groupId/leaderboard", async (req, res) => {
   const params = GetGroupLeaderboardParams.parse(req.params);
+  if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
+    res.status(403).json({ error: "feature_disabled" });
+    return;
+  }
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group || !(await isGroupMember(group.id, req.userId))) {
@@ -651,6 +664,10 @@ router.get("/groups/:groupId/leaderboard", async (req, res) => {
 
 router.get("/groups/:groupId/leaderboard/sparkline", async (req, res) => {
   const params = GetGroupLeaderboardParams.parse(req.params);
+  if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
+    res.status(403).json({ error: "feature_disabled" });
+    return;
+  }
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group || !(await isGroupMember(group.id, req.userId))) {

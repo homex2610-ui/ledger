@@ -1313,6 +1313,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/feature-flags:
+    get:
+      operationId: listFeatureFlags
+      tags: [admin]
+      summary: All feature flags with their enabled state
+      responses:
+        "200":
+          description: Feature flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeatureFlag"
+        "404":
+          description: Not an admin
+  /admin/feature-flags/{key}/toggle:
+    post:
+      operationId: toggleFeatureFlag
+      tags: [admin]
+      summary: Enable or disable a feature flag (audited, reason required)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeatureFlagToggle"
+      responses:
+        "200":
+          description: Toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlagToggleResponse"
+        "400":
+          description: Missing reason
+        "404":
+          description: Not an admin or flag not found
+
   /admin/cohorts:
     get:
       operationId: listAdminCohorts
@@ -3025,6 +3070,38 @@ components:
           type: string
           format: date-time
       required: [id, adminId, action, targetType, targetId, beforeState, afterState, createdAt]
+
+    FeatureFlag:
+      type: object
+      properties:
+        key:
+          type: string
+        enabled:
+          type: boolean
+        description:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+      required: [key, enabled, description, updatedAt]
+    FeatureFlagToggle:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        reason:
+          type: string
+          minLength: 1
+      required: [enabled, reason]
+    FeatureFlagToggleResponse:
+      type: object
+      properties:
+        key:
+          type: string
+        enabled:
+          type: boolean
+      required: [key, enabled]
 
     AdminStatsResponse:
       type: object

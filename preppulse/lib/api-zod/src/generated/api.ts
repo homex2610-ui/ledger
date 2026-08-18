@@ -1761,6 +1761,39 @@ export const ToggleAnnouncementResponse = zod.void()
 
 
 /**
+ * @summary All feature flags with their enabled state
+ */
+export const ListFeatureFlagsResponseItem = zod.object({
+  "key": zod.string(),
+  "enabled": zod.boolean(),
+  "description": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListFeatureFlagsResponse = zod.array(ListFeatureFlagsResponseItem)
+
+
+/**
+ * @summary Enable or disable a feature flag (audited, reason required)
+ */
+export const ToggleFeatureFlagParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+
+
+
+export const ToggleFeatureFlagBody = zod.object({
+  "enabled": zod.boolean(),
+  "reason": zod.string().min(1)
+})
+
+export const ToggleFeatureFlagResponse = zod.object({
+  "key": zod.string(),
+  "enabled": zod.boolean()
+})
+
+
+/**
  * @summary All cohorts with member counts
  */
 export const ListAdminCohortsResponseItem = zod.object({

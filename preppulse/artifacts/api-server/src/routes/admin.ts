@@ -7,6 +7,7 @@ import {
   announcementsTable,
   cohortMembersTable,
   cohortsTable,
+  featureFlagsTable,
   focusSessionsTable,
   profilesTable,
   studySessionsTable,
@@ -24,6 +25,7 @@ import {
   ListAdminCohortsResponse,
   ListAdminUsersExportResponse,
   ListAdminUsersResponse,
+  ListFeatureFlagsResponse,
   MoveCohortMemberBody,
   MoveCohortMemberParams,
   RemoveAdminUserParams,
@@ -31,12 +33,16 @@ import {
   SetAdminParams,
   ToggleAnnouncementBody,
   ToggleAnnouncementParams,
+  ToggleFeatureFlagBody,
+  ToggleFeatureFlagParams,
+  ToggleFeatureFlagResponse,
   UpdateAnnouncementBody,
   UpdateAnnouncementParams,
   UpdateAnnouncementResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth.js";
 import { COHORT_CAPACITY } from "../lib/cohorts.js";
+import { invalidateFeatureFlag } from "../lib/feature-flags.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -360,6 +366,52 @@ router.post("/admin/users/:userId/remove", async (req, res) => {
     beforeState: { handle: target.handle, email: target.email, isAdmin: target.isAdmin ?? false },
   });
   res.status(204).end();
+});
+
+// ---------------------------------------------------------------------------
+// Feature flags — server-enforced kill switches, audited
+// ---------------------------------------------------------------------------
+
+router.get("/feature-flags", async (_req, res) => {
+  const rows = await db.select().from(featureFlagsTable).orderBy(featureFlagsTable.key);
+  res.json(
+    ListFeatureFlagsResponse.parse(
+      rows.map((row) => ({ key: row.key, enabled: row.enabled, description: row.description, updatedAt: row.updatedAt })),
+    ),
+  );
+});
+
+router.post("/feature-flags/:key/toggle", async (req, res) => {
+  const { key } = ToggleFeatureFlagParams.parse(req.params);
+  const body = ToggleFeatureFlagBody.parse(req.body);
+  if (!body.reason.trim()) {
+    res.status(400).json({ error: "A reason is required for flag changes" });
+    return;
+  }
+
+  const existing = await db.select().from(featureFlagsTable).where(eq(featureFlagsTable.key, key)).limit(1);
+  if (!existing[0]) {
+    res.status(404).json({ error: "Feature flag not found" });
+    return;
+  }
+
+  const before = existing[0];
+  await db
+    .update(featureFlagsTable)
+    .set({ enabled: body.enabled, updatedBy: req.userId, updatedAt: new Date() })
+    .where(eq(featureFlagsTable.key, key));
+  invalidateFeatureFlag(key);
+
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "feature_flag_update",
+    targetType: "feature_flag",
+    targetId: key,
+    beforeState: { enabled: before.enabled },
+    afterState: { enabled: body.enabled, reason: body.reason.trim() },
+  });
+
+  res.json(ToggleFeatureFlagResponse.parse({ key, enabled: body.enabled }));
 });
 
 export default router;

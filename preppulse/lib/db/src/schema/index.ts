@@ -9,3 +9,4 @@ export * from "./community";
 export * from "./admin";
 export * from "./shares";
 export * from "./periods";
+export * from "./flags";
