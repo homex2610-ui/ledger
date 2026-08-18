@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.2.0
  */
+import type { AnnouncementAudienceType } from './announcementAudienceType';
 
 export interface Announcement {
   id: string;
@@ -13,6 +14,8 @@ export interface Announcement {
   link: string | null;
   icon: string;
   isEnabled: boolean;
+  audienceType: AnnouncementAudienceType;
+  audienceId: string | null;
   startsAt: Date | null;
   expiresAt: Date | null;
   createdAt: Date;

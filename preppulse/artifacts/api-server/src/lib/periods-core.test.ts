@@ -49,3 +49,22 @@ test("rankPeriodEntries rounds pulse to integers", () => {
   const ranked = rankPeriodEntries([e("a", 59.5, 1)]);
   assert.equal(ranked[0].pulse, 90);
 });
+
+test("rankPeriodEntries applies pulse adjustments before ranking", () => {
+  const adjustments = new Map([["a", 30], ["c", -100]]);
+  const ranked = rankPeriodEntries([e("a", 10, 0), e("b", 30, 0), e("c", 300, 0)], adjustments);
+  assert.deepEqual(
+    ranked.map(({ userId, rank, pulse }) => ({ userId, rank, pulse })),
+    [
+      { userId: "c", rank: 1, pulse: 200 },
+      { userId: "a", rank: 2, pulse: 40 },
+      { userId: "b", rank: 3, pulse: 30 },
+    ],
+  );
+});
+
+test("rankPeriodEntries ignores adjustments for unknown users", () => {
+  const adjustments = new Map([["zzz", 999]]);
+  const ranked = rankPeriodEntries([e("a", 10, 0)], adjustments);
+  assert.equal(ranked[0].pulse, 10);
+});

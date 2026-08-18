@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { FEATURE_LEADERBOARD_WEEKLY, isFeatureEnabled } from "../lib/feature-flags.js";
-import { allLeaderboardScopeIds, closeWeeklyPeriod, duePeriods, ensureOpenPeriod } from "../lib/periods.js";
+import { runWeeklyReset } from "../lib/periods.js";
 
 const router: IRouter = Router();
 
@@ -16,9 +16,8 @@ function isAuthorized(req: { headers: Record<string, string | string[] | undefin
 
 /**
  * Weekly leaderboard reset. Vercel cron invokes this every Monday 00:00 UTC.
- * It ensures a period exists for every leaderboard scope, then closes every
- * due period. Also safe to call manually (admin button calls closeWeeklyPeriod
- * directly; this route is the scheduled path only).
+ * This route is the scheduled path only; the admin button calls the same
+ * runWeeklyReset helper directly.
  */
 router.post("/cron/weekly-reset", async (req, res) => {
   if (!isAuthorized(req)) {
@@ -31,24 +30,8 @@ router.post("/cron/weekly-reset", async (req, res) => {
     return;
   }
 
-  const scopes = await allLeaderboardScopeIds();
-  for (const { scopeType, scopeId } of scopes) {
-    await ensureOpenPeriod(scopeType, scopeId);
-  }
-
-  const periods = await duePeriods();
-  const results = [];
-  for (const period of periods) {
-    try {
-      const result = await closeWeeklyPeriod(period.id);
-      results.push({ periodId: period.id, scopeType: period.scopeType, result: result.status });
-    } catch (error) {
-      console.error(`[cron] weekly reset failed for period ${period.id}`, error);
-      results.push({ periodId: period.id, scopeType: period.scopeType, result: "error" });
-    }
-  }
-
-  res.status(200).json({ scopesChecked: scopes.length, closed: results.filter((r) => r.result === "closed").length, results });
+  const result = await runWeeklyReset();
+  res.status(200).json(result);
 });
 
 export default router;

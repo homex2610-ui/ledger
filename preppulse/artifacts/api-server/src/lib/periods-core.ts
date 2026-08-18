@@ -15,15 +15,17 @@ export interface RankedPeriodEntry {
 /**
  * Competition ranking identical to the live leaderboard: tied pulse shares a
  * rank, the next distinct score jumps by the size of the tie group.
+ * `adjustments` (userId -> pulse delta, e.g. admin pulse adjustments) are
+ * applied before ranking; the stored pulse includes them.
  */
-export function rankPeriodEntries(entries: PeriodEntry[]): RankedPeriodEntry[] {
+export function rankPeriodEntries(entries: PeriodEntry[], adjustments?: Map<string, number>): RankedPeriodEntry[] {
   let lastScore = Number.NaN;
   let lastRank = 0;
   return entries
-    .map((entry) => ({
-      ...entry,
-      pulse: Math.round(entry.minutes + entry.topicsMoved * 30),
-    }))
+    .map((entry) => {
+      const pulse = Math.round(entry.minutes + entry.topicsMoved * 30 + (adjustments?.get(entry.userId) ?? 0));
+      return { ...entry, pulse };
+    })
     .sort((a, b) => b.pulse - a.pulse || a.userId.localeCompare(b.userId))
     .map((entry, index) => {
       if (index === 0 || entry.pulse !== lastScore) {

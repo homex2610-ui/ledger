@@ -1395,6 +1395,161 @@ paths:
                 $ref: "#/components/schemas/AdminCohortDetail"
         "404":
           description: Not an admin or not found
+    patch:
+      operationId: updateAdminCohort
+      tags: [admin]
+      summary: Update a cohort's name, capacity, or leaderboard top-N (audited)
+      parameters:
+        - name: cohortId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCohortUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCohortDetail"
+        "404":
+          description: Not an admin or not found
+
+  /admin/pulse-adjustments:
+    get:
+      operationId: listPulseAdjustments
+      tags: [admin]
+      summary: Recent pulse adjustments with target handles
+      responses:
+        "200":
+          description: Adjustments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PulseAdjustment"
+        "404":
+          description: Not an admin
+    post:
+      operationId: createPulseAdjustment
+      tags: [admin]
+      summary: Add or adjust a user's weekly pulse (audited, reason required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PulseAdjustmentCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PulseAdjustment"
+        "400":
+          description: Missing reason
+        "404":
+          description: Not an admin or user not found
+
+  /admin/exclusions:
+    get:
+      operationId: listLeaderboardExclusions
+      tags: [admin]
+      summary: Users excluded from all leaderboards
+      responses:
+        "200":
+          description: Exclusions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardExclusion"
+        "404":
+          description: Not an admin
+    post:
+      operationId: createLeaderboardExclusion
+      tags: [admin]
+      summary: Exclude a user from all leaderboards (audited, reason required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaderboardExclusionCreate"
+      responses:
+        "204":
+          description: Excluded
+        "400":
+          description: Missing reason
+        "404":
+          description: Not an admin or user not found
+
+  /admin/exclusions/{userId}:
+    delete:
+      operationId: removeLeaderboardExclusion
+      tags: [admin]
+      summary: Re-admit an excluded user (audited)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not an admin or exclusion not found
+
+  /admin/periods/reset:
+    post:
+      operationId: runWeeklyReset
+      tags: [admin]
+      summary: Manually run the weekly leaderboard reset (same pipeline as the cron, audited)
+      responses:
+        "200":
+          description: Reset run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyResetResult"
+        "404":
+          description: Not an admin
+
+  /admin/audit:
+    get:
+      operationId: getAdminAudit
+      tags: [admin]
+      summary: Paged audit trail (newest first)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+            maximum: 200
+        - name: before
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuditResponse"
+        "404":
+          description: Not an admin
 
   /admin/cohorts/members/{userId}/move:
     post:
@@ -2977,6 +3132,12 @@ components:
           type: string
         isEnabled:
           type: boolean
+        audienceType:
+          type: string
+          enum: [all, cohort, group]
+        audienceId:
+          type: string
+          nullable: true
         startsAt:
           type: string
           format: date-time
@@ -2991,7 +3152,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, title, body, link, icon, isEnabled, startsAt, expiresAt, createdAt, updatedAt]
+      required: [id, title, body, link, icon, isEnabled, audienceType, audienceId, startsAt, expiresAt, createdAt, updatedAt]
 
     AnnouncementCreate:
       type: object
@@ -3005,6 +3166,12 @@ components:
           nullable: true
         icon:
           type: string
+        audienceType:
+          type: string
+          enum: [all, cohort, group]
+        audienceId:
+          type: string
+          nullable: true
         startsAt:
           type: string
           format: date-time
@@ -3027,6 +3194,12 @@ components:
           nullable: true
         icon:
           type: string
+        audienceType:
+          type: string
+          enum: [all, cohort, group]
+        audienceId:
+          type: string
+          nullable: true
         startsAt:
           type: string
           format: date-time
@@ -3141,9 +3314,14 @@ components:
           type: number
         capacity:
           type: number
+        leaderboardTopN:
+          type: number
+        name:
+          type: string
+          nullable: true
         weeklyMinutes:
           type: number
-      required: [id, createdAt, memberCount, capacity, weeklyMinutes]
+      required: [id, createdAt, memberCount, capacity, leaderboardTopN, name, weeklyMinutes]
 
     AdminCohortMember:
       type: object
@@ -3171,11 +3349,123 @@ components:
           type: number
         capacity:
           type: number
+        leaderboardTopN:
+          type: number
+        name:
+          type: string
+          nullable: true
         members:
           type: array
           items:
             $ref: "#/components/schemas/AdminCohortMember"
-      required: [id, createdAt, memberCount, capacity, members]
+      required: [id, createdAt, memberCount, capacity, leaderboardTopN, name, members]
+
+    AdminCohortUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        capacity:
+          type: number
+          minimum: 1
+        leaderboardTopN:
+          type: number
+          minimum: 1
+        reason:
+          type: string
+
+    PulseAdjustment:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        handle:
+          type: string
+        amount:
+          type: number
+        reason:
+          type: string
+          nullable: true
+        adminId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, handle, amount, reason, adminId, createdAt]
+
+    PulseAdjustmentCreate:
+      type: object
+      properties:
+        userId:
+          type: string
+        amount:
+          type: number
+        reason:
+          type: string
+      required: [userId, amount, reason]
+
+    LeaderboardExclusion:
+      type: object
+      properties:
+        userId:
+          type: string
+        handle:
+          type: string
+        email:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        adminId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [userId, handle, email, reason, adminId, createdAt]
+
+    LeaderboardExclusionCreate:
+      type: object
+      properties:
+        userId:
+          type: string
+        reason:
+          type: string
+      required: [userId, reason]
+
+    WeeklyResetResult:
+      type: object
+      properties:
+        scopesChecked:
+          type: number
+        closed:
+          type: number
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              periodId:
+                type: string
+              scopeType:
+                type: string
+              result:
+                type: string
+            required: [periodId, scopeType, result]
+      required: [scopesChecked, closed, results]
+
+    AdminAuditResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditEntry"
+      required: [entries]
 
     CohortMemberMove:
       type: object

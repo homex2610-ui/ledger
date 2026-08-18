@@ -18,7 +18,10 @@ import Settings from '@/pages/settings';
 import NotFound from '@/pages/not-found';
 import AdminDashboard from '@/pages/admin/admin-dashboard';
 import AdminAnnouncements from '@/pages/admin/admin-announcements';
+import AdminAudit from '@/pages/admin/admin-audit';
 import AdminCohorts from '@/pages/admin/admin-cohorts';
+import AdminFlags from '@/pages/admin/admin-flags';
+import AdminLeaderboard from '@/pages/admin/admin-leaderboard';
 import AdminUsers from '@/pages/admin/admin-users';
 import AdminReleases from '@/pages/admin/admin-releases';
 import {
@@ -47,6 +50,9 @@ function Router() {
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/announcements" component={AdminAnnouncements} />
           <Route path="/admin/cohorts" component={AdminCohorts} />
+          <Route path="/admin/leaderboard" component={AdminLeaderboard} />
+          <Route path="/admin/flags" component={AdminFlags} />
+          <Route path="/admin/audit" component={AdminAudit} />
           <Route path="/admin/users" component={AdminUsers} />
           <Route path="/admin/releases" component={AdminReleases} />
           <Route path="/join/:code" component={JoinByLink} />

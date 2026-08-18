@@ -12,5 +12,7 @@ export interface AdminCohortDetail {
   createdAt: Date;
   memberCount: number;
   capacity: number;
+  leaderboardTopN: number;
+  name: string | null;
   members: AdminCohortMember[];
 }

@@ -1,10 +1,12 @@
-import { and, eq, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cohortMembersTable,
   groupMembersTable,
   groupsTable,
+  leaderboardExclusionsTable,
   profilesTable,
+  pulseAdjustmentsTable,
   weeklyPeriodsTable,
   weeklyRankSnapshotsTable,
   type WeeklyPeriod,
@@ -135,15 +137,33 @@ export async function closeWeeklyPeriod(periodId: string): Promise<ClosePeriodRe
 
   const scopeType = period.scopeType as PeriodScopeType;
   const memberIds = await scopeMemberIds(scopeType, period.scopeId);
+  const excludedRows = await db
+    .select({ userId: leaderboardExclusionsTable.userId })
+    .from(leaderboardExclusionsTable)
+    .where(inArray(leaderboardExclusionsTable.userId, memberIds));
+  const excludedIds = new Set(excludedRows.map((row) => row.userId));
   const visibleRows = await db
     .select({ userId: profilesTable.userId })
     .from(profilesTable)
-    .where(and(inArray(profilesTable.userId, memberIds), ne(profilesTable.showOnLeaderboard, false)));
+    .where(
+      and(
+        inArray(profilesTable.userId, memberIds),
+        ne(profilesTable.showOnLeaderboard, false),
+        ...(excludedIds.size > 0 ? [notInArray(profilesTable.userId, [...excludedIds])] : []),
+      ),
+    );
 
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(
     visibleRows.map((row) => row.userId),
     { from: period.weekStart, to: period.weekEnd },
   );
+
+  const adjustmentRows = await db
+    .select()
+    .from(pulseAdjustmentsTable)
+    .where(inArray(pulseAdjustmentsTable.userId, visibleRows.map((row) => row.userId)));
+  const adjustmentByUser = new Map<string, number>();
+  for (const row of adjustmentRows) adjustmentByUser.set(row.userId, (adjustmentByUser.get(row.userId) ?? 0) + row.amount);
 
   const ranked = rankPeriodEntries(
     visibleRows.map((row) => ({
@@ -151,6 +171,7 @@ export async function closeWeeklyPeriod(periodId: string): Promise<ClosePeriodRe
       minutes: minutesByUser.get(row.userId) ?? 0,
       topicsMoved: topicsByUser.get(row.userId) ?? 0,
     })),
+    adjustmentByUser,
   );
 
   await db.transaction(async (tx) => {
@@ -205,6 +226,39 @@ export async function duePeriods(now: Date = new Date()): Promise<WeeklyPeriod[]
     .select()
     .from(weeklyPeriodsTable)
     .where(and(lte(weeklyPeriodsTable.weekEnd, now), ne(weeklyPeriodsTable.status, "closed")));
+}
+
+export interface WeeklyResetResult {
+  scopesChecked: number;
+  closed: number;
+  results: Array<{ periodId: string; scopeType: string; result: string }>;
+}
+
+/**
+ * Ensures a period exists for every leaderboard scope, then closes every due
+ * period. Shared by the scheduled cron route and the admin "Run weekly reset"
+ * button; each period close is individually guarded so one failure does not
+ * block the rest.
+ */
+export async function runWeeklyReset(): Promise<WeeklyResetResult> {
+  const scopes = await allLeaderboardScopeIds();
+  for (const { scopeType, scopeId } of scopes) {
+    await ensureOpenPeriod(scopeType, scopeId);
+  }
+
+  const periods = await duePeriods();
+  const results: WeeklyResetResult["results"] = [];
+  for (const period of periods) {
+    try {
+      const result = await closeWeeklyPeriod(period.id);
+      results.push({ periodId: period.id, scopeType: period.scopeType, result: result.status });
+    } catch (error) {
+      console.error(`[periods] weekly reset failed for period ${period.id}`, error);
+      results.push({ periodId: period.id, scopeType: period.scopeType, result: "error" });
+    }
+  }
+
+  return { scopesChecked: scopes.length, closed: results.filter((r) => r.result === "closed").length, results };
 }
 
 let recapFailureCounter = 0;

@@ -21,8 +21,10 @@ import type {
 
 import type {
   ActiveAnnouncementResponse,
+  AdminAuditResponse,
   AdminCohortDetail,
   AdminCohortSummary,
+  AdminCohortUpdate,
   AdminSet,
   AdminStatsResponse,
   AdminUserDetail,
@@ -58,6 +60,7 @@ import type {
   FocusSessionInput,
   FocusSessionUpdate,
   ForgotPasswordInput,
+  GetAdminAuditParams,
   GetAuthDiscordAuthorizeParams,
   GetCirclesParams,
   GetCohortsParams,
@@ -73,6 +76,8 @@ import type {
   GroupSummary,
   HealthStatus,
   Leaderboard,
+  LeaderboardExclusion,
+  LeaderboardExclusionCreate,
   LeaderboardSparklineRow,
   ListAdminUsersParams,
   LoginInput,
@@ -82,6 +87,8 @@ import type {
   OkResponse,
   Profile,
   ProfileUpdate,
+  PulseAdjustment,
+  PulseAdjustmentCreate,
   ResetPasswordInput,
   ShareArtifact,
   ShareOpenEventInput,
@@ -99,7 +106,8 @@ import type {
   TestAttemptInput,
   TestAttemptUpdateInput,
   Topic,
-  TopicProgressInput
+  TopicProgressInput,
+  WeeklyResetResult
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -5664,6 +5672,600 @@ export function useGetAdminCohort<TData = Awaited<ReturnType<typeof getAdminCoho
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAdminCohortQueryOptions(cohortId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAdminCohortUrl = (cohortId: string,) => {
+
+
+
+
+  return `/api/admin/cohorts/${cohortId}`
+}
+
+/**
+ * @summary Update a cohort's name, capacity, or leaderboard top-N (audited)
+ */
+export const updateAdminCohort = async (cohortId: string,
+    adminCohortUpdate: AdminCohortUpdate, options?: Parameters<typeof customFetch>[1]): Promise<AdminCohortDetail> => {
+
+  return customFetch<AdminCohortDetail>(getUpdateAdminCohortUrl(cohortId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(adminCohortUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminCohortMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminCohort>>, TError,{cohortId: string;data: BodyType<AdminCohortUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminCohort>>, TError,{cohortId: string;data: BodyType<AdminCohortUpdate>}, TContext> => {
+
+const mutationKey = ['updateAdminCohort'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminCohort>>, {cohortId: string;data: BodyType<AdminCohortUpdate>}> = (props) => {
+          const {cohortId,data} = props ?? {};
+
+          return  updateAdminCohort(cohortId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminCohortMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminCohort>>>
+    export type UpdateAdminCohortMutationBody = BodyType<AdminCohortUpdate>
+    export type UpdateAdminCohortMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a cohort's name, capacity, or leaderboard top-N (audited)
+ */
+export const useUpdateAdminCohort = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminCohort>>, TError,{cohortId: string;data: BodyType<AdminCohortUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminCohort>>,
+        TError,
+        {cohortId: string;data: BodyType<AdminCohortUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAdminCohortMutationOptions(options));
+    }
+
+export const getListPulseAdjustmentsUrl = () => {
+
+
+
+
+  return `/api/admin/pulse-adjustments`
+}
+
+/**
+ * @summary Recent pulse adjustments with target handles
+ */
+export const listPulseAdjustments = async ( options?: Parameters<typeof customFetch>[1]): Promise<PulseAdjustment[]> => {
+
+  return customFetch<PulseAdjustment[]>(getListPulseAdjustmentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPulseAdjustmentsQueryKey = () => {
+    return [
+    `/api/admin/pulse-adjustments`
+    ] as const;
+    }
+
+
+export const getListPulseAdjustmentsQueryOptions = <TData = Awaited<ReturnType<typeof listPulseAdjustments>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPulseAdjustments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPulseAdjustmentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPulseAdjustments>>> = ({ signal }) => listPulseAdjustments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPulseAdjustments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPulseAdjustmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listPulseAdjustments>>>
+export type ListPulseAdjustmentsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Recent pulse adjustments with target handles
+ */
+
+export function useListPulseAdjustments<TData = Awaited<ReturnType<typeof listPulseAdjustments>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPulseAdjustments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPulseAdjustmentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePulseAdjustmentUrl = () => {
+
+
+
+
+  return `/api/admin/pulse-adjustments`
+}
+
+/**
+ * @summary Add or adjust a user's weekly pulse (audited, reason required)
+ */
+export const createPulseAdjustment = async (pulseAdjustmentCreate: PulseAdjustmentCreate, options?: Parameters<typeof customFetch>[1]): Promise<PulseAdjustment> => {
+
+  return customFetch<PulseAdjustment>(getCreatePulseAdjustmentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pulseAdjustmentCreate)
+  }
+);}
+
+
+
+
+
+export const getCreatePulseAdjustmentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPulseAdjustment>>, TError,{data: BodyType<PulseAdjustmentCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPulseAdjustment>>, TError,{data: BodyType<PulseAdjustmentCreate>}, TContext> => {
+
+const mutationKey = ['createPulseAdjustment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPulseAdjustment>>, {data: BodyType<PulseAdjustmentCreate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPulseAdjustment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePulseAdjustmentMutationResult = NonNullable<Awaited<ReturnType<typeof createPulseAdjustment>>>
+    export type CreatePulseAdjustmentMutationBody = BodyType<PulseAdjustmentCreate>
+    export type CreatePulseAdjustmentMutationError = ErrorType<void>
+
+    /**
+ * @summary Add or adjust a user's weekly pulse (audited, reason required)
+ */
+export const useCreatePulseAdjustment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPulseAdjustment>>, TError,{data: BodyType<PulseAdjustmentCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPulseAdjustment>>,
+        TError,
+        {data: BodyType<PulseAdjustmentCreate>},
+        TContext
+      > => {
+      return useMutation(getCreatePulseAdjustmentMutationOptions(options));
+    }
+
+export const getListLeaderboardExclusionsUrl = () => {
+
+
+
+
+  return `/api/admin/exclusions`
+}
+
+/**
+ * @summary Users excluded from all leaderboards
+ */
+export const listLeaderboardExclusions = async ( options?: Parameters<typeof customFetch>[1]): Promise<LeaderboardExclusion[]> => {
+
+  return customFetch<LeaderboardExclusion[]>(getListLeaderboardExclusionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLeaderboardExclusionsQueryKey = () => {
+    return [
+    `/api/admin/exclusions`
+    ] as const;
+    }
+
+
+export const getListLeaderboardExclusionsQueryOptions = <TData = Awaited<ReturnType<typeof listLeaderboardExclusions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeaderboardExclusions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLeaderboardExclusionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeaderboardExclusions>>> = ({ signal }) => listLeaderboardExclusions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLeaderboardExclusions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLeaderboardExclusionsQueryResult = NonNullable<Awaited<ReturnType<typeof listLeaderboardExclusions>>>
+export type ListLeaderboardExclusionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Users excluded from all leaderboards
+ */
+
+export function useListLeaderboardExclusions<TData = Awaited<ReturnType<typeof listLeaderboardExclusions>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeaderboardExclusions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLeaderboardExclusionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateLeaderboardExclusionUrl = () => {
+
+
+
+
+  return `/api/admin/exclusions`
+}
+
+/**
+ * @summary Exclude a user from all leaderboards (audited, reason required)
+ */
+export const createLeaderboardExclusion = async (leaderboardExclusionCreate: LeaderboardExclusionCreate, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCreateLeaderboardExclusionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(leaderboardExclusionCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateLeaderboardExclusionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLeaderboardExclusion>>, TError,{data: BodyType<LeaderboardExclusionCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createLeaderboardExclusion>>, TError,{data: BodyType<LeaderboardExclusionCreate>}, TContext> => {
+
+const mutationKey = ['createLeaderboardExclusion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLeaderboardExclusion>>, {data: BodyType<LeaderboardExclusionCreate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createLeaderboardExclusion(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateLeaderboardExclusionMutationResult = NonNullable<Awaited<ReturnType<typeof createLeaderboardExclusion>>>
+    export type CreateLeaderboardExclusionMutationBody = BodyType<LeaderboardExclusionCreate>
+    export type CreateLeaderboardExclusionMutationError = ErrorType<void>
+
+    /**
+ * @summary Exclude a user from all leaderboards (audited, reason required)
+ */
+export const useCreateLeaderboardExclusion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLeaderboardExclusion>>, TError,{data: BodyType<LeaderboardExclusionCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createLeaderboardExclusion>>,
+        TError,
+        {data: BodyType<LeaderboardExclusionCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateLeaderboardExclusionMutationOptions(options));
+    }
+
+export const getRemoveLeaderboardExclusionUrl = (userId: string,) => {
+
+
+
+
+  return `/api/admin/exclusions/${userId}`
+}
+
+/**
+ * @summary Re-admit an excluded user (audited)
+ */
+export const removeLeaderboardExclusion = async (userId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRemoveLeaderboardExclusionUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRemoveLeaderboardExclusionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeLeaderboardExclusion>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeLeaderboardExclusion>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['removeLeaderboardExclusion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeLeaderboardExclusion>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  removeLeaderboardExclusion(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveLeaderboardExclusionMutationResult = NonNullable<Awaited<ReturnType<typeof removeLeaderboardExclusion>>>
+
+    export type RemoveLeaderboardExclusionMutationError = ErrorType<void>
+
+    /**
+ * @summary Re-admit an excluded user (audited)
+ */
+export const useRemoveLeaderboardExclusion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeLeaderboardExclusion>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeLeaderboardExclusion>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getRemoveLeaderboardExclusionMutationOptions(options));
+    }
+
+export const getRunWeeklyResetUrl = () => {
+
+
+
+
+  return `/api/admin/periods/reset`
+}
+
+/**
+ * @summary Manually run the weekly leaderboard reset (same pipeline as the cron, audited)
+ */
+export const runWeeklyReset = async ( options?: Parameters<typeof customFetch>[1]): Promise<WeeklyResetResult> => {
+
+  return customFetch<WeeklyResetResult>(getRunWeeklyResetUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRunWeeklyResetMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runWeeklyReset>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runWeeklyReset>>, TError,void, TContext> => {
+
+const mutationKey = ['runWeeklyReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runWeeklyReset>>, void> = () => {
+
+
+          return  runWeeklyReset(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunWeeklyResetMutationResult = NonNullable<Awaited<ReturnType<typeof runWeeklyReset>>>
+
+    export type RunWeeklyResetMutationError = ErrorType<void>
+
+    /**
+ * @summary Manually run the weekly leaderboard reset (same pipeline as the cron, audited)
+ */
+export const useRunWeeklyReset = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runWeeklyReset>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runWeeklyReset>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRunWeeklyResetMutationOptions(options));
+    }
+
+export const getGetAdminAuditUrl = (params?: GetAdminAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/audit?${stringifiedParams}` : `/api/admin/audit`
+}
+
+/**
+ * @summary Paged audit trail (newest first)
+ */
+export const getAdminAudit = async (params?: GetAdminAuditParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminAuditResponse> => {
+
+  return customFetch<AdminAuditResponse>(getGetAdminAuditUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAuditQueryKey = (params?: GetAdminAuditParams,) => {
+    return [
+    `/api/admin/audit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminAuditQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAudit>>, TError = ErrorType<void>>(params?: GetAdminAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAuditQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAudit>>> = ({ signal }) => getAdminAudit(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAudit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAuditQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAudit>>>
+export type GetAdminAuditQueryError = ErrorType<void>
+
+
+/**
+ * @summary Paged audit trail (newest first)
+ */
+
+export function useGetAdminAudit<TData = Awaited<ReturnType<typeof getAdminAudit>>, TError = ErrorType<void>>(
+ params?: GetAdminAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAuditQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

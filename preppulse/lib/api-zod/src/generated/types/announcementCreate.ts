@@ -5,12 +5,15 @@
  * API specification
  * OpenAPI spec version: 0.2.0
  */
+import type { AnnouncementCreateAudienceType } from './announcementCreateAudienceType';
 
 export interface AnnouncementCreate {
   title: string;
   body: string;
   link?: string | null;
   icon?: string;
+  audienceType?: AnnouncementCreateAudienceType;
+  audienceId?: string | null;
   startsAt?: Date | null;
   expiresAt?: Date | null;
 }

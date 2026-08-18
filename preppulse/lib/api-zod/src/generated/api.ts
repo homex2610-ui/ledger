@@ -1682,6 +1682,8 @@ export const ListAdminAnnouncementsResponseItem = zod.object({
   "link": zod.string().nullable(),
   "icon": zod.string(),
   "isEnabled": zod.boolean(),
+  "audienceType": zod.enum(['all', 'cohort', 'group']),
+  "audienceId": zod.string().nullable(),
   "startsAt": zod.coerce.date().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
@@ -1698,6 +1700,8 @@ export const CreateAnnouncementBody = zod.object({
   "body": zod.string(),
   "link": zod.string().nullish(),
   "icon": zod.string().optional(),
+  "audienceType": zod.enum(['all', 'cohort', 'group']).optional(),
+  "audienceId": zod.string().nullish(),
   "startsAt": zod.coerce.date().nullish(),
   "expiresAt": zod.coerce.date().nullish()
 })
@@ -1709,6 +1713,8 @@ export const CreateAnnouncementResponse = zod.object({
   "link": zod.string().nullable(),
   "icon": zod.string(),
   "isEnabled": zod.boolean(),
+  "audienceType": zod.enum(['all', 'cohort', 'group']),
+  "audienceId": zod.string().nullable(),
   "startsAt": zod.coerce.date().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
@@ -1728,6 +1734,8 @@ export const UpdateAnnouncementBody = zod.object({
   "body": zod.string().optional(),
   "link": zod.string().nullish(),
   "icon": zod.string().optional(),
+  "audienceType": zod.enum(['all', 'cohort', 'group']).optional(),
+  "audienceId": zod.string().nullish(),
   "startsAt": zod.coerce.date().nullish(),
   "expiresAt": zod.coerce.date().nullish()
 })
@@ -1739,6 +1747,8 @@ export const UpdateAnnouncementResponse = zod.object({
   "link": zod.string().nullable(),
   "icon": zod.string(),
   "isEnabled": zod.boolean(),
+  "audienceType": zod.enum(['all', 'cohort', 'group']),
+  "audienceId": zod.string().nullable(),
   "startsAt": zod.coerce.date().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
@@ -1801,6 +1811,8 @@ export const ListAdminCohortsResponseItem = zod.object({
   "createdAt": zod.coerce.date(),
   "memberCount": zod.number(),
   "capacity": zod.number(),
+  "leaderboardTopN": zod.number(),
+  "name": zod.string().nullable(),
   "weeklyMinutes": zod.number()
 })
 export const ListAdminCohortsResponse = zod.array(ListAdminCohortsResponseItem)
@@ -1818,11 +1830,157 @@ export const GetAdminCohortResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "memberCount": zod.number(),
   "capacity": zod.number(),
+  "leaderboardTopN": zod.number(),
+  "name": zod.string().nullable(),
   "members": zod.array(zod.object({
   "userId": zod.string(),
   "handle": zod.string(),
   "email": zod.string(),
   "joinedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Update a cohort's name, capacity, or leaderboard top-N (audited)
+ */
+export const UpdateAdminCohortParams = zod.object({
+  "cohortId": zod.coerce.string()
+})
+
+
+
+
+
+export const UpdateAdminCohortBody = zod.object({
+  "name": zod.string().nullish(),
+  "capacity": zod.number().min(1).optional(),
+  "leaderboardTopN": zod.number().min(1).optional(),
+  "reason": zod.string().optional()
+})
+
+export const UpdateAdminCohortResponse = zod.object({
+  "id": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "memberCount": zod.number(),
+  "capacity": zod.number(),
+  "leaderboardTopN": zod.number(),
+  "name": zod.string().nullable(),
+  "members": zod.array(zod.object({
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "email": zod.string(),
+  "joinedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Recent pulse adjustments with target handles
+ */
+export const ListPulseAdjustmentsResponseItem = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "amount": zod.number(),
+  "reason": zod.string().nullable(),
+  "adminId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPulseAdjustmentsResponse = zod.array(ListPulseAdjustmentsResponseItem)
+
+
+/**
+ * @summary Add or adjust a user's weekly pulse (audited, reason required)
+ */
+export const CreatePulseAdjustmentBody = zod.object({
+  "userId": zod.string(),
+  "amount": zod.number(),
+  "reason": zod.string()
+})
+
+export const CreatePulseAdjustmentResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "amount": zod.number(),
+  "reason": zod.string().nullable(),
+  "adminId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Users excluded from all leaderboards
+ */
+export const ListLeaderboardExclusionsResponseItem = zod.object({
+  "userId": zod.string(),
+  "handle": zod.string(),
+  "email": zod.string(),
+  "reason": zod.string().nullable(),
+  "adminId": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeaderboardExclusionsResponse = zod.array(ListLeaderboardExclusionsResponseItem)
+
+
+/**
+ * @summary Exclude a user from all leaderboards (audited, reason required)
+ */
+export const CreateLeaderboardExclusionBody = zod.object({
+  "userId": zod.string(),
+  "reason": zod.string()
+})
+
+export const CreateLeaderboardExclusionResponse = zod.void()
+
+
+/**
+ * @summary Re-admit an excluded user (audited)
+ */
+export const RemoveLeaderboardExclusionParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const RemoveLeaderboardExclusionResponse = zod.void()
+
+
+/**
+ * @summary Manually run the weekly leaderboard reset (same pipeline as the cron, audited)
+ */
+export const RunWeeklyResetResponse = zod.object({
+  "scopesChecked": zod.number(),
+  "closed": zod.number(),
+  "results": zod.array(zod.object({
+  "periodId": zod.string(),
+  "scopeType": zod.string(),
+  "result": zod.string()
+}))
+})
+
+
+/**
+ * @summary Paged audit trail (newest first)
+ */
+export const getAdminAuditQueryLimitMax = 200;
+
+
+
+export const GetAdminAuditQueryParams = zod.object({
+  "limit": zod.coerce.number().max(getAdminAuditQueryLimitMax).optional(),
+  "before": zod.date().optional()
+})
+
+export const GetAdminAuditResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.string(),
+  "adminId": zod.string().nullable(),
+  "action": zod.string(),
+  "targetType": zod.string(),
+  "targetId": zod.string().nullable(),
+  "beforeState": zod.record(zod.string(), zod.unknown()).nullable(),
+  "afterState": zod.record(zod.string(), zod.unknown()).nullable(),
+  "createdAt": zod.coerce.date()
 }))
 })
 

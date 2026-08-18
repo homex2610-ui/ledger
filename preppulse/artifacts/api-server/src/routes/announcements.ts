@@ -1,12 +1,35 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, gt, lte, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { announcementDismissalsTable, announcementsTable } from "@workspace/db/schema";
+import { announcementDismissalsTable, announcementsTable, cohortMembersTable, groupMembersTable } from "@workspace/db/schema";
 import { DismissAnnouncementParams, DismissAnnouncementResponse, GetActiveAnnouncementResponse } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
+
+async function matchesAudience(announcement: { audienceType: string | null; audienceId: string | null }, userId: string): Promise<boolean> {
+  switch (announcement.audienceType) {
+    case "cohort":
+      if (!announcement.audienceId) return false;
+      const cohort = await db
+        .select({ userId: cohortMembersTable.userId })
+        .from(cohortMembersTable)
+        .where(and(eq(cohortMembersTable.cohortId, announcement.audienceId), eq(cohortMembersTable.userId, userId)))
+        .limit(1);
+      return Boolean(cohort[0]);
+    case "group":
+      if (!announcement.audienceId) return false;
+      const group = await db
+        .select({ userId: groupMembersTable.userId })
+        .from(groupMembersTable)
+        .where(and(eq(groupMembersTable.groupId, announcement.audienceId), eq(groupMembersTable.userId, userId)))
+        .limit(1);
+      return Boolean(group[0]);
+    default:
+      return true;
+  }
+}
 
 router.get("/announcements/active", async (req, res) => {
   const userId = req.userId;
@@ -22,8 +45,14 @@ router.get("/announcements/active", async (req, res) => {
       ),
     )
     .orderBy(desc(announcementsTable.updatedAt))
-    .limit(1);
-  const announcement = rows[0];
+    .limit(5);
+  let announcement = null;
+  for (const candidate of rows) {
+    if (await matchesAudience(candidate, userId)) {
+      announcement = candidate;
+      break;
+    }
+  }
   if (!announcement) {
     res.json(GetActiveAnnouncementResponse.parse({ announcement: null }));
     return;

@@ -46,7 +46,38 @@ export const weeklyRankSnapshotsTable = pgTable(
   ],
 );
 
+export const leaderboardExclusionsTable = pgTable(
+  "leaderboard_exclusions",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    reason: text("reason"),
+    adminId: uuid("admin_id").references(() => usersTable.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+export const pulseAdjustmentsTable = pgTable(
+  "pulse_adjustments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+    reason: text("reason"),
+    adminId: uuid("admin_id").references(() => usersTable.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("pulse_adjustments_user_idx").on(table.userId)],
+);
+
 export type WeeklyPeriod = typeof weeklyPeriodsTable.$inferSelect;
 export type NewWeeklyPeriod = typeof weeklyPeriodsTable.$inferInsert;
 export type WeeklyRankSnapshot = typeof weeklyRankSnapshotsTable.$inferSelect;
 export type NewWeeklyRankSnapshot = typeof weeklyRankSnapshotsTable.$inferInsert;
+export type LeaderboardExclusion = typeof leaderboardExclusionsTable.$inferSelect;
+export type NewLeaderboardExclusion = typeof leaderboardExclusionsTable.$inferInsert;
+export type PulseAdjustment = typeof pulseAdjustmentsTable.$inferSelect;
+export type NewPulseAdjustment = typeof pulseAdjustmentsTable.$inferInsert;

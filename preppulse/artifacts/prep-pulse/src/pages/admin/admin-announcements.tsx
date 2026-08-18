@@ -29,6 +29,8 @@ function toBody(data: AnnouncementCreate): AnnouncementCreate {
     ...data,
     icon: data.icon ?? 'megaphone',
     link: data.link?.trim() ? data.link.trim() : null,
+    audienceType: data.audienceType ?? 'all',
+    audienceId: data.audienceId ?? null,
     startsAt: data.startsAt ?? null,
     expiresAt: data.expiresAt ?? null,
   };
@@ -56,6 +58,7 @@ function AnnouncementForm({ initial, onDone, busy }: { initial?: Announcement; o
   const [body, setBody] = useState(initial?.body ?? '');
   const [link, setLink] = useState(initial?.link ?? '');
   const [icon, setIcon] = useState(initial?.icon ?? 'megaphone');
+  const [audienceType, setAudienceType] = useState(initial?.audienceType ?? 'all');
   const [startsAt, setStartsAt] = useState(toLocalInput(initial?.startsAt));
   const [expiresAt, setExpiresAt] = useState(toLocalInput(initial?.expiresAt));
   const startsIso = toIso(startsAt);
@@ -69,14 +72,29 @@ function AnnouncementForm({ initial, onDone, busy }: { initial?: Announcement; o
           <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={80} data-testid="input-announcement-title" className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary" placeholder="e.g. Mock test week is here" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-muted-foreground">Icon</label>
+          <label className="mb-1 block text-xs font-semibold text-muted-foreground">Audience</label>
           <div className="flex flex-wrap items-center gap-1.5">
-            {ICON_OPTIONS.map((option) => (
-              <button key={option.value} type="button" onClick={() => setIcon(option.value)} data-testid={`icon-option-${option.value}`} title={option.label} className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${icon === option.value ? 'border-primary bg-primary/10 text-primary' : 'border-border/80 text-muted-foreground hover:bg-secondary'}`}>
-                <option.icon size={16} />
+            {(['all', 'cohort', 'group'] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setAudienceType(value)} data-testid={`audience-option-${value}`} className={`rounded-lg border px-3 py-2 text-xs font-bold capitalize transition-colors ${audienceType === value ? 'border-primary bg-primary/10 text-primary' : 'border-border/80 text-muted-foreground hover:bg-secondary'}`}>
+                {value}
               </button>
             ))}
           </div>
+        </div>
+      </div>
+      {audienceType !== 'all' && (
+        <p className="rounded-lg bg-secondary/50 px-3 py-2 text-[11px] text-muted-foreground">
+          {audienceType === 'cohort' ? 'Shown only to members of the default study cohort (every signed-up user).' : 'Shown only to members of a specific group.'} The active announcement swap still allows one live pill at a time.
+        </p>
+      )}
+      <div>
+        <label className="mb-1 block text-xs font-semibold text-muted-foreground">Icon</label>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ICON_OPTIONS.map((option) => (
+            <button key={option.value} type="button" onClick={() => setIcon(option.value)} data-testid={`icon-option-${option.value}`} title={option.label} className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${icon === option.value ? 'border-primary bg-primary/10 text-primary' : 'border-border/80 text-muted-foreground hover:bg-secondary'}`}>
+              <option.icon size={16} />
+            </button>
+          ))}
         </div>
       </div>
       <div>
@@ -98,7 +116,7 @@ function AnnouncementForm({ initial, onDone, busy }: { initial?: Announcement; o
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={() => onDone({ title, body, link, icon, startsAt: startsIso, expiresAt: expiresIso })} disabled={!valid || busy} data-testid="button-save-announcement" className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" onClick={() => onDone({ title, body, link, icon, audienceType, startsAt: startsIso, expiresAt: expiresIso })} disabled={!valid || busy} data-testid="button-save-announcement" className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50">
           {busy ? 'Saving…' : initial ? 'Save changes' : 'Create announcement'}
         </button>
       </div>
@@ -198,6 +216,9 @@ export function AdminAnnouncements() {
                       <span className={`rounded-full px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase tracking-[.12em] ${announcementStatus(announcement).className}`}>{announcementStatus(announcement).label}</span>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{announcement.body}</p>
+                    {announcement.audienceType && announcement.audienceType !== 'all' && (
+                      <p className="mt-1 font-mono-custom text-[9px] uppercase tracking-[.12em] text-muted-foreground/70">Audience: {announcement.audienceType}{announcement.audienceId ? ` · ${announcement.audienceId.slice(0, 8)}` : ''}</p>
+                    )}
                     {announcement.link && <p className="mt-1 truncate font-mono-custom text-[10px] text-primary">{announcement.link}</p>}
                     {announcement.startsAt && (
                       <p className="mt-1 font-mono-custom text-[9px] uppercase tracking-[.12em] text-muted-foreground/70">Shows {new Date(announcement.startsAt).toLocaleString()}{announcement.expiresAt ? ` · hides ${new Date(announcement.expiresAt).toLocaleString()}` : ''}</p>

@@ -4,9 +4,12 @@ import { db } from "@workspace/db";
 import {
   circleConnectionsTable,
   cohortMembersTable,
+  cohortsTable,
   groupMembersTable,
   groupsTable,
+  leaderboardExclusionsTable,
   profilesTable,
+  pulseAdjustmentsTable,
   studySessionsTable,
   testAttemptsTable,
   topicProgressTable,
@@ -92,20 +95,29 @@ async function groupSummaryFor(userId: string, group: typeof groupsTable.$inferS
     createdAt: group.createdAt,
   };
 }
-
 async function leaderboardFor(userIds: string[], currentUserId: string, scope?: { scopeType: PeriodScopeType; scopeId: string }) {
-  const [profile, profileRows] = await Promise.all([
+  const [profile, profileRows, excludedRows, adjustmentRows] = await Promise.all([
     db.select().from(profilesTable).where(eq(profilesTable.userId, currentUserId)).limit(1),
     db.select().from(profilesTable).where(inArray(profilesTable.userId, userIds)),
+    db.select().from(leaderboardExclusionsTable).where(inArray(leaderboardExclusionsTable.userId, userIds)),
+    db.select().from(pulseAdjustmentsTable).where(inArray(pulseAdjustmentsTable.userId, userIds)),
   ]);
   const myProfile = profile[0];
   const visibilityById = new Map(profileRows.map((row) => [row.userId, row.showOnLeaderboard]));
+  const excludedIds = new Set(excludedRows.map((row) => row.userId));
+  const adjustmentByUser = new Map<string, number>();
+  for (const row of adjustmentRows) adjustmentByUser.set(row.userId, (adjustmentByUser.get(row.userId) ?? 0) + row.amount);
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(userIds);
   const handles = await userHandlesById(userIds);
   const history = scope ? await rankHistoryForScope(scope.scopeType, scope.scopeId, userIds) : undefined;
+
+  const cohortTopN = scope?.scopeType === "cohort" ? await leaderboardTopNFor(scope.scopeId) : null;
+  const topN = cohortTopN ?? LEADERBOARD_TOP_N_DEFAULT;
+
   const period = scope ? await ensureOpenPeriod(scope.scopeType, scope.scopeId) : undefined;
 
   const visibleIds = userIds.filter((id) => {
+    if (excludedIds.has(id)) return false;
     if (id === currentUserId) return !myProfile?.focusMode;
     return visibilityById.get(id) !== false;
   });
@@ -122,7 +134,7 @@ async function leaderboardFor(userIds: string[], currentUserId: string, scope?: 
         handle: info.handle,
         initials: info.initials,
         avatarUrl: info.avatarUrl,
-        score: Math.round(minutes + topics * 30),
+        score: Math.round(minutes + topics * 30 + (adjustmentByUser.get(id) ?? 0)),
         hours: Math.round((minutes / 60) * 10) / 10,
         topics,
         isCurrentUser: id === currentUserId,
@@ -146,7 +158,7 @@ async function leaderboardFor(userIds: string[], currentUserId: string, scope?: 
     return {
       ...publicEntry,
       rankDelta: computeRankDelta(entry.rank, points),
-      streak: computeStreakFromSnapshots(points, LEADERBOARD_TOP_N_DEFAULT),
+      streak: computeStreakFromSnapshots(points, topN),
       pb: computeBestRank(points),
       gapToNext: gap.gapToNext,
       gapState: gap.state,
@@ -158,6 +170,12 @@ async function leaderboardFor(userIds: string[], currentUserId: string, scope?: 
     focused: Boolean(myProfile?.focusMode),
     weekEnd: period?.weekEnd,
   };
+}
+
+async function leaderboardTopNFor(cohortId: string): Promise<number> {
+  const rows = await db.select({ leaderboardTopN: cohortsTable.leaderboardTopN }).from(cohortsTable).where(eq(cohortsTable.id, cohortId)).limit(1);
+  const topN = rows[0]?.leaderboardTopN;
+  return typeof topN === "number" && topN > 0 ? topN : LEADERBOARD_TOP_N_DEFAULT;
 }
 
 interface FeedItem {
@@ -400,7 +418,11 @@ router.get("/cohorts", async (req, res) => {
   }
 
   const cohortId = membership[0].cohortId;
-  const memberRows = await db.select().from(cohortMembersTable).where(eq(cohortMembersTable.cohortId, cohortId));
+  const [cohortRows, memberRows] = await Promise.all([
+    db.select().from(cohortsTable).where(eq(cohortsTable.id, cohortId)).limit(1),
+    db.select().from(cohortMembersTable).where(eq(cohortMembersTable.cohortId, cohortId)),
+  ]);
+  const cohort = cohortRows[0];
   const memberIds = memberRows.map((row) => row.userId);
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(memberIds);
   const handles = await userHandlesById(memberIds);
@@ -422,7 +444,7 @@ router.get("/cohorts", async (req, res) => {
       }),
   );
 
-  res.json(GetCohortsResponse.parse({ cohortId, memberCount: members.length, capacity: COHORT_CAPACITY, members }));
+  res.json(GetCohortsResponse.parse({ cohortId, memberCount: members.length, capacity: cohort?.capacity ?? COHORT_CAPACITY, members }));
 });
 
 router.get("/cohorts/leaderboard", async (req, res) => {

@@ -6,12 +6,12 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface AdminCohortSummary {
+export interface PulseAdjustment {
   id: string;
+  userId: string;
+  handle: string;
+  amount: number;
+  reason: string | null;
+  adminId: string | null;
   createdAt: Date;
-  memberCount: number;
-  capacity: number;
-  leaderboardTopN: number;
-  name: string | null;
-  weeklyMinutes: number;
 }

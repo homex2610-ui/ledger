@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const circleConnectionsTable = pgTable(
@@ -40,6 +40,9 @@ export const groupsTable = pgTable(
 
 export const cohortsTable = pgTable("cohorts", {
   id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name"),
+  capacity: integer("capacity").notNull().default(20),
+  leaderboardTopN: integer("leaderboard_top_n").notNull().default(3),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
 import { db } from "@workspace/db";
 import {
@@ -9,13 +9,19 @@ import {
   cohortsTable,
   featureFlagsTable,
   focusSessionsTable,
+  leaderboardExclusionsTable,
   profilesTable,
+  pulseAdjustmentsTable,
   studySessionsTable,
   usersTable,
 } from "@workspace/db/schema";
 import {
   CreateAnnouncementBody,
   CreateAnnouncementResponse,
+  CreateLeaderboardExclusionBody,
+  CreatePulseAdjustmentBody,
+  CreatePulseAdjustmentResponse,
+  GetAdminAuditResponse,
   GetAdminCohortParams,
   GetAdminCohortResponse,
   GetAdminStatsResponse,
@@ -26,9 +32,12 @@ import {
   ListAdminUsersExportResponse,
   ListAdminUsersResponse,
   ListFeatureFlagsResponse,
+  ListLeaderboardExclusionsResponse,
+  ListPulseAdjustmentsResponse,
   MoveCohortMemberBody,
   MoveCohortMemberParams,
   RemoveAdminUserParams,
+  RemoveLeaderboardExclusionParams,
   SetAdminBody,
   SetAdminParams,
   ToggleAnnouncementBody,
@@ -36,6 +45,9 @@ import {
   ToggleFeatureFlagBody,
   ToggleFeatureFlagParams,
   ToggleFeatureFlagResponse,
+  UpdateAdminCohortBody,
+  UpdateAdminCohortParams,
+  UpdateAdminCohortResponse,
   UpdateAnnouncementBody,
   UpdateAnnouncementParams,
   UpdateAnnouncementResponse,
@@ -43,6 +55,7 @@ import {
 import { requireAuth } from "../lib/auth.js";
 import { COHORT_CAPACITY } from "../lib/cohorts.js";
 import { invalidateFeatureFlag } from "../lib/feature-flags.js";
+import { runWeeklyReset } from "../lib/periods.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -133,6 +146,8 @@ router.post("/admin/announcements", async (req, res) => {
       body: body.body,
       link: body.link ?? null,
       icon: body.icon ?? "megaphone",
+      audienceType: body.audienceType ?? "all",
+      audienceId: body.audienceId ?? null,
       startsAt: body.startsAt ? new Date(body.startsAt) : null,
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     })
@@ -150,6 +165,8 @@ router.patch("/admin/announcements/:announcementId", async (req, res) => {
       body: body.body,
       link: body.link ?? null,
       icon: body.icon,
+      audienceType: body.audienceType,
+      audienceId: body.audienceId === undefined ? undefined : body.audienceId,
       startsAt: body.startsAt === undefined ? undefined : body.startsAt ? new Date(body.startsAt) : null,
       expiresAt: body.expiresAt === undefined ? undefined : body.expiresAt ? new Date(body.expiresAt) : null,
       updatedAt: new Date(),
@@ -183,6 +200,9 @@ router.get("/admin/cohorts", async (_req, res) => {
   const rows = await db
     .select({
       id: cohortsTable.id,
+      capacity: cohortsTable.capacity,
+      leaderboardTopN: cohortsTable.leaderboardTopN,
+      name: cohortsTable.name,
       createdAt: cohortsTable.createdAt,
       memberCount: sql<number>`count(distinct ${cohortMembersTable.userId})::int`,
       weeklyMinutes: sql<number>`coalesce(sum(case when ${studySessionsTable.createdAt} >= date_trunc('week', now()) then ${studySessionsTable.minutes} else 0 end), 0)::int`,
@@ -192,7 +212,7 @@ router.get("/admin/cohorts", async (_req, res) => {
     .leftJoin(studySessionsTable, eq(studySessionsTable.userId, cohortMembersTable.userId))
     .groupBy(cohortsTable.id)
     .orderBy(asc(cohortsTable.createdAt));
-  res.json(ListAdminCohortsResponse.parse(rows.map((row) => ({ ...row, capacity: COHORT_CAPACITY }))));
+  res.json(ListAdminCohortsResponse.parse(rows.map((row) => ({ ...row, capacity: row.capacity ?? COHORT_CAPACITY }))));
 });
 
 router.get("/admin/cohorts/:cohortId", async (req, res) => {
@@ -216,12 +236,56 @@ router.get("/admin/cohorts/:cohortId", async (req, res) => {
   res.json(
     GetAdminCohortResponse.parse({
       id: cohortRows[0].id,
+      capacity: cohortRows[0].capacity,
+      leaderboardTopN: cohortRows[0].leaderboardTopN,
+      name: cohortRows[0].name,
       createdAt: cohortRows[0].createdAt,
       memberCount: members.length,
-      capacity: COHORT_CAPACITY,
       members,
     }),
   );
+});
+
+router.patch("/admin/cohorts/:cohortId", async (req, res) => {
+  const { cohortId } = UpdateAdminCohortParams.parse(req.params);
+  const body = UpdateAdminCohortBody.parse(req.body);
+  const existing = await db.select().from(cohortsTable).where(eq(cohortsTable.id, cohortId)).limit(1);
+  if (!existing[0]) {
+    res.status(404).json({ error: "Cohort not found" });
+    return;
+  }
+  const before = existing[0];
+  const updated = (
+    await db
+      .update(cohortsTable)
+      .set({
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.capacity !== undefined ? { capacity: body.capacity } : {}),
+        ...(body.leaderboardTopN !== undefined ? { leaderboardTopN: body.leaderboardTopN } : {}),
+      })
+      .where(eq(cohortsTable.id, cohortId))
+      .returning()
+  )[0];
+
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "cohort_update",
+    targetType: "cohort",
+    targetId: cohortId,
+    beforeState: {
+      name: before.name,
+      capacity: before.capacity,
+      leaderboardTopN: before.leaderboardTopN,
+    },
+    afterState: {
+      name: updated.name,
+      capacity: updated.capacity,
+      leaderboardTopN: updated.leaderboardTopN,
+      reason: body.reason ?? null,
+    },
+  });
+
+  res.json(UpdateAdminCohortResponse.parse(updated));
 });
 
 router.post("/admin/cohorts/members/:userId/move", async (req, res) => {
@@ -366,6 +430,166 @@ router.post("/admin/users/:userId/remove", async (req, res) => {
     beforeState: { handle: target.handle, email: target.email, isAdmin: target.isAdmin ?? false },
   });
   res.status(204).end();
+});
+
+// ---------------------------------------------------------------------------
+// Leaderboard moderation — pulse adjustments + exclusions, audited
+// ---------------------------------------------------------------------------
+
+router.get("/admin/pulse-adjustments", async (_req, res) => {
+  const rows = await db
+    .select({
+      id: pulseAdjustmentsTable.id,
+      userId: pulseAdjustmentsTable.userId,
+      handle: usersTable.handle,
+      amount: pulseAdjustmentsTable.amount,
+      reason: pulseAdjustmentsTable.reason,
+      adminId: pulseAdjustmentsTable.adminId,
+      createdAt: pulseAdjustmentsTable.createdAt,
+    })
+    .from(pulseAdjustmentsTable)
+    .leftJoin(usersTable, eq(usersTable.id, pulseAdjustmentsTable.userId))
+    .orderBy(desc(pulseAdjustmentsTable.createdAt))
+    .limit(100);
+  res.json(ListPulseAdjustmentsResponse.parse(rows));
+});
+
+router.post("/admin/pulse-adjustments", async (req, res) => {
+  const body = CreatePulseAdjustmentBody.parse(req.body);
+  if (!body.reason?.trim()) {
+    res.status(400).json({ error: "A reason is required for pulse adjustments" });
+    return;
+  }
+  const targetRows = await db.select({ id: usersTable.id, handle: usersTable.handle }).from(usersTable).where(eq(usersTable.id, body.userId)).limit(1);
+  if (!targetRows[0]) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const inserted = (
+    await db
+      .insert(pulseAdjustmentsTable)
+      .values({ userId: body.userId, amount: body.amount, reason: body.reason, adminId: req.userId })
+      .returning()
+  )[0];
+
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "pulse_adjustment_create",
+    targetType: "user",
+    targetId: body.userId,
+    afterState: { amount: body.amount, reason: body.reason, handle: targetRows[0].handle },
+  });
+
+  res.status(201).json(
+    CreatePulseAdjustmentResponse.parse({
+      id: inserted.id,
+      userId: inserted.userId,
+      handle: targetRows[0].handle,
+      amount: inserted.amount,
+      reason: inserted.reason,
+      adminId: inserted.adminId,
+      createdAt: inserted.createdAt,
+    }),
+  );
+});
+
+router.get("/admin/exclusions", async (_req, res) => {
+  const rows = await db
+    .select({
+      userId: leaderboardExclusionsTable.userId,
+      handle: usersTable.handle,
+      email: usersTable.email,
+      reason: leaderboardExclusionsTable.reason,
+      adminId: leaderboardExclusionsTable.adminId,
+      createdAt: leaderboardExclusionsTable.createdAt,
+    })
+    .from(leaderboardExclusionsTable)
+    .leftJoin(usersTable, eq(usersTable.id, leaderboardExclusionsTable.userId))
+    .orderBy(desc(leaderboardExclusionsTable.createdAt));
+  res.json(ListLeaderboardExclusionsResponse.parse(rows));
+});
+
+router.post("/admin/exclusions", async (req, res) => {
+  const body = CreateLeaderboardExclusionBody.parse(req.body);
+  if (!body.reason?.trim()) {
+    res.status(400).json({ error: "A reason is required for exclusions" });
+    return;
+  }
+  const targetRows = await db.select({ id: usersTable.id, handle: usersTable.handle }).from(usersTable).where(eq(usersTable.id, body.userId)).limit(1);
+  if (!targetRows[0]) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  await db
+    .insert(leaderboardExclusionsTable)
+    .values({ userId: body.userId, reason: body.reason, adminId: req.userId })
+    .onConflictDoUpdate({ target: leaderboardExclusionsTable.userId, set: { reason: body.reason, adminId: req.userId } });
+
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "leaderboard_exclusion_add",
+    targetType: "user",
+    targetId: body.userId,
+    afterState: { reason: body.reason, handle: targetRows[0].handle },
+  });
+
+  res.status(204).end();
+});
+
+router.delete("/admin/exclusions/:userId", async (req, res) => {
+  const { userId } = RemoveLeaderboardExclusionParams.parse(req.params);
+  const existing = await db
+    .select({ reason: leaderboardExclusionsTable.reason })
+    .from(leaderboardExclusionsTable)
+    .where(eq(leaderboardExclusionsTable.userId, userId))
+    .limit(1);
+  if (!existing[0]) {
+    res.status(404).json({ error: "Exclusion not found" });
+    return;
+  }
+  await db.delete(leaderboardExclusionsTable).where(eq(leaderboardExclusionsTable.userId, userId));
+
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "leaderboard_exclusion_remove",
+    targetType: "user",
+    targetId: userId,
+    beforeState: { reason: existing[0].reason },
+  });
+
+  res.status(204).end();
+});
+
+// ---------------------------------------------------------------------------
+// Weekly reset — manual admin trigger of the same pipeline the cron runs
+// ---------------------------------------------------------------------------
+
+router.post("/admin/periods/reset", async (req, res) => {
+  const result = await runWeeklyReset();
+  await db.insert(adminAuditLogTable).values({
+    adminId: req.userId,
+    action: "weekly_reset_run",
+    targetType: "period",
+    targetId: null,
+    afterState: { scopesChecked: result.scopesChecked, closed: result.closed },
+  });
+  res.json(result);
+});
+
+// ---------------------------------------------------------------------------
+// Audit trail viewer
+// ---------------------------------------------------------------------------
+
+router.get("/admin/audit", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const before = typeof req.query.before === "string" ? new Date(req.query.before) : undefined;
+  const rows = await db
+    .select()
+    .from(adminAuditLogTable)
+    .where(before ? lt(adminAuditLogTable.createdAt, before) : undefined)
+    .orderBy(desc(adminAuditLogTable.createdAt))
+    .limit(limit);
+  res.json(GetAdminAuditResponse.parse({ entries: rows }));
 });
 
 // ---------------------------------------------------------------------------

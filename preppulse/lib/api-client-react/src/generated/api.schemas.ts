@@ -908,6 +908,15 @@ export interface ActiveAnnouncementResponse {
   announcement: ActiveAnnouncementResponseAnnouncement;
 }
 
+export type AnnouncementAudienceType = typeof AnnouncementAudienceType[keyof typeof AnnouncementAudienceType];
+
+
+export const AnnouncementAudienceType = {
+  all: 'all',
+  cohort: 'cohort',
+  group: 'group',
+} as const;
+
 export interface Announcement {
   id: string;
   title: string;
@@ -915,26 +924,50 @@ export interface Announcement {
   link: string | null;
   icon: string;
   isEnabled: boolean;
+  audienceType: AnnouncementAudienceType;
+  audienceId: string | null;
   startsAt: string | null;
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export type AnnouncementCreateAudienceType = typeof AnnouncementCreateAudienceType[keyof typeof AnnouncementCreateAudienceType];
+
+
+export const AnnouncementCreateAudienceType = {
+  all: 'all',
+  cohort: 'cohort',
+  group: 'group',
+} as const;
+
 export interface AnnouncementCreate {
   title: string;
   body: string;
   link?: string | null;
   icon?: string;
+  audienceType?: AnnouncementCreateAudienceType;
+  audienceId?: string | null;
   startsAt?: string | null;
   expiresAt?: string | null;
 }
+
+export type AnnouncementUpdateAudienceType = typeof AnnouncementUpdateAudienceType[keyof typeof AnnouncementUpdateAudienceType];
+
+
+export const AnnouncementUpdateAudienceType = {
+  all: 'all',
+  cohort: 'cohort',
+  group: 'group',
+} as const;
 
 export interface AnnouncementUpdate {
   title?: string;
   body?: string;
   link?: string | null;
   icon?: string;
+  audienceType?: AnnouncementUpdateAudienceType;
+  audienceId?: string | null;
   startsAt?: string | null;
   expiresAt?: string | null;
 }
@@ -995,6 +1028,8 @@ export interface AdminCohortSummary {
   createdAt: string;
   memberCount: number;
   capacity: number;
+  leaderboardTopN: number;
+  name: string | null;
   weeklyMinutes: number;
 }
 
@@ -1010,7 +1045,64 @@ export interface AdminCohortDetail {
   createdAt: string;
   memberCount: number;
   capacity: number;
+  leaderboardTopN: number;
+  name: string | null;
   members: AdminCohortMember[];
+}
+
+export interface AdminCohortUpdate {
+  name?: string | null;
+  /** @minimum 1 */
+  capacity?: number;
+  /** @minimum 1 */
+  leaderboardTopN?: number;
+  reason?: string;
+}
+
+export interface PulseAdjustment {
+  id: string;
+  userId: string;
+  handle: string;
+  amount: number;
+  reason: string | null;
+  adminId: string | null;
+  createdAt: string;
+}
+
+export interface PulseAdjustmentCreate {
+  userId: string;
+  amount: number;
+  reason: string;
+}
+
+export interface LeaderboardExclusion {
+  userId: string;
+  handle: string;
+  email: string;
+  reason: string | null;
+  adminId: string | null;
+  createdAt: string;
+}
+
+export interface LeaderboardExclusionCreate {
+  userId: string;
+  reason: string;
+}
+
+export type WeeklyResetResultResultsItem = {
+  periodId: string;
+  scopeType: string;
+  result: string;
+};
+
+export interface WeeklyResetResult {
+  scopesChecked: number;
+  closed: number;
+  results: WeeklyResetResultResultsItem[];
+}
+
+export interface AdminAuditResponse {
+  entries: AdminAuditEntry[];
 }
 
 export interface CohortMemberMove {
@@ -1130,6 +1222,14 @@ export const GetStatsSubjectsPeriod = {
   week: 'week',
   all: 'all',
 } as const;
+
+export type GetAdminAuditParams = {
+/**
+ * @maximum 200
+ */
+limit?: number;
+before?: string;
+};
 
 export type ListAdminUsersParams = {
 q?: string;
