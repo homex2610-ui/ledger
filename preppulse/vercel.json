@@ -6,6 +6,14 @@
   "outputDirectory": "artifacts/prep-pulse/dist/public",
   "rewrites": [
     {
+      "source": "/probe1/:x",
+      "destination": "/api/healthz"
+    },
+    {
+      "source": "/probe2/:x",
+      "destination": "/api/[...slug]?...slug=healthz"
+    },
+    {
       "source": "/share/:type/:id",
       "destination": "/api/[...slug]?...slug=share-page/:type/:id"
     },
