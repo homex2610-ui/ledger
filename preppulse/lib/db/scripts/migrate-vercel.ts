@@ -25,6 +25,17 @@ async function runOnClient(client: PoolClient, sql: string): Promise<void> {
   }
 }
 
+async function probeOnClient(client: PoolClient, sql: string): Promise<void> {
+  await client.query("BEGIN");
+  try {
+    await client.query(sql);
+    await client.query("ROLLBACK");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  }
+}
+
 try {
   await pool.query("CREATE SCHEMA IF NOT EXISTS drizzle");
   await pool.query(
@@ -47,7 +58,7 @@ try {
     const client = await pool.connect();
     let probeOk = false;
     try {
-      await runOnClient(client, sql);
+      await probeOnClient(client, sql);
       probeOk = true;
     } catch (error) {
       const message = (error as Error).message ?? String(error);
