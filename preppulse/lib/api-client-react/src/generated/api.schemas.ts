@@ -596,7 +596,7 @@ export interface TaskUpdate {
   /** @minLength 1 */
   title?: string;
   subject?: string;
-  status: TaskUpdateStatus;
+  status?: TaskUpdateStatus;
 }
 
 export interface CardInput {

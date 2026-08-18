@@ -59,7 +59,8 @@ export function sm2Schedule(card: { ease: number; interval: number; reps: number
   interval = clamp(interval, 0, MAX_INTERVAL);
 
   const due = new Date(today);
-  due.setDate(due.getDate() + Math.max(1, interval));
+  // interval 0 (a "again" relearn) means due again today, not tomorrow.
+  due.setDate(due.getDate() + Math.max(0, interval));
   return { ease, interval, reps, due };
 }
 

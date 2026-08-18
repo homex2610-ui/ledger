@@ -168,11 +168,11 @@ router.get("/discord/authorize", authRateLimit, async (req, res) => {
       res.status(401).json({ error: "Sign in first to connect Discord" });
       return;
     }
-    res.cookie(OAUTH_LINK_COOKIE, "1", { httpOnly: true, sameSite: "lax", maxAge: OAUTH_COOKIE_MAX_AGE_MS, path: "/" });
+    res.cookie(OAUTH_LINK_COOKIE, "1", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: OAUTH_COOKIE_MAX_AGE_MS, path: "/" });
   }
 
   const state = randomBytes(24).toString("hex");
-  res.cookie(OAUTH_STATE_COOKIE, state, { httpOnly: true, sameSite: "lax", maxAge: OAUTH_COOKIE_MAX_AGE_MS, path: "/" });
+  res.cookie(OAUTH_STATE_COOKIE, state, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: OAUTH_COOKIE_MAX_AGE_MS, path: "/" });
   res.json(GetAuthDiscordAuthorizeResponse.parse({ url: getDiscordAuthorizeUrl(state, buildRedirectUri(req), link) }));
 });
 
@@ -185,9 +185,9 @@ router.get("/discord/callback", async (req, res) => {
     return;
   }
 
-  res.clearCookie(OAUTH_STATE_COOKIE, { httpOnly: true, sameSite: "lax", path: "/" });
+  res.clearCookie(OAUTH_STATE_COOKIE, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
   const link = req.cookies?.[OAUTH_LINK_COOKIE] === "1";
-  res.clearCookie(OAUTH_LINK_COOKIE, { httpOnly: true, sameSite: "lax", path: "/" });
+  res.clearCookie(OAUTH_LINK_COOKIE, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
 
   let identity;
   let accessToken: string | null = null;

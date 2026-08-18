@@ -152,7 +152,9 @@ router.patch("/focus-sessions/:focusSessionId", async (req, res) => {
         })
         .returning()
     )[0];
-    void afterSessionRecorded({ userId: req.userId, minutes: logged.minutes, createdAt: logged.createdAt });
+    void afterSessionRecorded({ userId: req.userId, minutes: logged.minutes, createdAt: logged.createdAt }).catch((error) => {
+    console.error("afterSessionRecorded failed:", error);
+  });
   }
 
   res.json(UpdateFocusSessionResponse.parse(toFocusShape(updated)));

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { oauthAccountsTable, profilesTable, usersTable, type User } from "@workspace/db/schema";
 import { assignUserToCohort } from "../cohorts.js";
@@ -89,7 +89,13 @@ export async function uniqueHandle(base: string): Promise<string> {
       .slice(0, 24) || "learner";
   let candidate = cleaned;
   for (let i = 2; ; i++) {
-    const rows = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.handle, candidate)).limit(1);
+    // Handle uniqueness is case-insensitive: "Alice" and "alice" must not both
+    // exist even though the DB index is case-sensitive.
+    const rows = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(sql`lower(${usersTable.handle}) = ${candidate}`)
+      .limit(1);
     if (!rows[0]) return candidate;
     candidate = `${cleaned.slice(0, 20)}_${i}`;
   }

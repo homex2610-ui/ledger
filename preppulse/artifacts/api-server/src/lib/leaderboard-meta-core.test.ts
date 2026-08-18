@@ -69,8 +69,11 @@ test("computeGap states: leading, empty, active", () => {
   assert.deepEqual(computeGap(1, 120, 100), { state: "leading", gapToNext: null });
   assert.deepEqual(computeGap(1, 120, null), { state: "leading", gapToNext: null });
   assert.deepEqual(computeGap(2, 40, null), { state: "empty", gapToNext: null });
-  assert.deepEqual(computeGap(2, 40, 90), { state: "active", gapToNext: 50 });
+  // Pulse scores are integers: overtaking the entry above needs one more than
+  // the raw score difference (matching only ties).
+  assert.deepEqual(computeGap(2, 40, 90), { state: "active", gapToNext: 51 });
   assert.deepEqual(computeGap(3, 90, 40), { state: "active", gapToNext: 0 });
+  assert.deepEqual(computeGap(2, 40, 40), { state: "active", gapToNext: 1 });
 });
 
 test("sparklineRanks returns newest weeks oldest-first", () => {

@@ -56,12 +56,14 @@ export type GapState = "active" | "leading" | "empty";
 /**
  * Pulse gap to the entry directly above. "leading" when the member is rank 1;
  * "empty" when they are the only ranked member; otherwise "active" with the
- * number of pulse points needed to overtake.
+ * number of pulse points needed to overtake (strictly beat) the entry above.
  */
 export function computeGap(rank: number, score: number, previousScore: number | null): { state: GapState; gapToNext: number | null } {
   if (rank === 1) return { state: "leading", gapToNext: null };
   if (previousScore === null) return { state: "empty", gapToNext: null };
-  return { state: "active", gapToNext: Math.max(0, previousScore - score) };
+  // Integer pulse scores: matching the score above only ties, so overtaking
+  // requires (previous - score + 1) more points.
+  return { state: "active", gapToNext: Math.max(0, previousScore - score + 1) };
 }
 
 /** Last `weeks` snapshot ranks per user, oldest-first, for sparklines. */

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { authSessionsTable, usersTable, type User } from "@workspace/db/schema";
 import {
@@ -22,7 +22,8 @@ import { isUniqueViolation, clientIpFromRequest } from "../lib/utils.js";
 import { sendRecoveryEmail, supabaseAuthConfigured, verifyRecoveryToken } from "../lib/supabase-auth.js";
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
-const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
+const parsedAuthMax = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
+const AUTH_MAX_REQUESTS = Number.isFinite(parsedAuthMax) && parsedAuthMax > 0 ? Math.floor(parsedAuthMax) : 60;
 const PROD_ORIGIN = "https://ledger-pi-topaz.vercel.app";
 // Caps bound the CPU cost of scrypt hashing on attacker-supplied input.
 const PASSWORD_MAX_LENGTH = 72;
@@ -197,11 +198,20 @@ router.post("/reset-password", authRateLimit, async (req, res) => {
   if (!user) {
     let handle = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 24) || "learner";
     for (let i = 2; ; i++) {
-      const clash = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.handle, handle)).limit(1);
+      const clash = await db.select({ id: usersTable.id }).from(usersTable).where(sql`lower(${usersTable.handle}) = ${handle}`).limit(1);
       if (!clash[0]) break;
       handle = `${handle.slice(0, 20)}_${i}`;
     }
-    user = await createUserWithProfile({ id: verified.id, email, handle, passwordHash: null });
+    try {
+      user = await createUserWithProfile({ id: verified.id, email, handle, passwordHash: null });
+    } catch (error) {
+      // A concurrent reset or signup may have created the account between our
+      // check and this insert — treat that as success rather than a 500.
+      if (!isUniqueViolation(error, "users_email_unique")) throw error;
+      const recheck = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+      if (!recheck[0]) throw error;
+      user = recheck[0];
+    }
   }
 
   const passwordHash = await hashPassword(body.newPassword);

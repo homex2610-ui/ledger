@@ -802,7 +802,7 @@ export const UpdateTaskParams = zod.object({
 export const UpdateTaskBody = zod.object({
   "title": zod.string().min(1).optional(),
   "subject": zod.string().optional(),
-  "status": zod.enum(['todo', 'in_progress', 'done'])
+  "status": zod.enum(['todo', 'in_progress', 'done']).optional()
 })
 
 export const UpdateTaskResponse = zod.object({

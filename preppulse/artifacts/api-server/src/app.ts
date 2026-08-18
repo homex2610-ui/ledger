@@ -84,7 +84,12 @@ if (frontendDist) {
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof ZodError) {
-    res.status(400).json({ error: "Invalid request", issues: err.issues });
+    // Sanitized issue summary: paths and messages only — never echo the raw
+    // submitted values (they can include emails, passwords, or schema internals).
+    res.status(400).json({
+      error: "Invalid request",
+      issues: err.issues.map((issue) => ({ path: issue.path, message: issue.message })),
+    });
     return;
   }
   if (

@@ -49,6 +49,8 @@ export function buildDailyFocusPayload(input: {
   streak: number;
   subjects: SubjectMinutes[];
   createdAt: Date;
+  /** Calendar to label the day in; the share window is computed in this same time zone. */
+  timeZone?: string;
 }): DailyFocusPayload {
   const subjects = input.subjects
     .filter((s) => s.minutes > 0)
@@ -70,7 +72,7 @@ export function buildDailyFocusPayload(input: {
       weekday: "long",
       month: "short",
       day: "numeric",
-      timeZone: "UTC",
+      timeZone: input.timeZone ?? "UTC",
     }),
     createdAt: input.createdAt.toISOString(),
   };

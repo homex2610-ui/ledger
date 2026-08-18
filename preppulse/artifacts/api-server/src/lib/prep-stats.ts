@@ -43,8 +43,22 @@ export async function listSyllabusTopics(userId: string) {
     .where(eq(topicsTable.examTrack, track))
     .orderBy(asc(topicsTable.sortOrder));
 
+  // Prerequisites are stored as topic names; a topic is locked until every
+  // prerequisite (that exists in this track's catalog) is past not_started.
+  const statusByName = new Map<string, TopicStatus>();
+  for (const topic of catalog) {
+    statusByName.set(topic.name, (progressByTopic.get(topic.id)?.status ?? "not_started") as TopicStatus);
+  }
+
   return catalog.map((topic) => {
     const progress = progressByTopic.get(topic.id);
+    const prerequisites = topic.prerequisites ?? [];
+    const locked =
+      prerequisites.length > 0 &&
+      !prerequisites.every((name) => {
+        const status = statusByName.get(name);
+        return status !== undefined && status !== "not_started";
+      });
     return {
       id: topic.id,
       subject: topic.subject,
@@ -54,8 +68,8 @@ export async function listSyllabusTopics(userId: string) {
       weightage: topic.weightage as "high" | "medium" | "low",
       accuracy: progress?.accuracy ?? 0,
       questionCount: progress?.questionCount ?? 0,
-      prerequisites: topic.prerequisites,
-      locked: false,
+      prerequisites,
+      locked,
     };
   });
 }
@@ -286,7 +300,13 @@ export async function weeklyPulseForUsers(
   const topicRows = await db
     .select({ userId: topicProgressTable.userId })
     .from(topicProgressTable)
-    .where(and(inArray(topicProgressTable.userId, userIds), gte(topicProgressTable.updatedAt, weekStart)));
+    .where(
+      and(
+        inArray(topicProgressTable.userId, userIds),
+        gte(topicProgressTable.updatedAt, weekStart),
+        lt(topicProgressTable.updatedAt, weekEnd),
+      ),
+    );
 
   const minutesByUser = new Map<string, number>();
   const topicsByUser = new Map<string, number>();

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cardsTable,
@@ -275,6 +275,10 @@ router.post("/tests", async (req, res) => {
     res.status(400).json({ error: "Score cannot exceed the max score", code: "score_exceeds_max" });
     return;
   }
+  if (body.attempted > body.totalQuestions) {
+    res.status(400).json({ error: "Attempted questions cannot exceed total questions", code: "attempted_exceeds_total" });
+    return;
+  }
   const accuracy = body.maxScore > 0 ? Math.min(100, Math.round((score / body.maxScore) * 100)) : 0;
 
   const topicRows = await listSyllabusTopics(req.userId);
@@ -442,10 +446,14 @@ router.get("/tests/analyze", async (req, res) => {
   const subjectMap = new Map<string, { sum: number; count: number }>();
   for (const test of rows) {
     if (test.subjectScores && Object.keys(test.subjectScores).length) {
+      const subjectKeys = subjectsForExam(test.exam);
+      const perSubjectMax = subjectKeys.length > 0 ? test.maxScore / subjectKeys.length : test.maxScore;
       for (const [key, value] of Object.entries(test.subjectScores)) {
         const label = subjectLabel(key);
         const entry = subjectMap.get(label) ?? { sum: 0, count: 0 };
-        entry.sum += test.maxScore > 0 ? Math.round((value / test.maxScore) * 100) : 0;
+        // A subject score is relative to that subject's share of the test,
+        // not the full test max — dividing by maxScore understated accuracy.
+        entry.sum += perSubjectMax > 0 ? Math.min(100, Math.round((value / perSubjectMax) * 100)) : 0;
         entry.count += 1;
         subjectMap.set(label, entry);
       }
@@ -517,7 +525,9 @@ router.post("/study-sessions", async (req, res) => {
       .values({ userId: req.userId, subject: body.subject, minutes: body.minutes, source: body.source })
       .returning()
   )[0];
-  void afterSessionRecorded({ userId: req.userId, minutes: inserted.minutes, createdAt: inserted.createdAt });
+  void afterSessionRecorded({ userId: req.userId, minutes: inserted.minutes, createdAt: inserted.createdAt }).catch((error) => {
+    console.error("afterSessionRecorded failed:", error);
+  });
   res.status(201).json(
     CreateStudySessionResponse.parse({
       id: inserted.id,
@@ -553,14 +563,41 @@ router.patch("/profile", async (req, res) => {
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.handle !== undefined) {
-    await db.update(usersTable).set({ handle: body.handle }).where(eq(usersTable.id, req.userId));
+    const handle = body.handle.trim().replace(/\s+/g, "_");
+    if (handle.length < 2 || handle.length > 24 || !/^[a-zA-Z0-9._-]+$/.test(handle)) {
+      res.status(400).json({ error: "Handle must be 2-24 characters using letters, numbers, dots, underscores, or dashes", code: "invalid_handle" });
+      return;
+    }
+    const clash = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(ne(usersTable.id, req.userId), sql`lower(${usersTable.handle}) = ${handle.toLowerCase()}`))
+      .limit(1);
+    if (clash[0]) {
+      res.status(409).json({ error: "That handle is already taken", code: "handle_taken" });
+      return;
+    }
+    await db.update(usersTable).set({ handle }).where(eq(usersTable.id, req.userId));
   }
   if (body.examTrack !== undefined) updates.examTrack = body.examTrack;
   if (body.stage !== undefined) updates.stage = body.stage;
-  if (body.targetYear !== undefined) updates.targetYear = body.targetYear;
-  if (body.examDate !== undefined) updates.examDate = body.examDate;
-  if (body.dailyGoalMinutes !== undefined) updates.dailyGoalMinutes = body.dailyGoalMinutes;
-  if (body.weeklyGoalMinutes !== undefined) updates.weeklyGoalMinutes = body.weeklyGoalMinutes;
+  if (body.targetYear !== undefined) {
+    const nowYear = new Date().getFullYear();
+    if (body.targetYear < nowYear || body.targetYear > nowYear + 6) {
+      res.status(400).json({ error: "targetYear must be between this year and 6 years ahead", code: "invalid_target_year" });
+      return;
+    }
+    updates.targetYear = body.targetYear;
+  }
+  if (body.examDate !== undefined) {
+    if (body.examDate === null) updates.examDate = null;
+    else if (Number.isNaN(body.examDate.getTime())) {
+      res.status(400).json({ error: "examDate is not a valid date", code: "invalid_exam_date" });
+      return;
+    } else updates.examDate = body.examDate;
+  }
+  if (body.dailyGoalMinutes !== undefined) updates.dailyGoalMinutes = Math.min(body.dailyGoalMinutes, 24 * 60);
+  if (body.weeklyGoalMinutes !== undefined) updates.weeklyGoalMinutes = Math.min(body.weeklyGoalMinutes, 7 * 24 * 60);
   if (body.focusMode !== undefined) updates.focusMode = body.focusMode;
   if (body.showOnLeaderboard !== undefined) updates.showOnLeaderboard = body.showOnLeaderboard;
 

@@ -107,6 +107,7 @@ router.post("/shares", requireAuth, async (req, res) => {
     streak,
     subjects: subjectRows.map((row) => ({ subject: row.subject, minutes: row.minutes })),
     createdAt: now,
+    timeZone: timeZone ?? undefined,
   });
 
   const expiresAt = new Date(now.getTime() + SHARE_ARTIFACT_TTL_DAYS * 86_400_000);

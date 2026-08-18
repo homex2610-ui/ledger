@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { studySessionsTable } from "@workspace/db/schema";
 import { computeStreak } from "./prep-stats.js";
-import { dayKeyIn, parseISODate, startOfWeek } from "./utils.js";
+import { dayKeyIn, parseISODate, startOfDayIn } from "./utils.js";
 
 type SessionRow = { createdAt: Date; minutes: number; subject: string };
 
@@ -155,7 +155,15 @@ export async function computeStats(userId: string, query: StatsQuery) {  const {
     mostProductiveDay = Array.from(minutesByWeekday30.entries()).sort((a, b) => b[1] - a[1])[0][0];
   }
 
-  const weekStartDate = query.weekStart ? parseISODate(query.weekStart) : startOfWeek();
+  const weekStartDate = query.weekStart
+    ? parseISODate(query.weekStart)
+    : (() => {
+        // No explicit weekStart: anchor the week to the user's calendar, not
+        // the server's. startOfWeek() alone would drift for non-UTC time zones.
+        const dayStart = timeZone ? startOfDayIn(new Date(), timeZone) : startOfDayIn(new Date(), "UTC");
+        dayStart.setDate(dayStart.getDate() - ((dayStart.getDay() + 6) % 7));
+        return dayStart;
+      })();
   const weekDays = daysOfWeek(weekStartDate);
   const week = {
     weekStart: weekDays[0],

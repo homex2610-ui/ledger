@@ -2597,7 +2597,6 @@ components:
         status:
           type: string
           enum: [todo, in_progress, done]
-      required: [status]
 
     Card:
       type: object

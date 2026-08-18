@@ -67,7 +67,7 @@ import {
   userHandlesById,
   weeklyPulseForUsers,
 } from "../lib/prep-stats.js";
-import { generateInviteCode, isUuid, safeTimeZone, startOfDay, startOfWeek, toISODate, weekLabel } from "../lib/utils.js";
+import { generateInviteCode, isUuid, safeTimeZone, startOfDayIn, startOfWeek, toISODate, weekLabel } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -477,6 +477,7 @@ router.get("/cohorts/leaderboard", async (req, res) => {
     res.status(403).json({ error: "feature_disabled" });
     return;
   }
+  const timeZone = safeTimeZone(req.query.tz);
   const membership = await db
     .select({ cohortId: cohortMembersTable.cohortId })
     .from(cohortMembersTable)
@@ -488,7 +489,7 @@ router.get("/cohorts/leaderboard", async (req, res) => {
   }
   const memberIds = await cohortUserIdsFor(req.userId);
   const period = req.query.period === "today" ? "today" : "week";
-  const window = period === "today" ? { from: startOfDay(new Date()), to: new Date() } : undefined;
+  const window = period === "today" ? { from: startOfDayIn(new Date(), timeZone ?? "UTC"), to: new Date() } : undefined;
   const { entries, focused, weekEnd } = await leaderboardFor(memberIds ?? [], req.userId, {
     scopeType: "cohort",
     scopeId: membership[0].cohortId,
@@ -756,6 +757,7 @@ router.get("/groups/:groupId/leaderboard/sparkline", async (req, res) => {
 router.get("/groups/:groupId/activity", async (req, res) => {
   const params = GetGroupActivityParams.parse(req.params);
   if (rejectInvalidUuid(res, params.groupId)) return;
+  const timeZone = safeTimeZone(req.query.tz);
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group || !(await isGroupMember(group.id, req.userId))) {
@@ -765,7 +767,7 @@ router.get("/groups/:groupId/activity", async (req, res) => {
 
   const memberIds = await groupUserIds(group.id);
   const handles = await userHandlesById(memberIds);
-  const since = startOfDay(new Date());
+  const since = startOfDayIn(new Date(), timeZone ?? "UTC");
   since.setDate(since.getDate() - 6);
 
   const sessionRows = await db
