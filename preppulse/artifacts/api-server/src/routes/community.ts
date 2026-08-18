@@ -542,21 +542,24 @@ router.get("/groups", async (req, res) => {
 
 router.post("/groups", async (req, res) => {
   const body = CreateGroupBody.parse(req.body);
-  const inserted = (
-    await db
-      .insert(groupsTable)
-      .values({
-        name: body.name,
-        description: body.description ?? null,
-        examFocus: body.examFocus ?? null,
-        subjectFocus: body.subjectFocus ?? [],
-        ownerId: req.userId,
-        inviteCode: generateInviteCode(),
-        isDiscoverable: body.isDiscoverable ?? false,
-      })
-      .returning()
-  )[0];
-  await db.insert(groupMembersTable).values({ groupId: inserted.id, userId: req.userId, role: "owner" });
+  const inserted = await db.transaction(async (tx) => {
+    const group = (
+      await tx
+        .insert(groupsTable)
+        .values({
+          name: body.name,
+          description: body.description ?? null,
+          examFocus: body.examFocus ?? null,
+          subjectFocus: body.subjectFocus ?? [],
+          ownerId: req.userId,
+          inviteCode: generateInviteCode(),
+          isDiscoverable: body.isDiscoverable ?? false,
+        })
+        .returning()
+    )[0];
+    await tx.insert(groupMembersTable).values({ groupId: group.id, userId: req.userId, role: "owner" });
+    return group;
+  });
   res.status(201).json(CreateGroupResponse.parse(await groupSummaryFor(req.userId, inserted)));
 });
 

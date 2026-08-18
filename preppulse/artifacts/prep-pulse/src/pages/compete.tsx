@@ -190,7 +190,7 @@ function useRankDelta(handle: string | undefined, rank: number | undefined): num
     try {
       const raw = localStorage.getItem(PREV_RANK_KEY);
       const prev = raw ? JSON.parse(raw) as { handle?: string; rank?: number } : null;
-      const next = prev && prev.handle === handle && typeof prev.rank === 'number' && prev.rank !== rank ? rank - prev.rank : null;
+      const next = prev && prev.handle === handle && typeof prev.rank === 'number' && prev.rank !== rank ? prev.rank - rank : null;
       localStorage.setItem(PREV_RANK_KEY, JSON.stringify({ handle, rank }));
       rankDeltaByHandle.set(handle, next);
       setDelta(next);
@@ -320,7 +320,7 @@ function CelebrationCard({ rank, meta, weekEnd }: { rank: number; meta: BoardMet
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-500"><Crown size={17} /></div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-extrabold text-foreground">{leading ? "You're leading this week's board!" : `You're in the top ${rank} this week!`}</p>
-          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{leading ? "Keep showing up — the board resets next week." : "Keep showing up — the board resets next week."}</p>
+          <p className="mt-0.5 text-xs font-medium text-muted-foreground">Keep showing up — the board resets next week.</p>
         </div>
         <button type="button" onClick={() => setDismissed(true)} className="rounded-lg px-2 py-1 text-xs font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label="Dismiss celebration">Dismiss</button>
       </div>
@@ -519,7 +519,7 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, meta, sparkline
         <p className="text-[11px] text-muted-foreground">{entry.topics} topics moved</p>
       </div>
       {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
-        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta > 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
       )}
       {sparkline && <Sparkline ranks={sparkline} />}
       {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streakByHandle.get(entry.handle)} />}
@@ -550,7 +550,7 @@ function PinnedRow({ entry, streak, delta, meta, sparkline, avatarClass }: { ent
         <p className="text-[11px] font-semibold text-accent">Your rank</p>
       </div>
       {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
-        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta > 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
       )}
       {sparkline && <Sparkline ranks={sparkline} />}
       {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streak} />}
@@ -849,8 +849,8 @@ function FeedRow({ group, index, fresh }: { group: { handle: string; items: Circ
   const first = group.items[0];
   const last = group.items[group.items.length - 1];
   const sameDay = new Date(first.date).toDateString() === new Date(last.date).toDateString();
-  const subjects = [...new Set(group.items.map((item) => item.subject).filter(Boolean))].join(' � ');
-  const summary = `${group.items.length} update${group.items.length === 1 ? '' : 's'}${sameDay ? ' today' : ' this week'}${subjects ? ` � ${subjects}` : ''}${grouped ? ` � latest: ${last.detail}` : ''}`;
+  const subjects = [...new Set(group.items.map((item) => item.subject).filter(Boolean))].join(' · ');
+  const summary = `${group.items.length} update${group.items.length === 1 ? '' : 's'}${sameDay ? ' today' : ' this week'}${subjects ? ` · ${subjects}` : ''}${grouped ? ` · latest: ${last.detail}` : ''}`;
   const avatarClass = avatarColorFor(first.userId);
   const inner = (
     <>
@@ -883,7 +883,7 @@ function FeedRow({ group, index, fresh }: { group: { handle: string; items: Circ
           {group.items.map((item, itemIndex) => (
             <li key={`${item.userId}-${item.date}-${itemIndex}`} className="flex items-center gap-2.5 py-1.5 pl-10 text-xs">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-              <span className="min-w-0 flex-1 text-muted-foreground">{item.subject ? `${item.subject} � ` : ''}{item.detail}</span>
+              <span className="min-w-0 flex-1 text-muted-foreground">{item.subject ? `${item.subject} · ` : ''}{item.detail}</span>
               <span className="shrink-0 text-[10px] text-muted-foreground">{new Date(item.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
             </li>
           ))}
@@ -965,11 +965,10 @@ function GroupsTab() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: getListGroupsQueryKey() });
 
-  useEffect(() => {
-    if (groupsQuery.data && groupsQuery.data.length > 0 && !groupsQuery.data.some((group) => group.id === selectedId)) {
-      setSelectedId(groupsQuery.data[0].id);
-    }
-  }, [groupsQuery.data, selectedId]);
+  const handleGroupGone = (groupId: string) => {
+    setSelectedId(null);
+    queryClient.setQueryData<GroupSummary[]>(getListGroupsQueryKey(), (data) => (data ?? []).filter((group) => group.id !== groupId));
+  };
 
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -996,7 +995,7 @@ function GroupsTab() {
   if (groupsQuery.isError) return <ErrorState onRetry={() => groupsQuery.refetch()} />;
 
   const groups = groupsQuery.data ?? [];
-  const selected = groups.find((group) => group.id === selectedId) ?? null;
+  const selected = groups.find((group) => group.id === selectedId) ?? groups[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -1029,12 +1028,12 @@ function GroupsTab() {
             {groups.map((group) => (
               <button key={group.id} type="button" onClick={() => setSelectedId(group.id)} className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors ${selected?.id === group.id ? 'border-primary/40 bg-primary/5' : 'border-border/70 hover:bg-secondary'}`} data-testid={`group-card-${group.id}`}>
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary font-display text-sm font-bold">{group.name.slice(0, 2).toUpperCase()}</span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{group.name}</p><p className="text-xs text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole === 'owner' ? ' � you own this' : ''}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{group.name}</p><p className="text-xs text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole === 'owner' ? ' · you own this' : ''}</p></div>
               </button>
             ))}
             <DiscoverGroups onPick={(group) => setSelectedId(group.id)} />
           </div>
-          <div>{selected ? <GroupDetail key={selected.id} group={selected} refresh={() => refresh()} onLeave={() => setSelectedId(null)} /> : <Card className="p-8 text-center"><p className="text-sm text-muted-foreground">Select a group to see its members, board, and activity.</p></Card>}</div>
+          <div>{selected ? <GroupDetail key={selected.id} group={selected} refresh={() => refresh()} onLeave={() => handleGroupGone(selected.id)} /> : <Card className="p-8 text-center"><p className="text-sm text-muted-foreground">Select a group to see its members, board, and activity.</p></Card>}</div>
         </div>
       ) : (
         <Card className="p-8"><EmptyState title="No groups yet" detail="Create a room with friends or join one with a code." action={<button type="button" onClick={() => setShowCreate(true)} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-empty-create-group">Create a group</button>} /></Card>
@@ -1060,7 +1059,7 @@ function DiscoverGroups({ onPick }: { onPick: (group: GroupSummary) => void }) {
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name…" className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs outline-none" data-testid="input-discover-query" />
           {search.data?.map((group) => (
             <button key={group.id} type="button" onClick={() => { onPick(group); setVisible(false); }} className="flex w-full items-center gap-2 rounded-lg border border-border/70 p-2.5 text-left hover:bg-secondary" data-testid={`discover-${group.name}`}>
-              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{group.name}</span><span className="text-[10px] text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole ? ' � already joined' : ''}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{group.name}</span><span className="text-[10px] text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole ? ' · already joined' : ''}</span></span>
               {!group.myRole && <span className="rounded-md bg-primary px-2 py-1 text-[9px] font-bold text-primary-foreground">Open</span>}
             </button>
           ))}

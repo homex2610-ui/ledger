@@ -10,7 +10,10 @@ export const usersTable = pgTable(
     avatarUrl: text("avatar_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("users_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("users_email_unique").on(table.email),
+    uniqueIndex("users_handle_unique").on(table.handle),
+  ],
 );
 
 export const profilesTable = pgTable(

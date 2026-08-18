@@ -27,6 +27,7 @@ export default function Settings() {
   const [values, setValues] = useState<ProfileUpdate>({ focusMode: false, showOnLeaderboard: true });
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [oauthError, setOauthError] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function Settings() {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       const data = await exportMyData();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -83,7 +85,7 @@ export default function Settings() {
       link.download = 'preppulse-data.json';
       link.click();
       URL.revokeObjectURL(url);
-    } catch { /* export failed silently; button state resets */ } finally { setExporting(false); }
+    } catch { setExportError('Export failed — try again in a moment.'); } finally { setExporting(false); }
   };
 
   const confirmDelete = () => {
@@ -385,6 +387,7 @@ export default function Settings() {
         </div>
         <div className="mt-4 flex flex-col gap-2 border-t border-border/70 pt-4 sm:flex-row">
           <button type="button" onClick={handleExport} disabled={exporting} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-bold hover:bg-secondary disabled:opacity-50" data-testid="button-export-data">{exporting ? 'Preparing…' : <><Download size={14} /> Export your data</>}</button>
+          {exportError && <p className="text-[11px] font-semibold text-accent" data-testid="export-error">{exportError}</p>}
           <button type="button" onClick={() => setDeleteOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-accent/30 px-4 py-2.5 text-xs font-bold text-accent hover:bg-accent/10" data-testid="button-delete-account"><Trash2 size={14} /> Delete account</button>
         </div>
       </Card>
@@ -447,8 +450,15 @@ function NumberField({ value, min, max, onCommit, testId }: { value: number; min
 
 function Field({ label, value, onCommit, placeholder, testId }: { label: string; value: string; onCommit: (value: string) => void; placeholder: string; testId: string }) {
   const [draft, setDraft] = useState(value);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => setDraft(value), [value]);
-  return <label className="block"><span className="mb-1.5 block text-xs font-bold">{label}</span><div className="flex gap-2"><input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onBlur={() => { if (draft.trim().length >= 2 && draft !== value) onCommit(draft.trim()); }} placeholder={placeholder} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid={testId} /><button type="button" onClick={() => { if (draft.trim().length >= 2 && draft !== value) onCommit(draft.trim()); }} className="rounded-xl border border-border px-3 text-xs font-bold hover:bg-secondary" data-testid={`${testId}-save`}>Save</button></div></label>;
+  const commit = () => {
+    const next = draft.trim();
+    if (next.length < 2) { setError('Needs at least 2 characters'); return; }
+    setError(null);
+    if (next !== value) onCommit(next);
+  };
+  return <label className="block"><span className="mb-1.5 block text-xs font-bold">{label}</span><div className="flex gap-2"><input value={draft} onChange={(event) => { setDraft(event.target.value); if (error) setError(null); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} onBlur={commit} placeholder={placeholder} className="h-10 w-full rounded-xl border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/20" data-testid={testId} /><button type="button" onClick={commit} className="rounded-xl border border-border px-3 text-xs font-bold hover:bg-secondary" data-testid={`${testId}-save`}>Save</button></div>{error && <p className="mt-1 text-[11px] font-semibold text-accent">{error}</p>}</label>;
 }
 
 function SettingRow({ icon, title, detail, enabled, onToggle, testId }: { icon: ReactNode; title: string; detail: string; enabled: boolean; onToggle: () => void; testId: string }) {
