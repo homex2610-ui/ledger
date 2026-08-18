@@ -639,6 +639,15 @@ export interface CardStats {
   newToday: number;
 }
 
+export type LeaderboardEntryGapState = typeof LeaderboardEntryGapState[keyof typeof LeaderboardEntryGapState];
+
+
+export const LeaderboardEntryGapState = {
+  active: 'active',
+  leading: 'leading',
+  empty: 'empty',
+} as const;
+
 export interface LeaderboardEntry {
   rank: number;
   handle: string;
@@ -648,12 +657,29 @@ export interface LeaderboardEntry {
   hours: number;
   topics: number;
   isCurrentUser: boolean;
+  /** Rank change vs the previous closed week (positive = moved up). Null on private-circle leaderboards and when no prior snapshot exists. */
+  rankDelta?: number | null;
+  /** Consecutive closed weeks ranked in the top N of this leaderboard */
+  streak?: number;
+  /** Best (lowest) rank ever recorded on this leaderboard, null before the first close */
+  pb?: number | null;
+  /** Pulse points needed to overtake the entry above. Null when leading or alone on the board. */
+  gapToNext?: number | null;
+  gapState?: LeaderboardEntryGapState;
 }
 
 export interface Leaderboard {
   weekLabel: string;
+  /** End of the current open weekly period (countdown target). Null on private-circle leaderboards. */
+  weekEnd?: string | null;
   entries: LeaderboardEntry[];
   focused: boolean;
+}
+
+export interface LeaderboardSparklineRow {
+  userId: string;
+  /** Snapshot ranks over the last 8 closed weeks, oldest first. Shorter when fewer closes exist. */
+  ranks: number[];
 }
 
 export interface CircleMember {
@@ -769,6 +795,8 @@ export interface GroupDetail {
 
 export interface GroupLeaderboard {
   weekLabel: string;
+  /** End of the current open weekly period (countdown target) */
+  weekEnd?: string | null;
   entries: LeaderboardEntry[];
   focused: boolean;
 }

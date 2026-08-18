@@ -70,6 +70,7 @@ import type {
   GroupSummary,
   HealthStatus,
   Leaderboard,
+  LeaderboardSparklineRow,
   ListAdminUsersParams,
   LoginInput,
   OAuthAuthorizeResponse,
@@ -3789,6 +3790,83 @@ export function useGetCohortsLeaderboard<TData = Awaited<ReturnType<typeof getCo
 
 
 
+export const getGetCohortsLeaderboardSparklineUrl = () => {
+
+
+
+
+  return `/api/cohorts/leaderboard/sparkline`
+}
+
+/**
+ * @summary Snapshot rank history for every cohort member (last 8 closed weeks)
+ */
+export const getCohortsLeaderboardSparkline = async ( options?: Parameters<typeof customFetch>[1]): Promise<LeaderboardSparklineRow[]> => {
+
+  return customFetch<LeaderboardSparklineRow[]>(getGetCohortsLeaderboardSparklineUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCohortsLeaderboardSparklineQueryKey = () => {
+    return [
+    `/api/cohorts/leaderboard/sparkline`
+    ] as const;
+    }
+
+
+export const getGetCohortsLeaderboardSparklineQueryOptions = <TData = Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortsLeaderboardSparklineQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>> = ({ signal }) => getCohortsLeaderboardSparkline({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCohortsLeaderboardSparklineQueryResult = NonNullable<Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>>
+export type GetCohortsLeaderboardSparklineQueryError = ErrorType<void>
+
+
+/**
+ * @summary Snapshot rank history for every cohort member (last 8 closed weeks)
+ */
+
+export function useGetCohortsLeaderboardSparkline<TData = Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortsLeaderboardSparkline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCohortsLeaderboardSparklineQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetCohortsFeedUrl = () => {
 
 
@@ -4525,6 +4603,83 @@ export function useGetGroupLeaderboard<TData = Awaited<ReturnType<typeof getGrou
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetGroupLeaderboardQueryOptions(groupId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGroupLeaderboardSparklineUrl = (groupId: string,) => {
+
+
+
+
+  return `/api/groups/${groupId}/leaderboard/sparkline`
+}
+
+/**
+ * @summary Snapshot rank history for every group member (last 8 closed weeks)
+ */
+export const getGroupLeaderboardSparkline = async (groupId: string, options?: Parameters<typeof customFetch>[1]): Promise<LeaderboardSparklineRow[]> => {
+
+  return customFetch<LeaderboardSparklineRow[]>(getGetGroupLeaderboardSparklineUrl(groupId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGroupLeaderboardSparklineQueryKey = (groupId: string,) => {
+    return [
+    `/api/groups/${groupId}/leaderboard/sparkline`
+    ] as const;
+    }
+
+
+export const getGetGroupLeaderboardSparklineQueryOptions = <TData = Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>, TError = ErrorType<void>>(groupId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGroupLeaderboardSparklineQueryKey(groupId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>> = ({ signal }) => getGroupLeaderboardSparkline(groupId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: groupId !== null && groupId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGroupLeaderboardSparklineQueryResult = NonNullable<Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>>
+export type GetGroupLeaderboardSparklineQueryError = ErrorType<void>
+
+
+/**
+ * @summary Snapshot rank history for every group member (last 8 closed weeks)
+ */
+
+export function useGetGroupLeaderboardSparkline<TData = Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>, TError = ErrorType<void>>(
+ groupId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGroupLeaderboardSparkline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGroupLeaderboardSparklineQueryOptions(groupId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -9,6 +9,8 @@ import type { LeaderboardEntry } from './leaderboardEntry';
 
 export interface Leaderboard {
   weekLabel: string;
+  /** End of the current open weekly period (countdown target). Null on private-circle leaderboards. */
+  weekEnd?: Date | null;
   entries: LeaderboardEntry[];
   focused: boolean;
 }

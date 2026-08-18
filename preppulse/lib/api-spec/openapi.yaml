@@ -899,6 +899,22 @@ paths:
                 $ref: "#/components/schemas/Leaderboard"
         "404":
           description: No cohort assigned yet
+  /cohorts/leaderboard/sparkline:
+    get:
+      operationId: getCohortsLeaderboardSparkline
+      tags: [community]
+      summary: Snapshot rank history for every cohort member (last 8 closed weeks)
+      responses:
+        "200":
+          description: Per-member rank sparkline data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardSparklineRow"
+        "404":
+          description: No cohort assigned yet
   /cohorts/feed:
     get:
       operationId: getCohortsFeed
@@ -1075,6 +1091,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupLeaderboard"
+        "404":
+          description: Group not found or not a member
+  /groups/{groupId}/leaderboard/sparkline:
+    get:
+      operationId: getGroupLeaderboardSparkline
+      tags: [community]
+      summary: Snapshot rank history for every group member (last 8 closed weeks)
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-member rank sparkline data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardSparklineRow"
         "404":
           description: Group not found or not a member
   /groups/{groupId}/activity:
@@ -2427,12 +2465,35 @@ components:
           type: number
         isCurrentUser:
           type: boolean
+        rankDelta:
+          type: number
+          nullable: true
+          description: Rank change vs the previous closed week (positive = moved up). Null on private-circle leaderboards and when no prior snapshot exists.
+        streak:
+          type: number
+          description: Consecutive closed weeks ranked in the top N of this leaderboard
+        pb:
+          type: number
+          nullable: true
+          description: Best (lowest) rank ever recorded on this leaderboard, null before the first close
+        gapToNext:
+          type: number
+          nullable: true
+          description: Pulse points needed to overtake the entry above. Null when leading or alone on the board.
+        gapState:
+          type: string
+          enum: [active, leading, empty]
       required: [rank, handle, initials, avatarUrl, score, hours, topics, isCurrentUser]
     Leaderboard:
       type: object
       properties:
         weekLabel:
           type: string
+        weekEnd:
+          type: string
+          format: date-time
+          nullable: true
+          description: End of the current open weekly period (countdown target). Null on private-circle leaderboards.
         entries:
           type: array
           items:
@@ -2440,6 +2501,17 @@ components:
         focused:
           type: boolean
       required: [weekLabel, entries, focused]
+    LeaderboardSparklineRow:
+      type: object
+      properties:
+        userId:
+          type: string
+        ranks:
+          type: array
+          items:
+            type: number
+          description: Snapshot ranks over the last 8 closed weeks, oldest first. Shorter when fewer closes exist.
+      required: [userId, ranks]
 
     CircleMember:
       type: object
@@ -2629,6 +2701,11 @@ components:
       properties:
         weekLabel:
           type: string
+        weekEnd:
+          type: string
+          format: date-time
+          nullable: true
+          description: End of the current open weekly period (countdown target)
         entries:
           type: array
           items:

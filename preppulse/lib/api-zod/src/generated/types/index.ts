@@ -80,6 +80,8 @@ export * from './groupSummaryMyRole';
 export * from './healthStatus';
 export * from './leaderboard';
 export * from './leaderboardEntry';
+export * from './leaderboardEntryGapState';
+export * from './leaderboardSparklineRow';
 export * from './listAdminUsersParams';
 export * from './loginInput';
 export * from './monthHeatmap';

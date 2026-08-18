@@ -1153,6 +1153,7 @@ export const GetLeaderboardQueryParams = zod.object({
 
 export const GetLeaderboardResponse = zod.object({
   "weekLabel": zod.string(),
+  "weekEnd": zod.coerce.date().nullish().describe('End of the current open weekly period (countdown target). Null on private-circle leaderboards.'),
   "entries": zod.array(zod.object({
   "rank": zod.number(),
   "handle": zod.string(),
@@ -1161,7 +1162,12 @@ export const GetLeaderboardResponse = zod.object({
   "score": zod.number(),
   "hours": zod.number(),
   "topics": zod.number(),
-  "isCurrentUser": zod.boolean()
+  "isCurrentUser": zod.boolean(),
+  "rankDelta": zod.number().nullish().describe('Rank change vs the previous closed week (positive = moved up). Null on private-circle leaderboards and when no prior snapshot exists.'),
+  "streak": zod.number().optional().describe('Consecutive closed weeks ranked in the top N of this leaderboard'),
+  "pb": zod.number().nullish().describe('Best (lowest) rank ever recorded on this leaderboard, null before the first close'),
+  "gapToNext": zod.number().nullish().describe('Pulse points needed to overtake the entry above. Null when leading or alone on the board.'),
+  "gapState": zod.enum(['active', 'leading', 'empty']).optional()
 })),
   "focused": zod.boolean()
 })
@@ -1277,6 +1283,7 @@ export const GetCohortsResponse = zod.object({
  */
 export const GetCohortsLeaderboardResponse = zod.object({
   "weekLabel": zod.string(),
+  "weekEnd": zod.coerce.date().nullish().describe('End of the current open weekly period (countdown target). Null on private-circle leaderboards.'),
   "entries": zod.array(zod.object({
   "rank": zod.number(),
   "handle": zod.string(),
@@ -1285,10 +1292,25 @@ export const GetCohortsLeaderboardResponse = zod.object({
   "score": zod.number(),
   "hours": zod.number(),
   "topics": zod.number(),
-  "isCurrentUser": zod.boolean()
+  "isCurrentUser": zod.boolean(),
+  "rankDelta": zod.number().nullish().describe('Rank change vs the previous closed week (positive = moved up). Null on private-circle leaderboards and when no prior snapshot exists.'),
+  "streak": zod.number().optional().describe('Consecutive closed weeks ranked in the top N of this leaderboard'),
+  "pb": zod.number().nullish().describe('Best (lowest) rank ever recorded on this leaderboard, null before the first close'),
+  "gapToNext": zod.number().nullish().describe('Pulse points needed to overtake the entry above. Null when leading or alone on the board.'),
+  "gapState": zod.enum(['active', 'leading', 'empty']).optional()
 })),
   "focused": zod.boolean()
 })
+
+
+/**
+ * @summary Snapshot rank history for every cohort member (last 8 closed weeks)
+ */
+export const GetCohortsLeaderboardSparklineResponseItem = zod.object({
+  "userId": zod.string(),
+  "ranks": zod.array(zod.number()).describe('Snapshot ranks over the last 8 closed weeks, oldest first. Shorter when fewer closes exist.')
+})
+export const GetCohortsLeaderboardSparklineResponse = zod.array(GetCohortsLeaderboardSparklineResponseItem)
 
 
 /**
@@ -1496,6 +1518,7 @@ export const GetGroupLeaderboardParams = zod.object({
 
 export const GetGroupLeaderboardResponse = zod.object({
   "weekLabel": zod.string(),
+  "weekEnd": zod.coerce.date().nullish().describe('End of the current open weekly period (countdown target)'),
   "entries": zod.array(zod.object({
   "rank": zod.number(),
   "handle": zod.string(),
@@ -1504,10 +1527,29 @@ export const GetGroupLeaderboardResponse = zod.object({
   "score": zod.number(),
   "hours": zod.number(),
   "topics": zod.number(),
-  "isCurrentUser": zod.boolean()
+  "isCurrentUser": zod.boolean(),
+  "rankDelta": zod.number().nullish().describe('Rank change vs the previous closed week (positive = moved up). Null on private-circle leaderboards and when no prior snapshot exists.'),
+  "streak": zod.number().optional().describe('Consecutive closed weeks ranked in the top N of this leaderboard'),
+  "pb": zod.number().nullish().describe('Best (lowest) rank ever recorded on this leaderboard, null before the first close'),
+  "gapToNext": zod.number().nullish().describe('Pulse points needed to overtake the entry above. Null when leading or alone on the board.'),
+  "gapState": zod.enum(['active', 'leading', 'empty']).optional()
 })),
   "focused": zod.boolean()
 })
+
+
+/**
+ * @summary Snapshot rank history for every group member (last 8 closed weeks)
+ */
+export const GetGroupLeaderboardSparklineParams = zod.object({
+  "groupId": zod.coerce.string()
+})
+
+export const GetGroupLeaderboardSparklineResponseItem = zod.object({
+  "userId": zod.string(),
+  "ranks": zod.array(zod.number()).describe('Snapshot ranks over the last 8 closed weeks, oldest first. Shorter when fewer closes exist.')
+})
+export const GetGroupLeaderboardSparklineResponse = zod.array(GetGroupLeaderboardSparklineResponseItem)
 
 
 /**

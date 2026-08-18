@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.2.0
  */
+import type { LeaderboardEntryGapState } from './leaderboardEntryGapState';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -15,4 +16,13 @@ export interface LeaderboardEntry {
   hours: number;
   topics: number;
   isCurrentUser: boolean;
+  /** Rank change vs the previous closed week (positive = moved up). Null on private-circle leaderboards and when no prior snapshot exists. */
+  rankDelta?: number | null;
+  /** Consecutive closed weeks ranked in the top N of this leaderboard */
+  streak?: number;
+  /** Best (lowest) rank ever recorded on this leaderboard, null before the first close */
+  pb?: number | null;
+  /** Pulse points needed to overtake the entry above. Null when leading or alone on the board. */
+  gapToNext?: number | null;
+  gapState?: LeaderboardEntryGapState;
 }

@@ -9,6 +9,8 @@ import type { LeaderboardEntry } from './leaderboardEntry';
 
 export interface GroupLeaderboard {
   weekLabel: string;
+  /** End of the current open weekly period (countdown target) */
+  weekEnd?: Date | null;
   entries: LeaderboardEntry[];
   focused: boolean;
 }

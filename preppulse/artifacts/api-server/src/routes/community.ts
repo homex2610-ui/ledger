@@ -23,11 +23,13 @@ import {
   GetCirclesResponse,
   GetCohortsFeedResponse,
   GetCohortsLeaderboardResponse,
+  GetCohortsLeaderboardSparklineResponse,
   GetCohortsResponse,
   GetGroupActivityParams,
   GetGroupActivityResponse,
   GetGroupLeaderboardParams,
   GetGroupLeaderboardResponse,
+  GetGroupLeaderboardSparklineResponse,
   GetGroupParams,
   GetGroupResponse,
   GetLeaderboardResponse,
@@ -42,6 +44,14 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth.js";
 import { COHORT_CAPACITY } from "../lib/cohorts.js";
+import {
+  computeBestRank,
+  computeGap,
+  computeRankDelta,
+  computeStreakFromSnapshots,
+} from "../lib/leaderboard-meta-core.js";
+import { rankHistoryForScope, sparklineRanksForScope } from "../lib/leaderboard-meta.js";
+import { ensureOpenPeriod, type PeriodScopeType } from "../lib/periods.js";
 import {
   cohortUserIdsFor,
   computeStreak,
@@ -59,6 +69,7 @@ router.use(requireAuth);
 
 const CIRCLE_CAPACITY = 25;
 const MAX_CONNECTIONS = CIRCLE_CAPACITY - 1;
+const LEADERBOARD_TOP_N_DEFAULT = 3;
 
 async function groupSummaryFor(userId: string, group: typeof groupsTable.$inferSelect) {
   const memberRows = await db
@@ -81,7 +92,7 @@ async function groupSummaryFor(userId: string, group: typeof groupsTable.$inferS
   };
 }
 
-async function leaderboardFor(userIds: string[], currentUserId: string) {
+async function leaderboardFor(userIds: string[], currentUserId: string, scope?: { scopeType: PeriodScopeType; scopeId: string }) {
   const [profile, profileRows] = await Promise.all([
     db.select().from(profilesTable).where(eq(profilesTable.userId, currentUserId)).limit(1),
     db.select().from(profilesTable).where(inArray(profilesTable.userId, userIds)),
@@ -90,6 +101,8 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
   const visibilityById = new Map(profileRows.map((row) => [row.userId, row.showOnLeaderboard]));
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(userIds);
   const handles = await userHandlesById(userIds);
+  const history = scope ? await rankHistoryForScope(scope.scopeType, scope.scopeId, userIds) : undefined;
+  const period = scope ? await ensureOpenPeriod(scope.scopeType, scope.scopeId) : undefined;
 
   const visibleIds = userIds.filter((id) => {
     if (id === currentUserId) return !myProfile?.focusMode;
@@ -98,12 +111,13 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
 
   let lastScore = Number.NaN;
   let lastRank = 0;
-  const entries = visibleIds
+  const ranked = visibleIds
     .map((id) => {
       const info = handles.get(id) ?? { handle: "unknown", initials: "??", avatarUrl: null };
       const minutes = minutesByUser.get(id) ?? 0;
       const topics = topicsByUser.get(id) ?? 0;
       return {
+        userId: id,
         handle: info.handle,
         initials: info.initials,
         avatarUrl: info.avatarUrl,
@@ -122,7 +136,27 @@ async function leaderboardFor(userIds: string[], currentUserId: string) {
       return { ...entry, rank: lastRank };
     });
 
-  return { entries, focused: Boolean(myProfile?.focusMode) };
+  const entries = ranked.map((entry, index) => {
+    const { userId, ...publicEntry } = entry;
+    if (!scope || !history) return { ...publicEntry, rankDelta: null, streak: 0, pb: null, gapToNext: null, gapState: "empty" };
+    const points = history.get(userId)?.points ?? [];
+    const above = ranked[index - 1];
+    const gap = computeGap(entry.rank, entry.score, index === 0 ? null : above?.score ?? null);
+    return {
+      ...publicEntry,
+      rankDelta: computeRankDelta(entry.rank, points),
+      streak: computeStreakFromSnapshots(points, LEADERBOARD_TOP_N_DEFAULT),
+      pb: computeBestRank(points),
+      gapToNext: gap.gapToNext,
+      gapState: gap.state,
+    };
+  });
+
+  return {
+    entries,
+    focused: Boolean(myProfile?.focusMode),
+    weekEnd: period?.weekEnd,
+  };
 }
 
 interface FeedItem {
@@ -391,13 +425,40 @@ router.get("/cohorts", async (req, res) => {
 });
 
 router.get("/cohorts/leaderboard", async (req, res) => {
-  const memberIds = await cohortUserIdsFor(req.userId);
-  if (!memberIds) {
+  const membership = await db
+    .select({ cohortId: cohortMembersTable.cohortId })
+    .from(cohortMembersTable)
+    .where(eq(cohortMembersTable.userId, req.userId))
+    .limit(1);
+  if (!membership[0]) {
     res.status(404).json({ error: "No study cohort assigned yet" });
     return;
   }
-  const { entries, focused } = await leaderboardFor(memberIds, req.userId);
-  res.json(GetCohortsLeaderboardResponse.parse({ weekLabel: weekLabel(), entries, focused }));
+  const memberIds = await cohortUserIdsFor(req.userId);
+  const { entries, focused, weekEnd } = await leaderboardFor(memberIds ?? [], req.userId, {
+    scopeType: "cohort",
+    scopeId: membership[0].cohortId,
+  });
+  res.json(GetCohortsLeaderboardResponse.parse({ weekLabel: weekLabel(), weekEnd, entries, focused }));
+});
+
+router.get("/cohorts/leaderboard/sparkline", async (req, res) => {
+  const membership = await db
+    .select({ cohortId: cohortMembersTable.cohortId })
+    .from(cohortMembersTable)
+    .where(eq(cohortMembersTable.userId, req.userId))
+    .limit(1);
+  if (!membership[0]) {
+    res.status(404).json({ error: "No study cohort assigned yet" });
+    return;
+  }
+  const memberIds = await cohortUserIdsFor(req.userId);
+  const ranksByUser = await sparklineRanksForScope("cohort", membership[0].cohortId, memberIds ?? []);
+  res.json(
+    GetCohortsLeaderboardSparklineResponse.parse(
+      (memberIds ?? []).map((userId) => ({ userId, ranks: ranksByUser.get(userId) ?? [] })),
+    ),
+  );
 });
 
 router.get("/cohorts/feed", async (req, res) => {
@@ -581,8 +642,28 @@ router.get("/groups/:groupId/leaderboard", async (req, res) => {
     return;
   }
   const memberIds = await groupUserIds(group.id);
-  const { entries, focused } = await leaderboardFor(memberIds, req.userId);
-  res.json(GetGroupLeaderboardResponse.parse({ weekLabel: weekLabel(), entries, focused }));
+  const { entries, focused, weekEnd } = await leaderboardFor(memberIds, req.userId, {
+    scopeType: "group",
+    scopeId: group.id,
+  });
+  res.json(GetGroupLeaderboardResponse.parse({ weekLabel: weekLabel(), weekEnd, entries, focused }));
+});
+
+router.get("/groups/:groupId/leaderboard/sparkline", async (req, res) => {
+  const params = GetGroupLeaderboardParams.parse(req.params);
+  const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
+  const group = rows[0];
+  if (!group || !(await isGroupMember(group.id, req.userId))) {
+    res.status(404).json({ error: "Group not found" });
+    return;
+  }
+  const memberIds = await groupUserIds(group.id);
+  const ranksByUser = await sparklineRanksForScope("group", group.id, memberIds);
+  res.json(
+    GetGroupLeaderboardSparklineResponse.parse(
+      memberIds.map((userId) => ({ userId, ranks: ranksByUser.get(userId) ?? [] })),
+    ),
+  );
 });
 
 router.get("/groups/:groupId/activity", async (req, res) => {
