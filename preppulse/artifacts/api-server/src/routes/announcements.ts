@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { announcementDismissalsTable, announcementsTable, cohortMembersTable, groupMembersTable } from "@workspace/db/schema";
 import { DismissAnnouncementParams, DismissAnnouncementResponse, GetActiveAnnouncementResponse } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth.js";
+import { isUuid } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -81,6 +82,19 @@ router.get("/announcements/active", async (req, res) => {
 
 router.post("/announcements/:announcementId/dismiss", async (req, res) => {
   const { announcementId } = DismissAnnouncementParams.parse(req.params);
+  if (!isUuid(announcementId)) {
+    res.status(404).json({ error: "Announcement not found" });
+    return;
+  }
+  const exists = await db
+    .select({ id: announcementsTable.id })
+    .from(announcementsTable)
+    .where(eq(announcementsTable.id, announcementId))
+    .limit(1);
+  if (!exists[0]) {
+    res.status(404).json({ error: "Announcement not found" });
+    return;
+  }
   await db
     .insert(announcementDismissalsTable)
     .values({ userId: req.userId, announcementId })

@@ -24,7 +24,7 @@ import { recordShareEvent, type ShareEventType } from "../lib/shares-events.js";
 import { computeStreak, studyMinutesBetween } from "../lib/prep-stats.js";
 import { renderShareOgPng } from "../lib/share-og.js";
 import { buildSharePageHtml } from "../lib/share-page.js";
-import { safeTimeZone, startOfDayIn } from "../lib/utils.js";
+import { safeTimeZone, startOfDayIn, clientIpFromRequest } from "../lib/utils.js";
 
 const router: IRouter = Router();
 
@@ -37,12 +37,6 @@ const ogArtifactLimiter = createRateLimiter(60 * 1000, 10);
 const APP_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 const SHARE_TYPE_BY_PATH = { focus: "daily_focus" } as const;
 type ShareType = (typeof SHARE_TYPE_BY_PATH)[keyof typeof SHARE_TYPE_BY_PATH];
-
-function clientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) return forwarded.split(",")[0].trim();
-  return req.socket.remoteAddress ?? "unknown";
-}
 
 async function resolvePublicArtifact(id: string, type: "daily_focus"): Promise<(typeof shareArtifactsTable.$inferSelect) | null> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
@@ -246,7 +240,7 @@ router.post("/shares/:shareId/events", async (req, res) => {
     res.status(400).json({ error: "event must be share_link_opened" });
     return;
   }
-  const limit = openEventsLimiter.check(`open:${clientIp(req)}:${artifactId}`);
+  const limit = openEventsLimiter.check(`open:${clientIpFromRequest(req)}:${artifactId}`);
   if (!limit.ok) {
     res.status(429).json({ error: "Too many events", code: "event_rate_limited" });
     return;
@@ -268,7 +262,7 @@ router.post("/shares/:shareId/events", async (req, res) => {
 });
 
 router.get("/og/share", async (req, res) => {
-  const ipKey = clientIp(req);
+  const ipKey = clientIpFromRequest(req);
   const ipLimit = ogIpLimiter.check(`og:${ipKey}`);
   if (!ipLimit.ok) {
     res.status(429).set("Cache-Control", "no-store").end();

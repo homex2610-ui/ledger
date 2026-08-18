@@ -61,9 +61,17 @@ import { COHORT_CAPACITY } from "../lib/cohorts.js";
 import { invalidateFeatureFlag } from "../lib/feature-flags.js";
 import { getLastHealthz, recentDbErrors, recordDbProbeFailure } from "../lib/health-stats.js";
 import { runWeeklyReset } from "../lib/periods.js";
+import { isUuid } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
+
+/** Responds 400 and returns true when the value is not a well-formed UUID. */
+function rejectInvalidUuid(res: Response, value: unknown): boolean {
+  if (isUuid(value)) return false;
+  res.status(400).json({ error: "Invalid id" });
+  return true;
+}
 
 async function isAdmin(userId: string): Promise<boolean> {
   const rows = await db.select({ isAdmin: profilesTable.isAdmin }).from(profilesTable).where(eq(profilesTable.userId, userId)).limit(1);
@@ -108,7 +116,7 @@ router.get("/admin/stats", async (_req, res) => {
     .from(cohortsTable)
     .leftJoin(cohortMembersTable, eq(cohortMembersTable.cohortId, cohortsTable.id))
     .groupBy(cohortsTable.id)
-    .having(sql`count(${cohortMembersTable.userId}) >= ${COHORT_CAPACITY - 2}`);
+    .having(sql`count(${cohortMembersTable.userId}) >= ${cohortsTable.capacity} - 2`);
   const activeRows = await db
     .select({ id: announcementsTable.id, title: announcementsTable.title, icon: announcementsTable.icon })
     .from(announcementsTable)
@@ -227,17 +235,25 @@ router.get("/admin/health", async (_req, res) => {
     recordDbProbeFailure();
   }
 
-  const [sessionAgg] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(authSessionsTable)
-    .where(gt(authSessionsTable.expiresAt, new Date()));
+  let sessionsOk = false;
+  let sessionCount = 0;
+  try {
+    const [sessionAgg] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(authSessionsTable)
+      .where(gt(authSessionsTable.expiresAt, new Date()));
+    sessionsOk = true;
+    sessionCount = sessionAgg?.count ?? 0;
+  } catch {
+    sessionsOk = false;
+  }
 
   const deploySha = process.env["VERCEL_GIT_COMMIT_SHA"] ?? process.env["GIT_SHA"] ?? null;
 
   res.json(
     GetAdminHealthResponse.parse({
       pgErrors: { ok: pgOk, value: recentDbErrors(15 * 60_000) },
-      activeSessions: { ok: true, value: sessionAgg?.count ?? 0 },
+      activeSessions: { ok: sessionsOk, value: sessionCount },
       lastHealthz: { ok: getLastHealthz() !== null, value: getLastHealthz() },
       lastDeploy: { ok: deploySha !== null, value: deploySha },
     }),
@@ -251,6 +267,20 @@ router.get("/admin/announcements", async (_req, res) => {
 
 router.post("/admin/announcements", async (req, res) => {
   const body = CreateAnnouncementBody.parse(req.body);
+  if (!body.title.trim() || !body.body.trim()) {
+    res.status(400).json({ error: "Title and body are required" });
+    return;
+  }
+  const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+  const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+  if (startsAt && expiresAt && expiresAt <= startsAt) {
+    res.status(400).json({ error: "expiresAt must be after startsAt" });
+    return;
+  }
+  if (body.audienceId && !isUuid(body.audienceId)) {
+    res.status(400).json({ error: "Invalid audience id" });
+    return;
+  }
   const inserted = await db
     .insert(announcementsTable)
     .values({
@@ -260,8 +290,8 @@ router.post("/admin/announcements", async (req, res) => {
       icon: body.icon ?? "megaphone",
       audienceType: body.audienceType ?? "all",
       audienceId: body.audienceId ?? null,
-      startsAt: body.startsAt ? new Date(body.startsAt) : null,
-      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      startsAt,
+      expiresAt,
     })
     .returning();
   res.status(201).json(CreateAnnouncementResponse.parse(inserted[0]));
@@ -269,7 +299,22 @@ router.post("/admin/announcements", async (req, res) => {
 
 router.patch("/admin/announcements/:announcementId", async (req, res) => {
   const { announcementId } = UpdateAnnouncementParams.parse(req.params);
+  if (rejectInvalidUuid(res, announcementId)) return;
   const body = UpdateAnnouncementBody.parse(req.body);
+  if (body.title !== undefined && !body.title.trim()) {
+    res.status(400).json({ error: "Title cannot be empty" });
+    return;
+  }
+  if (body.body !== undefined && !body.body.trim()) {
+    res.status(400).json({ error: "Body cannot be empty" });
+    return;
+  }
+  const startsAt = body.startsAt === undefined ? undefined : body.startsAt ? new Date(body.startsAt) : null;
+  const expiresAt = body.expiresAt === undefined ? undefined : body.expiresAt ? new Date(body.expiresAt) : null;
+  if (startsAt && expiresAt && expiresAt <= startsAt) {
+    res.status(400).json({ error: "expiresAt must be after startsAt" });
+    return;
+  }
   const updated = await db
     .update(announcementsTable)
     .set({
@@ -279,8 +324,8 @@ router.patch("/admin/announcements/:announcementId", async (req, res) => {
       icon: body.icon,
       audienceType: body.audienceType,
       audienceId: body.audienceId === undefined ? undefined : body.audienceId,
-      startsAt: body.startsAt === undefined ? undefined : body.startsAt ? new Date(body.startsAt) : null,
-      expiresAt: body.expiresAt === undefined ? undefined : body.expiresAt ? new Date(body.expiresAt) : null,
+      startsAt,
+      expiresAt,
       updatedAt: new Date(),
     })
     .where(eq(announcementsTable.id, announcementId))
@@ -294,6 +339,7 @@ router.patch("/admin/announcements/:announcementId", async (req, res) => {
 
 router.post("/admin/announcements/:announcementId/toggle", async (req, res) => {
   const { announcementId } = ToggleAnnouncementParams.parse(req.params);
+  if (rejectInvalidUuid(res, announcementId)) return;
   const body = ToggleAnnouncementBody.parse(req.body);
   try {
     await db.execute(sql`select admin_toggle_announcement(${req.userId}::uuid, ${announcementId}::uuid, ${body.enabled})`);
@@ -329,6 +375,7 @@ router.get("/admin/cohorts", async (_req, res) => {
 
 router.get("/admin/cohorts/:cohortId", async (req, res) => {
   const { cohortId } = GetAdminCohortParams.parse(req.params);
+  if (rejectInvalidUuid(res, cohortId)) return;
   const cohortRows = await db.select().from(cohortsTable).where(eq(cohortsTable.id, cohortId)).limit(1);
   if (!cohortRows[0]) {
     res.status(404).json({ error: "Cohort not found" });
@@ -360,6 +407,7 @@ router.get("/admin/cohorts/:cohortId", async (req, res) => {
 
 router.patch("/admin/cohorts/:cohortId", async (req, res) => {
   const { cohortId } = UpdateAdminCohortParams.parse(req.params);
+  if (rejectInvalidUuid(res, cohortId)) return;
   const body = UpdateAdminCohortBody.parse(req.body);
   const existing = await db.select().from(cohortsTable).where(eq(cohortsTable.id, cohortId)).limit(1);
   if (!existing[0]) {
@@ -402,7 +450,9 @@ router.patch("/admin/cohorts/:cohortId", async (req, res) => {
 
 router.post("/admin/cohorts/members/:userId/move", async (req, res) => {
   const { userId } = MoveCohortMemberParams.parse(req.params);
+  if (rejectInvalidUuid(res, userId)) return;
   const body = MoveCohortMemberBody.parse(req.body);
+  if (rejectInvalidUuid(res, body.toCohortId)) return;
   try {
     await db.execute(sql`select admin_move_cohort_member(${req.userId}::uuid, ${userId}::uuid, ${body.toCohortId}::uuid)`);
     res.status(204).end();
@@ -435,6 +485,9 @@ router.get("/admin/users", async (req, res) => {
 });
 
 router.get("/admin/users/export", async (_req, res) => {
+  // Per-user aggregates via correlated scalar subqueries. A single LEFT JOIN
+  // against both session tables would cross-multiply rows (studySessions x
+  // focusSessions per user), inflating counts and sums.
   const rows = await db
     .select({
       id: usersTable.id,
@@ -443,15 +496,13 @@ router.get("/admin/users/export", async (_req, res) => {
       isAdmin: profilesTable.isAdmin,
       createdAt: usersTable.createdAt,
       cohortId: cohortMembersTable.cohortId,
-      sessionCount: sql<number>`count(${studySessionsTable.id})::int`,
-      totalMinutes: sql<number>`coalesce(sum(${studySessionsTable.minutes}), 0)::int`,
-      focusSessionsCompleted: sql<number>`count(${focusSessionsTable.id}) filter (where ${focusSessionsTable.status} = 'completed')::int`,
+      sessionCount: sql<number>`(select count(*)::int from ${studySessionsTable} where ${studySessionsTable.userId} = ${usersTable.id})`,
+      totalMinutes: sql<number>`coalesce((select sum(${studySessionsTable.minutes}) from ${studySessionsTable} where ${studySessionsTable.userId} = ${usersTable.id}), 0)::int`,
+      focusSessionsCompleted: sql<number>`(select count(*)::int from ${focusSessionsTable} where ${focusSessionsTable.userId} = ${usersTable.id} and ${focusSessionsTable.status} = 'completed')`,
     })
     .from(usersTable)
     .leftJoin(profilesTable, eq(profilesTable.userId, usersTable.id))
     .leftJoin(cohortMembersTable, eq(cohortMembersTable.userId, usersTable.id))
-    .leftJoin(studySessionsTable, eq(studySessionsTable.userId, usersTable.id))
-    .leftJoin(focusSessionsTable, eq(focusSessionsTable.userId, usersTable.id))
     .groupBy(usersTable.id, profilesTable.isAdmin, cohortMembersTable.cohortId)
     .orderBy(asc(usersTable.createdAt));
   res.json(ListAdminUsersExportResponse.parse(rows.map((row) => ({ ...row, isAdmin: row.isAdmin ?? false }))));
@@ -459,6 +510,7 @@ router.get("/admin/users/export", async (_req, res) => {
 
 router.get("/admin/users/:userId", async (req, res) => {
   const { userId } = GetAdminUserParams.parse(req.params);
+  if (rejectInvalidUuid(res, userId)) return;
   const userRows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   const profileRows = await db.select().from(profilesTable).where(eq(profilesTable.userId, userId)).limit(1);
   if (!userRows[0]) {
@@ -495,6 +547,7 @@ router.get("/admin/users/:userId", async (req, res) => {
 
 router.post("/admin/users/:userId/set-admin", async (req, res) => {
   const { userId } = SetAdminParams.parse(req.params);
+  if (rejectInvalidUuid(res, userId)) return;
   const body = SetAdminBody.parse(req.body);
   try {
     await db.execute(sql`select admin_set_admin(${req.userId}::uuid, ${userId}::uuid, ${body.isAdmin})`);
@@ -511,6 +564,7 @@ router.post("/admin/users/:userId/set-admin", async (req, res) => {
 
 router.post("/admin/users/:userId/remove", async (req, res) => {
   const { userId } = RemoveAdminUserParams.parse(req.params);
+  if (rejectInvalidUuid(res, userId)) return;
   if (userId === req.userId) {
     res.status(409).json({ error: "You can't remove your own account." });
     return;
@@ -526,21 +580,28 @@ router.post("/admin/users/:userId/remove", async (req, res) => {
     return;
   }
   const target = targetRows[0];
-  if (target.isAdmin) {
-    const [adminRows] = await db.select({ count: sql<number>`count(*)::int` }).from(profilesTable).where(eq(profilesTable.isAdmin, true));
-    if ((adminRows?.count ?? 0) <= 1) {
-      res.status(409).json({ error: "Can't remove the last admin" });
-      return;
+  // The count check and the delete share one transaction; all admin profile
+  // rows are locked first so concurrent removals/demotions serialize and the
+  // last-admin guard cannot be raced past.
+  await db.transaction(async (tx) => {
+    if (target.isAdmin) {
+      await tx.select().from(profilesTable).where(eq(profilesTable.isAdmin, true)).for("update");
+      const [adminRows] = await tx.select({ count: sql<number>`count(*)::int` }).from(profilesTable).where(eq(profilesTable.isAdmin, true));
+      if ((adminRows?.count ?? 0) <= 1) {
+        res.status(409).json({ error: "Can't remove the last admin" });
+        return;
+      }
     }
-  }
-  await db.delete(usersTable).where(eq(usersTable.id, userId));
-  await db.insert(adminAuditLogTable).values({
-    adminId: req.userId,
-    action: "user_remove",
-    targetType: "user",
-    targetId: userId,
-    beforeState: { handle: target.handle, email: target.email, isAdmin: target.isAdmin ?? false },
+    await tx.delete(usersTable).where(eq(usersTable.id, userId));
+    await tx.insert(adminAuditLogTable).values({
+      adminId: req.userId,
+      action: "user_remove",
+      targetType: "user",
+      targetId: userId,
+      beforeState: { handle: target.handle, email: target.email, isAdmin: target.isAdmin ?? false },
+    });
   });
+  if (res.headersSent) return;
   res.status(204).end();
 });
 
@@ -570,6 +631,11 @@ router.post("/admin/pulse-adjustments", async (req, res) => {
   const body = CreatePulseAdjustmentBody.parse(req.body);
   if (!body.reason?.trim()) {
     res.status(400).json({ error: "A reason is required for pulse adjustments" });
+    return;
+  }
+  if (rejectInvalidUuid(res, body.userId)) return;
+  if (!Number.isInteger(body.amount) || body.amount < -1000 || body.amount > 1000) {
+    res.status(400).json({ error: "Adjustment must be a whole number between -1000 and 1000 minutes" });
     return;
   }
   const targetRows = await db.select({ id: usersTable.id, handle: usersTable.handle }).from(usersTable).where(eq(usersTable.id, body.userId)).limit(1);
@@ -650,6 +716,7 @@ router.post("/admin/exclusions", async (req, res) => {
 
 router.delete("/admin/exclusions/:userId", async (req, res) => {
   const { userId } = RemoveLeaderboardExclusionParams.parse(req.params);
+  if (rejectInvalidUuid(res, userId)) return;
   const existing = await db
     .select({ reason: leaderboardExclusionsTable.reason })
     .from(leaderboardExclusionsTable)
@@ -693,8 +760,16 @@ router.post("/admin/periods/reset", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.get("/admin/audit", async (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 50, 200);
-  const before = typeof req.query.before === "string" ? new Date(req.query.before) : undefined;
+  const rawLimit = Number(req.query.limit);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+  const beforeValue = req.query.before;
+  const before = typeof beforeValue === "string" && beforeValue.length > 0 && !Number.isNaN(Date.parse(beforeValue))
+    ? new Date(beforeValue)
+    : undefined;
+  if (typeof beforeValue === "string" && beforeValue.length > 0 && !before) {
+    res.status(400).json({ error: "before must be a valid ISO date" });
+    return;
+  }
   const rows = await db
     .select()
     .from(adminAuditLogTable)

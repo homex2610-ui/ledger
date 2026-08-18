@@ -1,5 +1,5 @@
-import { Router, type IRouter } from "express";
-import { and, desc, eq, gte, gt, ilike, inArray, or } from "drizzle-orm";
+import { Router, type IRouter, type Response } from "express";
+import { and, desc, eq, gte, gt, ilike, inArray, lt, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   circleConnectionsTable,
@@ -67,10 +67,17 @@ import {
   userHandlesById,
   weeklyPulseForUsers,
 } from "../lib/prep-stats.js";
-import { generateInviteCode, safeTimeZone, startOfDay, toISODate, weekLabel } from "../lib/utils.js";
+import { generateInviteCode, isUuid, safeTimeZone, startOfDay, startOfWeek, toISODate, weekLabel } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
+
+/** Responds 400 and returns true when the value is not a well-formed UUID. */
+function rejectInvalidUuid(res: Response, value: unknown): boolean {
+  if (isUuid(value)) return false;
+  res.status(400).json({ error: "Invalid id" });
+  return true;
+}
 
 const CIRCLE_CAPACITY = 25;
 const MAX_CONNECTIONS = CIRCLE_CAPACITY - 1;
@@ -106,7 +113,16 @@ async function leaderboardFor(
     db.select().from(profilesTable).where(eq(profilesTable.userId, currentUserId)).limit(1),
     db.select().from(profilesTable).where(inArray(profilesTable.userId, userIds)),
     db.select().from(leaderboardExclusionsTable).where(inArray(leaderboardExclusionsTable.userId, userIds)),
-    db.select().from(pulseAdjustmentsTable).where(inArray(pulseAdjustmentsTable.userId, userIds)),
+    db
+      .select()
+      .from(pulseAdjustmentsTable)
+      .where(
+        and(
+          inArray(pulseAdjustmentsTable.userId, userIds),
+          gte(pulseAdjustmentsTable.createdAt, window?.from ?? startOfWeek()),
+          lt(pulseAdjustmentsTable.createdAt, window?.to ?? new Date(startOfWeek().getTime() + 7 * 86_400_000)),
+        ),
+      ),
   ]);
   const myProfile = profile[0];
   const visibilityById = new Map(profileRows.map((row) => [row.userId, row.showOnLeaderboard]));
@@ -379,6 +395,7 @@ router.post("/circles/connect", async (req, res) => {
 
 router.delete("/circles/:userId", async (req, res) => {
   const params = RemoveConnectionParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.userId)) return;
   if (params.userId === req.userId) {
     res.status(400).json({ error: "Cannot remove yourself" });
     return;
@@ -586,7 +603,12 @@ router.post("/groups/join", async (req, res) => {
     .where(and(eq(groupMembersTable.groupId, group.id), eq(groupMembersTable.userId, req.userId)))
     .limit(1);
   if (!already[0]) {
-    await db.insert(groupMembersTable).values({ groupId: group.id, userId: req.userId, role: "member" });
+    // PK (groupId, userId) makes this insert idempotent even when two join
+    // requests race; the conflict is ignored rather than surfacing a 500.
+    await db
+      .insert(groupMembersTable)
+      .values({ groupId: group.id, userId: req.userId, role: "member" })
+      .onConflictDoNothing();
   }
   res.json(JoinGroupByCodeResponse.parse(await groupSummaryFor(req.userId, group)));
 });
@@ -602,6 +624,7 @@ router.get("/groups/discover", async (req, res) => {
 
 router.get("/groups/:groupId", async (req, res) => {
   const params = GetGroupParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group || !(await isGroupMember(group.id, req.userId))) {
@@ -625,6 +648,7 @@ router.get("/groups/:groupId", async (req, res) => {
 
 router.patch("/groups/:groupId", async (req, res) => {
   const params = UpdateGroupParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   const body = UpdateGroupBody.parse(req.body);
 
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
@@ -647,6 +671,7 @@ router.patch("/groups/:groupId", async (req, res) => {
 
 router.delete("/groups/:groupId", async (req, res) => {
   const params = DeleteGroupParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group || group.ownerId !== req.userId) {
@@ -659,6 +684,7 @@ router.delete("/groups/:groupId", async (req, res) => {
 
 router.post("/groups/:groupId/leave", async (req, res) => {
   const params = LeaveGroupParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group) {
@@ -686,6 +712,7 @@ router.post("/groups/:groupId/leave", async (req, res) => {
 
 router.get("/groups/:groupId/leaderboard", async (req, res) => {
   const params = GetGroupLeaderboardParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
     res.status(403).json({ error: "feature_disabled" });
     return;
@@ -706,6 +733,7 @@ router.get("/groups/:groupId/leaderboard", async (req, res) => {
 
 router.get("/groups/:groupId/leaderboard/sparkline", async (req, res) => {
   const params = GetGroupLeaderboardParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   if (!(await isFeatureEnabled(FEATURE_LEADERBOARD_WEEKLY))) {
     res.status(403).json({ error: "feature_disabled" });
     return;
@@ -727,6 +755,7 @@ router.get("/groups/:groupId/leaderboard/sparkline", async (req, res) => {
 
 router.get("/groups/:groupId/activity", async (req, res) => {
   const params = GetGroupActivityParams.parse(req.params);
+  if (rejectInvalidUuid(res, params.groupId)) return;
   const rows = await db.select().from(groupsTable).where(eq(groupsTable.id, params.groupId)).limit(1);
   const group = rows[0];
   if (!group || !(await isGroupMember(group.id, req.userId))) {

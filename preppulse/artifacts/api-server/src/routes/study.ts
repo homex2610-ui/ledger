@@ -20,9 +20,13 @@ import {
 import { subjectAllowedForTrack } from "@workspace/exam-config";
 import { requireAuth } from "../lib/auth.js";
 import { afterSessionRecorded } from "../lib/shares-events.js";
+import { isUuid } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
+
+const MAX_PLANNED_MINUTES = 24 * 60;
+const MAX_ACTUAL_MINUTES = 24 * 60;
 
 function toFocusShape(session: typeof focusSessionsTable.$inferSelect) {
   return {
@@ -60,6 +64,10 @@ router.get("/focus-sessions", async (req, res) => {
 
 router.post("/focus-sessions", async (req, res) => {
   const body = CreateFocusSessionBody.parse(req.body);
+  if (!Number.isInteger(body.plannedMinutes) || body.plannedMinutes < 1 || body.plannedMinutes > MAX_PLANNED_MINUTES) {
+    res.status(400).json({ error: `plannedMinutes must be between 1 and ${MAX_PLANNED_MINUTES}` });
+    return;
+  }
 
   if (body.taskId) {
     const owned = await db
@@ -86,6 +94,16 @@ router.post("/focus-sessions", async (req, res) => {
 
 router.patch("/focus-sessions/:focusSessionId", async (req, res) => {
   const params = UpdateFocusSessionParams.parse(req.params);
+  if (!isUuid(params.focusSessionId)) {
+    res.status(404).json({ error: "Focus session not found" });
+    return;
+  }
+  const body = UpdateFocusSessionBody.parse(req.body);
+
+  if (body.actualMinutes !== undefined && (!Number.isInteger(body.actualMinutes) || body.actualMinutes < 0 || body.actualMinutes > MAX_ACTUAL_MINUTES)) {
+    res.status(400).json({ error: `actualMinutes must be between 0 and ${MAX_ACTUAL_MINUTES}` });
+    return;
+  }
 
   const existing = await db
     .select()
@@ -97,20 +115,26 @@ router.patch("/focus-sessions/:focusSessionId", async (req, res) => {
     return;
   }
 
-  const body = UpdateFocusSessionBody.parse(req.body);
-
   if (existing[0].status !== "active") {
     res.status(400).json({ error: "This focus session is already finished" });
     return;
   }
 
+  // Conditional update (WHERE status = 'active') makes completion atomic:
+  // two concurrent PATCHes cannot both pass the check above and log two
+  // study sessions. If another request finished it first, nothing changes.
   const updated = (
     await db
       .update(focusSessionsTable)
       .set({ status: body.status, actualMinutes: body.actualMinutes, endedAt: new Date() })
-      .where(and(eq(focusSessionsTable.id, params.focusSessionId), eq(focusSessionsTable.userId, req.userId)))
+      .where(and(eq(focusSessionsTable.id, params.focusSessionId), eq(focusSessionsTable.userId, req.userId), eq(focusSessionsTable.status, "active")))
       .returning()
   )[0];
+
+  if (!updated) {
+    res.status(400).json({ error: "This focus session is already finished" });
+    return;
+  }
 
   if (updated.taskId && body.status === "completed") {
     await db.update(tasksTable).set({ status: "done", completedAt: new Date() }).where(eq(tasksTable.id, updated.taskId));
@@ -161,6 +185,10 @@ router.post("/tasks", async (req, res) => {
 
 router.patch("/tasks/:taskId", async (req, res) => {
   const params = UpdateTaskParams.parse(req.params);
+  if (!isUuid(params.taskId)) {
+    res.status(404).json({ error: "Task not found" });
+    return;
+  }
   const body = UpdateTaskBody.parse(req.body);
 
   const existing = await db
@@ -196,6 +224,10 @@ router.patch("/tasks/:taskId", async (req, res) => {
 
 router.delete("/tasks/:taskId", async (req, res) => {
   const params = DeleteTaskParams.parse(req.params);
+  if (!isUuid(params.taskId)) {
+    res.status(404).json({ error: "Task not found" });
+    return;
+  }
   const existing = await db
     .select({ id: tasksTable.id })
     .from(tasksTable)

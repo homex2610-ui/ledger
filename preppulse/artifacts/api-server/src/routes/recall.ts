@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { subjectAllowedForTrack } from "@workspace/exam-config";
 import { requireAuth } from "../lib/auth.js";
-import { clamp, parseISODate, toISODate } from "../lib/utils.js";
+import { clamp, isUuid, parseISODate, toISODate } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -107,6 +107,10 @@ router.post("/cards", async (req, res) => {
 
 router.patch("/cards/:cardId", async (req, res) => {
   const params = UpdateCardParams.parse(req.params);
+  if (!isUuid(params.cardId)) {
+    res.status(404).json({ error: "Card not found" });
+    return;
+  }
   const body = UpdateCardBody.parse(req.body);
 
   const existing = await db
@@ -139,6 +143,10 @@ router.patch("/cards/:cardId", async (req, res) => {
 
 router.delete("/cards/:cardId", async (req, res) => {
   const params = DeleteCardParams.parse(req.params);
+  if (!isUuid(params.cardId)) {
+    res.status(404).json({ error: "Card not found" });
+    return;
+  }
   const existing = await db
     .select({ id: cardsTable.id })
     .from(cardsTable)
@@ -154,6 +162,10 @@ router.delete("/cards/:cardId", async (req, res) => {
 
 router.post("/cards/:cardId/review", async (req, res) => {
   const params = ReviewCardParams.parse(req.params);
+  if (!isUuid(params.cardId)) {
+    res.status(404).json({ error: "Card not found" });
+    return;
+  }
   const body = ReviewCardBody.parse(req.body);
 
   const existing = await db

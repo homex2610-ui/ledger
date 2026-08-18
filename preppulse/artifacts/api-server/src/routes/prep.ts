@@ -50,7 +50,7 @@ import {
   toProfileShape,
   userHandlesById,
 } from "../lib/prep-stats.js";
-import { addDays, safeTimeZone, startOfDay, startOfWeek } from "../lib/utils.js";
+import { addDays, isUuid, safeTimeZone, startOfDay, startOfWeek } from "../lib/utils.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -326,6 +326,10 @@ router.post("/tests", async (req, res) => {
 });
 
 router.patch("/tests/:id", async (req, res) => {
+  if (!isUuid(req.params.id)) {
+    res.status(404).json({ error: "Test attempt not found", code: "not_found" });
+    return;
+  }
   const body = UpdateTestAttemptBody.parse(req.body);
   const existing = (
     await db
@@ -411,6 +415,10 @@ router.patch("/tests/:id", async (req, res) => {
 });
 
 router.delete("/tests/:id", async (req, res) => {
+  if (!isUuid(req.params.id)) {
+    res.status(404).json({ error: "Test attempt not found", code: "not_found" });
+    return;
+  }
   const deleted = await db
     .delete(testAttemptsTable)
     .where(and(eq(testAttemptsTable.userId, req.userId), eq(testAttemptsTable.id, req.params.id)))

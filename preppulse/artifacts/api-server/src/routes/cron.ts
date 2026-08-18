@@ -4,18 +4,18 @@ import { runWeeklyReset } from "../lib/periods.js";
 
 const router: IRouter = Router();
 
+/**
+ * Vercel Cron auth: when CRON_SECRET is set, Vercel automatically sends it as
+ * `Authorization: Bearer <secret>` on every cron invocation. The check fails
+ * closed when the secret is missing. The user-agent / x-vercel-cron-schedule
+ * headers are NOT used as proof of identity — they are plain request headers
+ * and can be spoofed by any caller.
+ */
 function isAuthorized(req: { headers: Record<string, string | string[] | undefined> }): boolean {
   const secret = process.env["CRON_SECRET"];
-  if (secret) {
-    const header = req.headers["authorization"];
-    if (typeof header === "string" && header === `Bearer ${secret}`) return true;
-  }
-  const userAgent = req.headers["user-agent"];
-  return (
-    typeof userAgent === "string" &&
-    userAgent === "vercel-cron/1.0" &&
-    req.headers["x-vercel-cron-schedule"] !== undefined
-  );
+  if (!secret) return false;
+  const header = req.headers["authorization"];
+  return typeof header === "string" && header === `Bearer ${secret}`;
 }
 
 /**

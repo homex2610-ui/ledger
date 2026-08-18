@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cohortMembersTable,
@@ -161,7 +161,13 @@ export async function closeWeeklyPeriod(periodId: string): Promise<ClosePeriodRe
   const adjustmentRows = await db
     .select()
     .from(pulseAdjustmentsTable)
-    .where(inArray(pulseAdjustmentsTable.userId, visibleRows.map((row) => row.userId)));
+    .where(
+      and(
+        inArray(pulseAdjustmentsTable.userId, visibleRows.map((row) => row.userId)),
+        gte(pulseAdjustmentsTable.createdAt, period.weekStart),
+        lt(pulseAdjustmentsTable.createdAt, period.weekEnd),
+      ),
+    );
   const adjustmentByUser = new Map<string, number>();
   for (const row of adjustmentRows) adjustmentByUser.set(row.userId, (adjustmentByUser.get(row.userId) ?? 0) + row.amount);
 

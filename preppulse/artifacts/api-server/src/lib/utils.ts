@@ -139,3 +139,33 @@ export function addDays(date: Date, days: number): Date {
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** True when the value is a well-formed UUID (invalid ids would otherwise 500 at the DB layer). */
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+interface ClientIpSource {
+  headers: Record<string, string | string[] | undefined>;
+  socket?: { remoteAddress?: string };
+}
+
+/**
+ * The client IP for rate limiting. With `trust proxy` set, `req.ip` reflects
+ * the leftmost X-Forwarded-For entry, which a client can forge. The rightmost
+ * entry is the one appended by the immediate trusted proxy (Vercel's edge),
+ * so it is the trustworthy value; the socket address is the last resort.
+ */
+export function clientIpFromRequest(req: ClientIpSource): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.length > 0) {
+    const entries = forwarded
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (entries.length > 0) return entries[entries.length - 1];
+  }
+  return req.socket?.remoteAddress ?? "unknown";
+}

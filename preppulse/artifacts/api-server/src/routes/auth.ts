@@ -18,12 +18,15 @@ import {
 import { createSession, currentTokenHash, destroySession, hashPassword, requireAuth, setSessionCookie, verifyPassword, clearSessionCookie } from "../lib/auth.js";
 import { toProfileShape } from "../lib/prep-stats.js";
 import { createUserWithProfile, uniqueHandle } from "../lib/oauth/users.js";
-import { isUniqueViolation } from "../lib/utils.js";
+import { isUniqueViolation, clientIpFromRequest } from "../lib/utils.js";
 import { sendRecoveryEmail, supabaseAuthConfigured, verifyRecoveryToken } from "../lib/supabase-auth.js";
 
 const AUTH_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60);
 const PROD_ORIGIN = "https://ledger-pi-topaz.vercel.app";
+// Caps bound the CPU cost of scrypt hashing on attacker-supplied input.
+const PASSWORD_MAX_LENGTH = 72;
+const LOGIN_PASSWORD_MAX_LENGTH = 256;
 
 // PARTIAL FIX (documented limitation): the bucket store is an in-memory Map
 // on globalThis. This app runs on Vercel as a serverless function
@@ -39,7 +42,7 @@ export function authRateLimit(req: Request, res: Response, next: NextFunction): 
   const now = Date.now();
   const windowStart = now - AUTH_WINDOW_MS;
   const buckets = (globalThis as { __authBuckets?: Map<string, number[]> }).__authBuckets ??= new Map<string, number[]>();
-  const ip = req.ip ?? req.socket?.remoteAddress ?? "unknown";
+  const ip = clientIpFromRequest(req);
   const bucket = (buckets.get(ip) ?? []).filter((timestamp) => timestamp > windowStart);
   if (bucket.length >= AUTH_MAX_REQUESTS) {
     res.status(429).json({ error: "Too many attempts. Wait a few minutes and try again.", code: "rate_limited" });
@@ -58,6 +61,10 @@ router.post("/signup", authRateLimit, async (req, res) => {
   const email = body.email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+  if (body.password.length > PASSWORD_MAX_LENGTH) {
+    res.status(400).json({ error: "Password is too long" });
     return;
   }
 
@@ -100,6 +107,10 @@ router.post("/signup", authRateLimit, async (req, res) => {
 
 router.post("/login", authRateLimit, async (req, res) => {
   const body = LogInBody.parse(req.body);
+  if (body.password.length > LOGIN_PASSWORD_MAX_LENGTH) {
+    res.status(401).json({ error: "Email or password is incorrect" });
+    return;
+  }
 
   const rows = await db.select().from(usersTable).where(eq(usersTable.email, body.email.trim().toLowerCase())).limit(1);
   const user = rows[0];
@@ -166,6 +177,10 @@ router.post("/forgot-password", authRateLimit, async (req, res) => {
 
 router.post("/reset-password", authRateLimit, async (req, res) => {
   const body = ResetPasswordBody.parse(req.body);
+  if (body.newPassword.length > PASSWORD_MAX_LENGTH) {
+    res.status(400).json({ error: "Password is too long" });
+    return;
+  }
   if (!supabaseAuthConfigured()) {
     res.status(503).json({ error: "Password recovery is temporarily unavailable" });
     return;

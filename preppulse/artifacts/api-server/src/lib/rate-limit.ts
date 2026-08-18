@@ -10,9 +10,19 @@ export interface RateLimiter {
 
 export function createRateLimiter(windowMs: number, max: number): RateLimiter {
   const hits = new Map<string, number[]>();
+  let lastSweep = Date.now();
+
+  function sweep(now: number): void {
+    if (now - lastSweep < windowMs) return;
+    lastSweep = now;
+    for (const [key, timestamps] of hits) {
+      if (timestamps[timestamps.length - 1] < now - windowMs) hits.delete(key);
+    }
+  }
 
   function check(key: string): RateLimitResult {
     const now = Date.now();
+    sweep(now);
     const windowStart = now - windowMs;
     const recent = (hits.get(key) ?? []).filter((t) => t > windowStart);
     if (recent.length >= max) {

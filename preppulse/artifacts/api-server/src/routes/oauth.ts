@@ -13,7 +13,6 @@ import { loadOAuthConfig } from "../lib/oauth/config.js";
 import { logger } from "../lib/logger.js";
 import {
   AlreadyLinkedError,
-  countSignInMethods,
   linkOAuthToUser,
   OAuthLinkConflictError,
   resolveOrCreateOAuthUser,
@@ -284,13 +283,29 @@ router.delete("/oauth/:provider", requireAuth, async (req, res) => {
     return;
   }
 
-  const signInMethods = await countSignInMethods(req.userId);
-  if (signInMethods <= 1) {
-    res.status(409).json({ error: "You need another sign-in method before disconnecting this one.", code: "last_auth_method" });
-    return;
-  }
+  // Count-and-delete happen in one transaction with both the user row and
+  // the user's oauth rows locked, so two concurrent disconnects cannot both
+  // pass the last-method check and leave the account with zero sign-in paths.
+  const outcome = await db.transaction(async (tx) => {
+    const userLock = await tx.select({ id: usersTable.id, passwordHash: usersTable.passwordHash }).from(usersTable).where(eq(usersTable.id, req.userId)).limit(1).for("update");
+    const lockedUser = userLock[0];
+    if (!lockedUser) {
+      res.status(401).json({ error: "Not signed in" });
+      return "responded" as const;
+    }
+    const oauthRows = await tx.select({ id: oauthAccountsTable.id }).from(oauthAccountsTable).where(eq(oauthAccountsTable.userId, req.userId)).for("update");
 
-  await db.delete(oauthAccountsTable).where(eq(oauthAccountsTable.id, account.id));
+    const signInMethods = (lockedUser.passwordHash ? 1 : 0) + oauthRows.length;
+    if (signInMethods <= 1) {
+      res.status(409).json({ error: "You need another sign-in method before disconnecting this one.", code: "last_auth_method" });
+      return "responded" as const;
+    }
+
+    await tx.delete(oauthAccountsTable).where(eq(oauthAccountsTable.id, account.id));
+    return "deleted" as const;
+  });
+
+  if (outcome === "responded") return;
   res.status(204).end();
 });
 
