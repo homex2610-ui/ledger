@@ -6,8 +6,8 @@
   "outputDirectory": "artifacts/prep-pulse/dist/public",
   "rewrites": [
     {
-      "source": "/share/:type/:id",
-      "destination": "/api/share-page/:type/:id"
+      "source": "/share/(.*)",
+      "destination": "/api/[...slug]?...slug=$1"
     },
     {
       "source": "/api/(.*)",

@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -36,6 +36,7 @@ const ogArtifactLimiter = createRateLimiter(60 * 1000, 10);
 
 const APP_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 const SHARE_TYPE_BY_PATH = { focus: "daily_focus" } as const;
+type ShareType = (typeof SHARE_TYPE_BY_PATH)[keyof typeof SHARE_TYPE_BY_PATH];
 
 function clientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -311,7 +312,20 @@ router.get("/share-page/:type/:shareId", async (req, res) => {
     res.status(404).json({ error: "Share not found" });
     return;
   }
-  const artifact = await resolvePublicArtifact(req.params.shareId, type);
+  await serveSharePage(type, req.params.shareId, req, res);
+});
+
+router.get("/focus/:shareId", async (req, res) => {
+  await serveSharePage(SHARE_TYPE_BY_PATH["focus"], req.params.shareId, req, res);
+});
+
+async function serveSharePage(
+  type: ShareType,
+  shareId: string,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const artifact = await resolvePublicArtifact(shareId, type);
   const payload = payloadOf(artifact);
   if (!artifact || !payload) {
     res.status(404).set("Cache-Control", "no-store").json({ error: "Share not found" });
@@ -329,7 +343,7 @@ router.get("/share-page/:type/:shareId", async (req, res) => {
         variant: artifact.variant === "B" ? "B" : "A",
       }),
     );
-});
+}
 
 export default router;
 
