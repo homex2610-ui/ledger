@@ -37,7 +37,13 @@ function toBody(data: AnnouncementCreate): AnnouncementCreate {
 }
 
 function toLocalInput(iso: string | null | undefined): string {
-  return iso ? iso.slice(0, 16) : '';
+  // datetime-local inputs expect LOCAL wall-clock time — the stored value is
+  // UTC ISO, so slicing it would show (and round-trip) the wrong clock time.
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function toIso(input: string): string | null {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   Check,
   Eye,
@@ -59,9 +59,17 @@ export default function Recall() {
   const [flipped, setFlipped] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ front: '', back: '', subject: subjects[0] });
+  const busyRef = useRef(false);
+  busyRef.current = reviewCard.isPending;
 
   const current = queueIndex < dueCards.length ? dueCards[queueIndex] : undefined;
   const queueProgress = dueCards.length > 0 ? Math.round((queueIndex / dueCards.length) * 100) : 100;
+
+  // If the due queue shrinks underneath us (another device reviewed a card, a
+  // card was deleted), never fall off the end or skip ahead of the list.
+  useEffect(() => {
+    setQueueIndex((index) => Math.min(index, dueCards.length));
+  }, [dueCards.length]);
 
   useEffect(() => {
     if (!current) return;
@@ -96,14 +104,21 @@ export default function Recall() {
   };
 
   const submitReview = (grade: CardReviewInputGrade) => {
-    if (!current) return;
+    // Guard against double-record: a held key repeats keydown, and rapid
+    // clicks can land before the disabled flag re-renders.
+    if (!current || busyRef.current) return;
+    busyRef.current = true;
     reviewCard.mutate(
       { cardId: current.id, data: { grade } },
       {
         onSuccess: () => {
+          busyRef.current = false;
           setFlipped(false);
           setQueueIndex((index) => index + 1);
           refresh();
+        },
+        onError: () => {
+          busyRef.current = false;
         },
       },
     );

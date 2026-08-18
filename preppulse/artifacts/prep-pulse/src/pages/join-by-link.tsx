@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { getGetCirclesQueryKey, getGetLeaderboardQueryKey, useConnectByCode } from '@workspace/api-client-react';
@@ -11,14 +11,19 @@ export default function JoinByLink() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const connect = useConnectByCode();
+  // The effect must fire exactly once per visit — StrictMode double-invokes
+  // effects in dev, and remounts (e.g. back-navigation) must not re-join.
+  const ranRef = useRef(false);
 
   useEffect(() => {
+    if (ranRef.current) return;
     const code = (params.code ?? '').trim().toUpperCase();
     if (!code) {
       try { sessionStorage.setItem(JOIN_ERROR_KEY, 'That invite link is missing its code.'); } catch { /* ignore */ }
       navigate('/compete');
       return;
     }
+    ranRef.current = true;
     connect.mutate(
       { data: { code } },
       {

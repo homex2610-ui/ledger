@@ -26,7 +26,12 @@ function loadGisScript(): Promise<void> {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google sign-in'));
+    script.onerror = () => {
+      // Don't cache the failure: a transient network error must not brick
+      // every future mount of the Google button for the page lifetime.
+      gisScriptPromise = null;
+      reject(new Error('Failed to load Google sign-in'));
+    };
     document.head.appendChild(script);
   });
   return gisScriptPromise;
@@ -58,6 +63,10 @@ export function GoogleSignInButton({ clientId, onCredential, disabled }: { clien
   const onCredentialRef = useRef(onCredential);
   onCredentialRef.current = onCredential;
 
+  // The container div stays mounted in every branch so renderButton always
+  // has a target — the previous version swapped it out for a spinner while
+  // disabled, which made renderButton no-op and left an empty div (the
+  // "vanished" Google button) once `disabled` flipped back.
   useEffect(() => {
     if (!clientId) return;
     ensureGisCsrfToken();
@@ -86,16 +95,21 @@ export function GoogleSignInButton({ clientId, onCredential, disabled }: { clien
     };
   }, [clientId]);
 
-  if (disabled) {
-    return <div className="flex h-11 w-full items-center justify-center rounded-xl bg-secondary/60" aria-busy="true"><LoaderCircle size={16} className="animate-spin text-muted-foreground" /></div>;
-  }
   if (!clientId) {
     return <GoogleOAuthButton label="Continue with Google" onStart={() => undefined} />;
   }
   if (status === 'error') {
     return <div className="flex h-11 w-full items-center justify-center rounded-xl border border-border/70 bg-secondary/30 text-xs font-semibold text-muted-foreground">Google sign-in could not load.</div>;
   }
-  return <div className="flex justify-center" ref={containerRef} data-testid="google-signin-button" />;
+  return (
+    <div className="relative flex min-h-11 justify-center" ref={containerRef} data-testid="google-signin-button">
+      {(disabled || status === 'loading') && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-secondary/60" aria-busy="true">
+          <LoaderCircle size={16} className="animate-spin text-muted-foreground" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function DiscordOAuthButton({ label, onStart, disabled }: { label: string; onStart: () => void; disabled?: boolean }) {

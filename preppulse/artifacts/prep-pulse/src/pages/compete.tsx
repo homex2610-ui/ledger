@@ -190,7 +190,9 @@ function useRankDelta(handle: string | undefined, rank: number | undefined): num
     try {
       const raw = localStorage.getItem(PREV_RANK_KEY);
       const prev = raw ? JSON.parse(raw) as { handle?: string; rank?: number } : null;
-      const next = prev && prev.handle === handle && typeof prev.rank === 'number' && prev.rank !== rank ? prev.rank - rank : null;
+      // delta = rank - prev.rank: negative means the rank number fell = the
+      // user moved UP (display maps negative to "up N").
+      const next = prev && prev.handle && prev.handle.toLowerCase() === handle.toLowerCase() && typeof prev.rank === 'number' && prev.rank !== rank ? rank - prev.rank : null;
       localStorage.setItem(PREV_RANK_KEY, JSON.stringify({ handle, rank }));
       rankDeltaByHandle.set(handle, next);
       setDelta(next);

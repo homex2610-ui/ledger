@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Check, ChevronRight, Copy, Download, Eye, EyeOff, Focus, Link2, LoaderCircle, Moon, MoonStar, Rocket, Share2, Sun, Timer, Trash2, Unplug, UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError, exportMyData, getGetAuthDiscordAuthorizeQueryKey, getGetCardStatsQueryKey, getGetDashboardQueryKey, getGetMeQueryKey, getGetProfileQueryKey, getGetSyllabusSummaryQueryKey, getListCardsQueryKey, getListTestAttemptsQueryKey, getListTopicsQueryKey, useChangePassword, useDeleteMyAccount, useDisconnectOauthProvider, useGetAuthDiscordAuthorize, useGetAuthOauthProviders, useGetProfile, useOauthLink, useUpdateProfile, type AuthResponse, type ProfileUpdate } from '@workspace/api-client-react';
@@ -25,6 +25,8 @@ export default function Settings() {
   const discordAuthorizeLink = useGetAuthDiscordAuthorize({ link: true }, { query: { queryKey: getGetAuthDiscordAuthorizeQueryKey({ link: true }), enabled: false } });
   const profile = query.data;
   const [values, setValues] = useState<ProfileUpdate>({ focusMode: false, showOnLeaderboard: true });
+  const valuesRef = useRef<ProfileUpdate>(values);
+  valuesRef.current = values;
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export default function Settings() {
   const [theme, setTheme] = useState<AppTheme>(getStoredTheme());
   const [template, setTemplate] = useState<AppTemplate>(getStoredTemplate());
   const [reminderPrefs, setReminderPrefs] = useState<ReminderPrefs>(loadReminderPrefs());
+  const [sharePrompts, setSharePrompts] = useState<boolean>(sharePromptsEnabled());
   const updateReminderPrefs = (next: Partial<ReminderPrefs>) => {
     const merged = { ...reminderPrefs, ...next };
     setReminderPrefs(merged);
@@ -52,7 +55,10 @@ export default function Settings() {
   useEffect(() => { if (profile) setValues({ focusMode: profile.focusMode, showOnLeaderboard: profile.showOnLeaderboard }); }, [profile]);
 
   const update = (next: Partial<ProfileUpdate>) => {
-    const merged = { ...values, ...next };
+    // Merge against the latest values (ref), not the render's snapshot, so
+    // rapid successive toggles can't clobber each other's changes in flight.
+    const merged = { ...valuesRef.current, ...next };
+    valuesRef.current = merged;
     setValues(merged);
     updateProfile.mutate({ data: merged }, {
       onSuccess: (saved) => {
@@ -152,9 +158,9 @@ export default function Settings() {
       {
         onSuccess: () => { providers.refetch(); },
         onError: (err) => {
-          const message = err instanceof Error ? err.message : '';
-          if (message.includes('another sign-in method')) setOauthError('You need another sign-in method before disconnecting this one.');
-          else setOauthError('Could not disconnect. Try again.');
+          const data = err instanceof ApiError ? (err.data as { error?: string; code?: string } | null) : null;
+          if (data?.code === 'last_auth_method') setOauthError('You need another sign-in method before disconnecting this one.');
+          else setOauthError(data?.error ?? 'Could not disconnect. Try again.');
         },
       },
     );
@@ -313,7 +319,7 @@ export default function Settings() {
         <SectionTitle eyebrow="Sharing" title="Daily focus cards" action={<Share2 size={17} className="text-primary" />} />
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">After a 25+ minute focus block, Ledger can offer to turn your day into a shareable card. Nothing is shared without your tap.</p>
         <div className="mt-2 border-t border-border/70">
-          <SettingRow icon={<Share2 size={16} />} title="Share prompts" detail="Ask whether you'd like to share after a qualifying focus block." enabled={sharePromptsEnabled()} onToggle={() => setSharePromptsEnabled(!sharePromptsEnabled())} testId="switch-share-prompts" />
+          <SettingRow icon={<Share2 size={16} />} title="Share prompts" detail="Ask whether you'd like to share after a qualifying focus block." enabled={sharePrompts} onToggle={() => { const next = !sharePrompts; setSharePrompts(next); setSharePromptsEnabled(next); }} testId="switch-share-prompts" />
         </div>
       </Card>
 

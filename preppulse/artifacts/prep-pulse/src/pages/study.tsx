@@ -15,6 +15,7 @@ import { BarStrip, Ring } from '@/components/mini-charts';
 import { SharePrompt } from '@/components/share-prompt';
 import { ShareSheet } from '@/components/share-sheet';
 import { sharePromptsEnabled } from '@/lib/share';
+import { browserTimeZone } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/version';
 
 const RITUAL_STEPS = ['Phone in another room.', 'This block is for one thing.', 'When it ends, write one sentence.'];
@@ -24,7 +25,7 @@ const QUICK_MINUTES = [25, 45, 60, 90];
 export default function Study() {
   const queryClient = useQueryClient();
   const createSession = useCreateStudySession();
-  const dashboardQuery = useGetDashboard(undefined, { query: { queryKey: getGetDashboardQueryKey(), refetchInterval: 60_000 } });
+  const dashboardQuery = useGetDashboard({ tz: browserTimeZone() }, { query: { queryKey: getGetDashboardQueryKey({ tz: browserTimeZone() }), refetchInterval: 60_000 } });
   const tasksQuery = useListTasks();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
@@ -162,7 +163,7 @@ export default function Study() {
   };
 
   const logSession = (minutes: number, source: StudySessionInputSource, sessionSubject: string, callback?: () => void) => {
-    createSession.mutate({ data: { subject: sessionSubject, minutes, source } }, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() }); callback?.(); setLogged(true); if (minutes >= 25 && sharePromptsEnabled()) setPromptMinutes(minutes); } });
+    createSession.mutate({ data: { subject: sessionSubject, minutes, source } }, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey({ tz: browserTimeZone() }) }); callback?.(); setLogged(true); if (minutes >= 25 && sharePromptsEnabled()) setPromptMinutes(minutes); } });
   };
   const startSharing = () => {
     if (!promptMinutes) return;
