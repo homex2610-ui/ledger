@@ -3,6 +3,12 @@
   "framework": null,
   "buildCommand": "pnpm run build",
   "outputDirectory": "artifacts/prep-pulse/dist/public",
+  "crons": [
+    {
+      "path": "/api/cron/weekly-reset",
+      "schedule": "0 0 * * 1"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

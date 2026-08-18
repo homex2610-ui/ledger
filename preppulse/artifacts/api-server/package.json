@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/lib/shares-core.test.ts"
+    "test": "tsx --test src/lib/shares-core.test.ts src/lib/periods-core.test.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

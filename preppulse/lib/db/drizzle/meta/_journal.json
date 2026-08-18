@@ -43,6 +43,13 @@
       "when": 1786977946747,
       "tag": "0005_hot_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787037118486,
+      "tag": "0006_thankful_mandroid",
+      "breakpoints": true
     }
   ]
 }

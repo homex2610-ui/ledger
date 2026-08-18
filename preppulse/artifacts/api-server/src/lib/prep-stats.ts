@@ -215,9 +215,12 @@ export async function toProfileShape(userId: string) {
 // Circle + group pulse helpers (minutes + topics moved over the current week)
 // ---------------------------------------------------------------------------
 
-export async function weeklyPulseForUsers(userIds: string[]) {
-  const weekStart = startOfWeek();
-  const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+export async function weeklyPulseForUsers(
+  userIds: string[],
+  window?: { from: Date; to: Date },
+) {
+  const weekStart = window?.from ?? startOfWeek();
+  const weekEnd = window?.to ?? new Date(weekStart.getTime() + 7 * 86_400_000);
 
   const sessionRows = await db
     .select({
