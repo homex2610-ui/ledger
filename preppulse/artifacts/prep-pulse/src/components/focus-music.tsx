@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { CloudRain, Headphones, Link2, Music2, Pause, Play, Volume2, X } from 'lucide-react';
+import { CloudRain, Headphones, Link2, Music2, Pause, Play, Sparkles, Trees, Volume2, Waves, X } from 'lucide-react';
 import { extractYouTubeId, loadFocusMusicUrl, saveFocusMusicUrl } from '@/lib/focus-music';
 import { Card, SectionTitle } from '@/components/ui-elements';
+import { SOUNDSCAPE_PRESETS, soundscapeEngine, type SoundscapeType } from '@/lib/ambient-soundscapes';
 
-const PRESETS = [
-  { label: 'Lo-fi', id: 'jfKfPfyJRdk', icon: Headphones },
-  { label: 'Rain', id: '7klljnYrw4k', icon: CloudRain },
+const YT_PRESETS = [
+  { label: 'Lo-fi Beats', id: 'jfKfPfyJRdk', icon: Headphones },
+  { label: 'Ambient Piano', id: 'lTRiuFIWV54', icon: Music2 },
 ];
 
 const VOLUME_KEY = 'pp-focus-music-volume';
@@ -65,17 +66,42 @@ function loadYouTubeApi(): Promise<void> {
   });
 }
 
+function getSoundscapeIcon(iconName: string) {
+  switch (iconName) {
+    case 'Sparkles':
+      return Sparkles;
+    case 'CloudRain':
+      return CloudRain;
+    case 'Waves':
+      return Waves;
+    case 'Trees':
+      return Trees;
+    default:
+      return Sparkles;
+  }
+}
+
 export function FocusMusic() {
+  const [activeTab, setActiveTab] = useState<'soundscapes' | 'youtube'>('soundscapes');
+  const [activeSoundscape, setActiveSoundscape] = useState<SoundscapeType | null>(null);
+
   const [draft, setDraft] = useState(loadFocusMusicUrl());
   const [videoId, setVideoId] = useState<string | null>(() => extractYouTubeId(loadFocusMusicUrl()));
   const [title, setTitle] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
+  const [ytPlaying, setYtPlaying] = useState(false);
   const [volume, setVolume] = useState(loadVolume);
   const [error, setError] = useState<string | null>(null);
+
   const playerRef = useRef<YTPlayer | null>(null);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
 
+  // Sync volume to native engine on mount
+  useEffect(() => {
+    soundscapeEngine.setVolume(volume / 100);
+  }, [volume]);
+
+  // YouTube Player setup
   useEffect(() => {
     if (!videoId) return;
     let cancelled = false;
@@ -89,12 +115,20 @@ export function FocusMusic() {
         events: {
           onReady: (event) => {
             playerRef.current = event.target;
-            try { event.target.setVolume(volumeRef.current); } catch { /* player not ready */ }
-            setPlaying(true);
-            try { event.target.playVideo(); } catch { /* autoplay may be blocked */ }
+            try {
+              event.target.setVolume(volumeRef.current);
+            } catch {
+              /* player not ready */
+            }
+            setYtPlaying(true);
+            try {
+              event.target.playVideo();
+            } catch {
+              /* autoplay may be blocked */
+            }
           },
-          onStateChange: (event) => setPlaying(event.data === YT_STATES.PLAYING),
-          onError: () => setError('This audio isn\u2019t available right now \u2014 try another preset or a fresh link.'),
+          onStateChange: (event) => setYtPlaying(event.data === YT_STATES.PLAYING),
+          onError: () => setError("This audio isn't available right now — try another preset or a fresh link."),
         },
       });
     });
@@ -105,7 +139,29 @@ export function FocusMusic() {
     };
   }, [videoId]);
 
+  const handleSoundscapeToggle = (type: SoundscapeType) => {
+    if (activeSoundscape === type) {
+      soundscapeEngine.stop();
+      setActiveSoundscape(null);
+    } else {
+      // Pause YouTube if playing
+      if (playerRef.current && ytPlaying) {
+        try {
+          playerRef.current.pauseVideo();
+        } catch {
+          /* no-op */
+        }
+      }
+      soundscapeEngine.play(type);
+      setActiveSoundscape(type);
+    }
+  };
+
   const playId = (id: string) => {
+    // Stop native soundscape if active
+    soundscapeEngine.stop();
+    setActiveSoundscape(null);
+
     setError(null);
     const watch = `https://www.youtube.com/watch?v=${id}`;
     saveFocusMusicUrl(watch);
@@ -113,9 +169,13 @@ export function FocusMusic() {
     setVideoId(id);
     setTitle(null);
     void fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(watch)}&format=json`)
-      .then((response) => (response.ok ? response.json() as Promise<{ title?: string }> : null))
-      .then((data) => { if (data?.title) setTitle(data.title); })
-      .catch(() => { return; });
+      .then((response) => (response.ok ? (response.json() as Promise<{ title?: string }>) : null))
+      .then((data) => {
+        if (data?.title) setTitle(data.title);
+      })
+      .catch(() => {
+        return;
+      });
   };
 
   const apply = () => {
@@ -127,79 +187,244 @@ export function FocusMusic() {
     playId(id);
   };
 
-  const toggle = () => {
+  const toggleYt = () => {
     const player = playerRef.current;
     if (!player) return;
     try {
-      if (playing) player.pauseVideo();
-      else player.playVideo();
-    } catch { /* player not ready */ }
+      if (ytPlaying) player.pauseVideo();
+      else {
+        soundscapeEngine.stop();
+        setActiveSoundscape(null);
+        player.playVideo();
+      }
+    } catch {
+      /* player not ready */
+    }
   };
 
   const changeVolume = (next: number) => {
     setVolume(next);
-    try { localStorage.setItem(VOLUME_KEY, String(next)); } catch { return; }
-    try { playerRef.current?.setVolume(next); } catch { /* player not ready */ }
+    try {
+      localStorage.setItem(VOLUME_KEY, String(next));
+    } catch {
+      return;
+    }
+    soundscapeEngine.setVolume(next / 100);
+    try {
+      playerRef.current?.setVolume(next);
+    } catch {
+      /* player not ready */
+    }
   };
 
-  const clear = () => {
+  const clearYt = () => {
     saveFocusMusicUrl('');
     setDraft('');
     setVideoId(null);
     setTitle(null);
-    setPlaying(false);
+    setYtPlaying(false);
     setError(null);
   };
 
+  const isAudioActive = activeSoundscape !== null || (videoId !== null && ytPlaying);
+
   return (
     <Card className="p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-5">
-      <SectionTitle eyebrow="Background music" title="Focus audio" action={playing && videoId ? <span className="pp-eq"><span /><span /><span /><span /></span> : <Music2 size={18} className="text-primary" />} />
-      <p className="text-sm leading-relaxed text-muted-foreground">Pick a soundscape, or paste any YouTube link — the audio keeps playing while you focus.</p>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {PRESETS.map(({ label, id, icon: Icon }) => (
-          <button key={label} type="button" onClick={() => playId(id)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-all duration-150 ${videoId === id ? 'border-accent/30 bg-accent/12 text-accent' : 'border-border/80 text-muted-foreground hover:border-accent/40 hover:text-foreground'}`} data-testid={`focus-preset-${label.toLowerCase()}`}><Icon size={12} />{label}</button>
-        ))}
+      <SectionTitle
+        eyebrow="Ambient Sound & Music"
+        title="Focus Audio"
+        action={
+          isAudioActive ? (
+            <span className="pp-soundwave text-primary" aria-label="Audio playing">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : (
+            <Music2 size={18} className="text-primary" />
+          )
+        }
+      />
+
+      <div className="mb-4 flex gap-1 rounded-xl border border-border/70 bg-secondary/50 p-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('soundscapes')}
+          className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition-colors ${
+            activeTab === 'soundscapes' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Synthesized Waves
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('youtube')}
+          className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition-colors ${
+            activeTab === 'youtube' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          YouTube & Lo-Fi
+        </button>
       </div>
-      <div className="mt-3 flex gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Link2 size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') apply(); }}
-            placeholder="https://www.youtube.com/watch?v=…"
-            className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-3 focus:ring-primary/20"
-            data-testid="input-focus-music"
-          />
-        </div>
-        <button type="button" onClick={apply} className="shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground transition-transform duration-150 hover:-translate-y-0.5" data-testid="button-focus-music-apply">Play</button>
-      </div>
-      {error && <p className="mt-2 text-xs font-semibold text-accent" data-testid="focus-music-error">{error}</p>}
-      {videoId ? (
-        <div className="mt-3">
-          <div className="relative aspect-video overflow-hidden rounded-xl border border-border/70 bg-sidebar" data-testid="iframe-focus-music">
-            <div id="focus-music-player" className="absolute inset-0" />
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <button type="button" onClick={toggle} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[10px] font-bold text-primary-foreground transition-[transform,background-color] duration-150 hover:-translate-y-0.5" data-testid="button-focus-music-toggle">
-              <span className="relative inline-flex h-[11px] w-[11px] items-center justify-center">
-                <Play size={11} fill="currentColor" className={`absolute transition-all duration-200 ease-out ${playing ? 'scale-50 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100'}`} />
-                <Pause size={11} className={`absolute transition-all duration-200 ease-out ${playing ? 'scale-100 rotate-0 opacity-100' : 'scale-50 -rotate-90 opacity-0'}`} />
-              </span>
-              {playing ? 'Pause' : 'Play'}
-            </button>
-            <p className="min-w-0 flex-1 truncate text-center font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground/70">{title ?? 'Saved on this device'}</p>
-            <button type="button" onClick={clear} className="flex items-center gap-1 rounded-lg border border-border/80 px-2.5 py-1.5 text-[10px] font-bold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" data-testid="button-focus-music-clear"><X size={11} /> Remove</button>
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <Volume2 size={13} className="shrink-0 text-muted-foreground/60" />
-            <input type="range" min={0} max={100} value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="h-1.5 w-full cursor-pointer accent-[hsl(var(--primary))]" aria-label="Music volume" data-testid="input-focus-music-volume" />
-            <span className="w-7 shrink-0 text-right font-mono-custom text-[9px] text-muted-foreground/60">{volume}</span>
+
+      {activeTab === 'soundscapes' ? (
+        <div>
+          <p className="text-xs text-muted-foreground">
+            Zero-latency procedural soundscapes synthesized directly in your browser. 100% offline.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {SOUNDSCAPE_PRESETS.map((preset) => {
+              const Icon = getSoundscapeIcon(preset.iconName);
+              const isActive = activeSoundscape === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSoundscapeToggle(preset.id)}
+                  className={`flex flex-col items-start rounded-xl border p-3 text-left transition-all ${
+                    isActive
+                      ? 'border-primary bg-primary/10 text-primary shadow-sm ring-2 ring-primary/20'
+                      : 'border-border/80 bg-card hover:border-primary/40 hover:bg-secondary/40'
+                  }`}
+                  data-testid={`soundscape-preset-${preset.id}`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <Icon size={16} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+                    {isActive && (
+                      <span className="flex h-2 w-2 rounded-full bg-primary animate-ping" />
+                    )}
+                  </div>
+                  <span className="mt-2 text-xs font-bold text-foreground">{preset.label}</span>
+                  <span className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                    {preset.detail}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : (
-        <p className="mt-3 text-xs text-muted-foreground/70">Nothing set yet — music stays on this device only.</p>
+        <div>
+          <p className="text-xs text-muted-foreground">
+            Play relaxing lo-fi streams or paste any YouTube study playlist.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {YT_PRESETS.map(({ label, id, icon: Icon }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => playId(id)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-all duration-150 ${
+                  videoId === id
+                    ? 'border-accent/30 bg-accent/12 text-accent'
+                    : 'border-border/80 text-muted-foreground hover:border-accent/40 hover:text-foreground'
+                }`}
+                data-testid={`focus-preset-${label.toLowerCase()}`}
+              >
+                <Icon size={12} />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Link2 size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') apply();
+                }}
+                placeholder="https://www.youtube.com/watch?v=…"
+                className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-3 focus:ring-primary/20"
+                data-testid="input-focus-music"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={apply}
+              className="shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground transition-transform duration-150 hover:-translate-y-0.5"
+              data-testid="button-focus-music-apply"
+            >
+              Play
+            </button>
+          </div>
+
+          {error && (
+            <p className="mt-2 text-xs font-semibold text-accent" data-testid="focus-music-error">
+              {error}
+            </p>
+          )}
+
+          {videoId && (
+            <div className="mt-3">
+              <div
+                className="relative aspect-video overflow-hidden rounded-xl border border-border/70 bg-sidebar"
+                data-testid="iframe-focus-music"
+              >
+                <div id="focus-music-player" className="absolute inset-0" />
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={toggleYt}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[10px] font-bold text-primary-foreground transition-[transform,background-color] duration-150 hover:-translate-y-0.5"
+                  data-testid="button-focus-music-toggle"
+                >
+                  <span className="relative inline-flex h-[11px] w-[11px] items-center justify-center">
+                    <Play
+                      size={11}
+                      fill="currentColor"
+                      className={`absolute transition-all duration-200 ease-out ${
+                        ytPlaying ? 'scale-50 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100'
+                      }`}
+                    />
+                    <Pause
+                      size={11}
+                      className={`absolute transition-all duration-200 ease-out ${
+                        ytPlaying ? 'scale-100 rotate-0 opacity-100' : 'scale-50 -rotate-90 opacity-0'
+                      }`}
+                    />
+                  </span>
+                  {ytPlaying ? 'Pause' : 'Play'}
+                </button>
+                <p className="min-w-0 flex-1 truncate text-center font-mono-custom text-[9px] uppercase tracking-[.14em] text-muted-foreground/70">
+                  {title ?? 'Saved on this device'}
+                </p>
+                <button
+                  type="button"
+                  onClick={clearYt}
+                  className="flex items-center gap-1 rounded-lg border border-border/80 px-2.5 py-1.5 text-[10px] font-bold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  data-testid="button-focus-music-clear"
+                >
+                  <X size={11} /> Remove
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
+
+      {/* Volume slider */}
+      <div className="mt-4 flex items-center gap-2 border-t border-border/60 pt-3">
+        <Volume2 size={14} className="shrink-0 text-muted-foreground" />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={volume}
+          onChange={(event) => changeVolume(Number(event.target.value))}
+          className="h-1.5 w-full cursor-pointer accent-[hsl(var(--primary))]"
+          aria-label="Master volume"
+          data-testid="input-focus-music-volume"
+        />
+        <span className="w-8 shrink-0 text-right font-mono-custom text-[10px] text-muted-foreground">
+          {volume}%
+        </span>
+      </div>
     </Card>
   );
 }
