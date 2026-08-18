@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 
-const OAUTH_NOTICE_KEY = 'pp-oauth-notice';
-
 export function useOauthQueryNotice(): string | null {
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -11,12 +9,6 @@ export function useOauthQueryNotice(): string | null {
     const reason = params.get('reason');
     if (!oauth) return;
     window.history.replaceState({}, '', window.location.pathname);
-    try {
-      if (sessionStorage.getItem(OAUTH_NOTICE_KEY) === oauth) return;
-      sessionStorage.setItem(OAUTH_NOTICE_KEY, oauth);
-    } catch {
-      /* storage unavailable */
-    }
     const providerLabel = provider === 'google' ? 'Google' : provider === 'discord' ? 'Discord' : null;
     if (oauth === 'error') {
       if (provider === 'discord' && reason === 'state_mismatch') setNotice('Discord sign-in expired. Go back and try again.');
