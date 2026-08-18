@@ -1,11 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Share2, X } from 'lucide-react';
 import { useRecordSharePromptEvent } from '@workspace/api-client-react';
 
 export function SharePrompt({ minutes, onShare, onDismiss }: { minutes: number; onShare: () => void; onDismiss: () => void }) {
   const recordEvent = useRecordSharePromptEvent();
+  const recordedRef = useRef(false);
 
   useEffect(() => {
+    if (recordedRef.current) return;
+    recordedRef.current = true;
     recordEvent.mutate({ data: { event: 'share_prompt_viewed' } });
   }, [recordEvent]);
 
