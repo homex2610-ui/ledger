@@ -172,6 +172,49 @@ export async function computeStreak(userId: string, timeZone?: string): Promise<
   return streak;
 }
 
+/**
+ * Batched streak computation — one query for every user instead of N.
+ * Same semantics as computeStreak (consecutive studied days ending today or
+ * yesterday), applied per user.
+ */
+export async function streaksForUsers(userIds: string[], timeZone?: string): Promise<Map<string, number>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({ userId: studySessionsTable.userId, createdAt: studySessionsTable.createdAt })
+    .from(studySessionsTable)
+    .where(inArray(studySessionsTable.userId, userIds))
+    .orderBy(desc(studySessionsTable.createdAt));
+  const daysByUser = new Map<string, Set<string>>();
+  for (const row of rows) {
+    let days = daysByUser.get(row.userId);
+    if (!days) {
+      days = new Set();
+      daysByUser.set(row.userId, days);
+    }
+    days.add(dayKeyIn(row.createdAt, timeZone));
+  }
+  const today = dayKeyIn(new Date(), timeZone);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = dayKeyIn(yesterday, timeZone);
+  const out = new Map<string, number>();
+  for (const userId of userIds) {
+    const days = daysByUser.get(userId);
+    if (!days || days.size === 0 || (!days.has(today) && !days.has(yesterdayKey))) {
+      out.set(userId, 0);
+      continue;
+    }
+    let streak = 0;
+    const cursor = new Date();
+    while (days.has(dayKeyIn(cursor, timeZone))) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    out.set(userId, streak);
+  }
+  return out;
+}
+
 export async function weeklyTopics(userId: string): Promise<number> {
   const weekStart = startOfWeek();
   const rows = await db

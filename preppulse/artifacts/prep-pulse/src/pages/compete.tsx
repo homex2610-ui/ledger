@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronDown, Clock, Copy, Crown, EyeOff, Flame, Link2, Lock, Search, ShieldCheck, Sparkles, Timer, Trash2, Trophy, UserRoundPlus, Users } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -35,6 +35,7 @@ import {
 import { Card, EmptyState, ErrorState, LoadingBlock, SectionTitle, StatTile } from '@/components/ui-elements';
 import { Avatar, avatarColorFor } from '@/components/avatar';
 import { browserTimeZone } from '@/lib/utils';
+import { formatMinutes } from '@/lib/format-duration';
 
 type Tab = 'board' | 'groups';
 type Scope = 'private' | 'cohort';
@@ -55,7 +56,7 @@ function weekRange(label: string): string {
   const match = /^([A-Z][a-z]+) (\d+) - ([A-Z][a-z]+) (\d+)$/.exec(label);
   if (!match) return label;
   const [, monthA, dayA, monthB, dayB] = match;
-  return monthA === monthB ? `${monthA} ${dayA} â€“ ${dayB}` : `${monthA} ${dayA} â€“ ${monthB} ${dayB}`;
+  return monthA === monthB ? `${monthA} ${dayA} – ${dayB}` : `${monthA} ${dayA} – ${monthB} ${dayB}`;
 }
 
 export default function Compete() {
@@ -266,10 +267,10 @@ function CountdownBadge({ weekEnd }: { weekEnd?: string | null }) {
 
 function DeltaBadge({ delta }: { delta: number | null }) {
   if (delta === null) return null;
-  if (delta === 0) return <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Same rank as last week">â€“</span>;
+  if (delta === 0) return <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Same rank as last week">–</span>;
   return (
     <span className={`shrink-0 text-[10px] font-bold ${delta > 0 ? 'text-success' : 'text-accent'}`} title={delta > 0 ? `Up ${delta} from last week` : `Down ${-delta} from last week`}>
-      {delta > 0 ? 'â†‘' : 'â†“'}{Math.abs(delta)}
+      {delta > 0 ? '↑' : '↓'}{Math.abs(delta)}
     </span>
   );
 }
@@ -319,7 +320,7 @@ function CelebrationCard({ rank, meta, weekEnd }: { rank: number; meta: BoardMet
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-500"><Crown size={17} /></div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-extrabold text-foreground">{leading ? "You're leading this week's board!" : `You're in the top ${rank} this week!`}</p>
-          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{leading ? "Keep showing up â€” the board resets next week." : "Keep showing up â€” the board resets next week."}</p>
+          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{leading ? "Keep showing up — the board resets next week." : "Keep showing up — the board resets next week."}</p>
         </div>
         <button type="button" onClick={() => setDismissed(true)} className="rounded-lg px-2 py-1 text-xs font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label="Dismiss celebration">Dismiss</button>
       </div>
@@ -362,7 +363,7 @@ function RankedBoard({ entries, weekLabel, weekEnd, focused, streakByHandle, ava
           )}
         </div>
       </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">Ranked by time studied â€” focus-mode sessions and study-room timers count; manual logs don't.</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">Ranked by time studied — focus-mode sessions and study-room timers count; manual logs don't.</p>
       {entries.length ? (
         <>
           <Podium entries={entries.slice(0, 3)} streakByHandle={streakByHandle} avatarColorByHandle={avatarColorByHandle} metaByHandle={metaByHandle} />
@@ -418,11 +419,11 @@ function PodiumCard({ entry, tier, streak, avatarClass, meta, animate, delay }: 
       <p className="font-mono-custom text-[10px] uppercase tracking-[.16em] text-muted-foreground">Rank {String(entry.rank).padStart(2, '0')}</p>
       <Avatar src={entry.avatarUrl} initials={entry.initials} className={`mx-auto mt-3 h-14 w-14 text-base md:h-16 md:w-16 md:text-lg ${avatarClass ?? 'bg-secondary text-foreground'}`} title={entry.handle} />
       <p className="mt-2.5 truncate text-sm font-bold text-foreground md:mt-3 md:text-base">{entry.handle}{entry.isCurrentUser && <span className="ml-1.5 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}</p>
-      <p className="mt-0.5 text-lg font-extrabold text-foreground md:mt-1 md:text-2xl" title="Minutes studied this period - focus sessions and timers count, manual logs don't">{score}</p>
+      <p className="mt-0.5 text-lg font-extrabold text-foreground md:mt-1 md:text-2xl" title="Time studied this period - focus sessions and timers count, manual logs don't">{formatMinutes(score)}</p>
       <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground md:mt-1">
         {streak > 0 && <span className={`inline-flex items-center gap-0.5 ${tier.flame} ${isFirst ? 'flame-breathe' : ''}`} title={`${streak}-day streak`}><Flame size={11} fill="currentColor" />{streak}</span>}
         {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : null}
-        <span>{entry.hours}h Â· {entry.topics} topics</span>
+        <span>{entry.topics} topics moved</span>
       </p>
       <div className="mt-1 flex items-center justify-center gap-2">
         <DeltaBadge delta={meta?.rankDelta ?? null} />
@@ -451,7 +452,7 @@ function RankedList({ entries, streakByHandle, avatarColorByHandle, metaByHandle
   const lastRank = ranked.length ? ranked[ranked.length - 1].rank : 0;
   const nextRank = extras.length ? extras[0].rank : 0;
   const delta = useRankDelta(self?.handle, self?.rank);
-  const toggleLabel = nextRank === lastRank ? `Show ${ranked.length} more` : `Show ranks ${nextRank}â€“${lastRank}`;
+  const toggleLabel = nextRank === lastRank ? `Show ${ranked.length} more` : `Show ranks ${nextRank}–${lastRank}`;
   const toggleClass = 'mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/60 px-4 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
   return (
@@ -515,17 +516,17 @@ function RankedRow({ entry, streakByHandle, avatarColorByHandle, meta, sparkline
           {entry.isCurrentUser && <span className="ml-2 font-mono-custom text-[9px] uppercase tracking-[.14em] text-primary">you</span>}
           {isOwner && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-mono-custom text-[9px] font-bold uppercase text-primary" data-testid={`owner-badge-${entry.handle}`}>Owner</span>}
         </p>
-        <p className="text-[11px] text-muted-foreground">{entry.hours}h Â· {entry.topics} topics</p>
+        <p className="text-[11px] text-muted-foreground">{entry.topics} topics moved</p>
       </div>
       {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
-        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? 'â†‘' : 'â†“'}{Math.abs(delta)}</span>
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
       )}
       {sparkline && <Sparkline ranks={sparkline} />}
       {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streakByHandle.get(entry.handle)} />}
       {removable && onRemove && (
         <button type="button" onClick={() => onRemove(removable.userId)} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" aria-label={`Remove ${entry.handle}`} data-testid={`button-remove-circle-${entry.handle}`}><Trash2 size={14} /></button>
       )}
-      <span className="text-sm font-extrabold text-foreground" title="Minutes studied this period - focus sessions and timers count, manual logs don't">{entry.score}</span>
+      <span className="text-sm font-extrabold text-foreground" title="Time studied this period - focus sessions and timers count, manual logs don't">{formatMinutes(entry.score)}</span>
     </div>
   );
 }
@@ -549,11 +550,11 @@ function PinnedRow({ entry, streak, delta, meta, sparkline, avatarClass }: { ent
         <p className="text-[11px] font-semibold text-accent">Your rank</p>
       </div>
       {meta ? <DeltaBadge delta={meta.rankDelta} /> : delta !== undefined && delta !== null && delta !== 0 && (
-        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? 'â†‘' : 'â†“'}{Math.abs(delta)}</span>
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground" title="Rank change since your last visit">{delta < 0 ? '↑' : '↓'}{Math.abs(delta)}</span>
       )}
       {sparkline && <Sparkline ranks={sparkline} />}
       {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : <StreakChip streak={streak} />}
-      <span className="text-sm font-extrabold text-foreground" title="Minutes studied this period - focus sessions and timers count, manual logs don't">{entry.score}</span>
+      <span className="text-sm font-extrabold text-foreground" title="Time studied this period - focus sessions and timers count, manual logs don't">{formatMinutes(entry.score)}</span>
     </div>
   );
 }
@@ -577,13 +578,13 @@ function BoardStats({ entries, streak, meta }: { entries: LeaderboardEntry[]; st
   const tiles: { label: string; value: string; detail: string; accent: boolean }[] = [];
   if (streak && streak > 0) tiles.push({ label: 'Streak', value: `${streak}d`, detail: 'days studied in a row', accent: false });
   if (self) {
-    tiles.push({ label: 'Minutes this week', value: `${self.score}`, detail: 'focus + timer time, no manual logs', accent: true });
+    tiles.push({ label: 'Time this week', value: formatMinutes(self.score), detail: 'focus + timer time, no manual logs', accent: true });
     if (meta) {
       const deltaDetail = meta.rankDelta === null || meta.rankDelta === 0 ? 'holding steady vs last week' : meta.rankDelta > 0 ? `up ${meta.rankDelta} vs last week` : `down ${-meta.rankDelta} vs last week`;
       tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail: deltaDetail, accent: false });
       if (meta.pb) tiles.push({ label: 'Personal best', value: `#${meta.pb}`, detail: 'best rank ever on this board', accent: false });
       if (meta.gapState === 'leading') tiles.push({ label: 'Board lead', value: 'Top spot', detail: 'you are rank 1 this week', accent: false });
-      else if (meta.gapState === 'active' && meta.gapToNext !== null) tiles.push({ label: 'To the next rank', value: `${meta.gapToNext}`, detail: 'studied minutes away', accent: false });
+      else if (meta.gapState === 'active' && meta.gapToNext !== null) tiles.push({ label: 'To the next rank', value: formatMinutes(meta.gapToNext), detail: 'studied time away', accent: false });
     } else {
       const detail = delta === null || delta === 0 ? 'holding steady' : delta < 0 ? `up ${-delta} since your last visit` : `down ${delta} since your last visit`;
       tiles.push({ label: 'Your rank', value: `#${self.rank}`, detail, accent: false });
@@ -679,14 +680,14 @@ function PrivateTab() {
           <h2 className="text-sm font-extrabold text-foreground">Your private circle</h2>
           <p className="font-mono-custom text-xs font-bold tabular-nums text-muted-foreground" data-testid="circle-member-count">{memberCount} / {capacity}</p>
         </div>
-        <p className="mt-1 text-xs font-medium leading-relaxed text-muted-foreground">There's no public directory and no search by name â€” only people you connect with directly see your profile.</p>
+        <p className="mt-1 text-xs font-medium leading-relaxed text-muted-foreground">There's no public directory and no search by name — only people you connect with directly see your profile.</p>
         <form onSubmit={submitConnect} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input value={code} onChange={(event) => setCode(event.target.value)} disabled={isFull} placeholder={isFull ? 'Circle full' : 'e.g. 7K4M2X'} className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-4 font-mono-custom text-sm uppercase tracking-[.12em] outline-none focus:ring-3 focus:ring-primary/25 disabled:opacity-60" data-testid="input-circle-code" />
-          <button type="submit" disabled={isFull || connect.isPending || code.trim().length < 6} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50" data-testid="button-connect-circle">{connect.isPending ? 'Addingâ€¦' : 'Add friend'}</button>
+          <button type="submit" disabled={isFull || connect.isPending || code.trim().length < 6} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50" data-testid="button-connect-circle">{connect.isPending ? 'Adding…' : 'Add friend'}</button>
         </form>
         {error && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-connect-error">{error}</p>}
         {joined && <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-success" data-testid="circle-connect-success"><Check size={13} /> Member added to your circle.</p>}
-        {isFull && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-full-notice">Your circle is full â€” this private circle can have up to {capacity} members.</p>}
+        {isFull && <p className="mt-2 text-xs font-semibold text-accent" data-testid="circle-full-notice">Your circle is full — this private circle can have up to {capacity} members.</p>}
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2">
           <Link2 size={13} className="shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate font-mono-custom text-xs text-muted-foreground" data-testid="text-invite-link">{inviteBase}/join/{profileCode}</span>
@@ -698,7 +699,7 @@ function PrivateTab() {
         <section className="flex flex-col items-center rounded-xl border border-dashed border-border/80 px-6 py-8 text-center" data-testid="circle-empty-state">
           <div className="grid h-10 w-10 place-items-center rounded-full bg-accent/10 text-accent"><Users size={18} /></div>
           <p className="mt-3 text-sm font-bold text-foreground">Your circle is empty</p>
-          <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">Invite up to {capacity} people you actually study with. No public directory, no search â€” just people you add by code or link.</p>
+          <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">Invite up to {capacity} people you actually study with. No public directory, no search — just people you add by code or link.</p>
           <button type="button" onClick={copyCode} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-empty-copy-code">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied!' : 'Copy your invite code'}</button>
         </section>
       ) : (
@@ -715,10 +716,10 @@ function PrivateTab() {
           onRemove={(userId) => remove.mutate({ userId }, { onSuccess: refresh })}
           ownerHandle={ownerHandle}
           emptyTitle="No one on the board yet"
-          emptyDetail="Your study time decides the score â€” focus sessions and timers count, manual logs don't. Invite a friend to fill the board."
+          emptyDetail="Your study time decides the score — focus sessions and timers count, manual logs don't. Invite a friend to fill the board."
         />
       )}
-      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Ranked by time studied this week â€” focus sessions and study-room timers count, manual logs don't. Circle only â€” no strangers.</p>
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Ranked by time studied this week — focus sessions and study-room timers count, manual logs don't. Circle only — no strangers.</p>
       </div>
       <aside className="min-w-0 xl:sticky xl:top-24" aria-label="Circle activity sidebar">
         {!alone && <FeedCard eyebrow="Last 7 days" title="Circle activity" items={feedQuery.data ?? []} emptyText="Activity from your circle will appear here." />}
@@ -744,7 +745,7 @@ function CohortTab() {
           <p className="mt-1 max-w-[38ch] text-xs text-muted-foreground">New members are placed into a study cohort automatically. Check back in a moment.</p>
           <button type="button" onClick={() => query.refetch()} className="mt-4 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" data-testid="button-retry-cohort">Check again</button>
         </section>
-        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Not searchable, no name lookup â€” you'll see your cohort's weekly board and activity once you're placed.</p>
+        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">Not searchable, no name lookup — you'll see your cohort's weekly board and activity once you're placed.</p>
       </div>
     );
   }
@@ -819,7 +820,7 @@ function CohortTab() {
           />
         </>
       )}
-      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">You're grouped with others who joined around the same time. Not searchable, no name lookup â€” it's view-only: you see each other's boards and activity, nothing else.</p>
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">You're grouped with others who joined around the same time. Not searchable, no name lookup — it's view-only: you see each other's boards and activity, nothing else.</p>
       </div>
       <aside className="min-w-0 xl:sticky xl:top-24" aria-label="Cohort activity sidebar">
         {!alone && <FeedCard eyebrow="Last 7 days" title="Cohort activity" items={feedQuery.data ?? []} emptyText="Activity from your cohort will appear here." />}
@@ -848,8 +849,8 @@ function FeedRow({ group, index, fresh }: { group: { handle: string; items: Circ
   const first = group.items[0];
   const last = group.items[group.items.length - 1];
   const sameDay = new Date(first.date).toDateString() === new Date(last.date).toDateString();
-  const subjects = [...new Set(group.items.map((item) => item.subject).filter(Boolean))].join(' Â· ');
-  const summary = `${group.items.length} update${group.items.length === 1 ? '' : 's'}${sameDay ? ' today' : ' this week'}${subjects ? ` Â· ${subjects}` : ''}${grouped ? ` Â· latest: ${last.detail}` : ''}`;
+  const subjects = [...new Set(group.items.map((item) => item.subject).filter(Boolean))].join(' � ');
+  const summary = `${group.items.length} update${group.items.length === 1 ? '' : 's'}${sameDay ? ' today' : ' this week'}${subjects ? ` � ${subjects}` : ''}${grouped ? ` � latest: ${last.detail}` : ''}`;
   const avatarClass = avatarColorFor(first.userId);
   const inner = (
     <>
@@ -882,7 +883,7 @@ function FeedRow({ group, index, fresh }: { group: { handle: string; items: Circ
           {group.items.map((item, itemIndex) => (
             <li key={`${item.userId}-${item.date}-${itemIndex}`} className="flex items-center gap-2.5 py-1.5 pl-10 text-xs">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-              <span className="min-w-0 flex-1 text-muted-foreground">{item.subject ? `${item.subject} Â· ` : ''}{item.detail}</span>
+              <span className="min-w-0 flex-1 text-muted-foreground">{item.subject ? `${item.subject} � ` : ''}{item.detail}</span>
               <span className="shrink-0 text-[10px] text-muted-foreground">{new Date(item.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
             </li>
           ))}
@@ -933,7 +934,7 @@ function ThePointCard({ scope }: { scope: Scope }) {
   return (
     <Card className="p-6 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-8">
       <SectionTitle eyebrow="The point" title="Effort is the scoreboard" action={<Trophy size={17} className="text-primary" />} />
-      <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? "Pulse combines focused minutes and topics moved forward. Only the people in your private circle can see it â€” there's no public scoreboard." : "Pulse combines focused minutes and topics moved forward. Your cohort only ever sees your weekly board â€” no profiles, no messages, nothing else."}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? "Pulse combines focused minutes and topics moved forward. Only the people in your private circle can see it — there's no public scoreboard." : "Pulse combines focused minutes and topics moved forward. Your cohort only ever sees your weekly board — no profiles, no messages, nothing else."}</p>
     </Card>
   );
 }
@@ -942,7 +943,7 @@ function YourBoundaryCard({ scope }: { scope: Scope }) {
   return (
     <Card className="p-6 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-8">
       <SectionTitle eyebrow="Your boundary" title="Change visibility in settings" />
-      <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? 'Focus mode hides comparison UI while keeping your own progress private and intact. Leaderboard visibility is opt-in â€” even within your circle.' : 'Focus mode hides your rank and pulse from the cohort board too. Comparison stays opt-in everywhere, no exceptions.'}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{scope === 'private' ? 'Focus mode hides comparison UI while keeping your own progress private and intact. Leaderboard visibility is opt-in — even within your circle.' : 'Focus mode hides your rank and pulse from the cohort board too. Comparison stays opt-in everywhere, no exceptions.'}</p>
     </Card>
   );
 }
@@ -1004,7 +1005,7 @@ function GroupsTab() {
           <button type="button" onClick={() => setShowCreate((open) => !open)} className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground" data-testid="button-create-group"><UserRoundPlus size={15} /> New group</button>
           <form onSubmit={submitJoin} className="flex gap-2">
             <input value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder="Group code" className="h-11 w-36 rounded-xl border border-border bg-background px-3 font-mono-custom text-sm uppercase outline-none focus:ring-3 focus:ring-primary/25" data-testid="input-join-code" />
-            <button type="submit" disabled={joinGroup.isPending || joinCode.trim().length < 4} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-bold hover:bg-secondary disabled:opacity-50" data-testid="button-join-group">{joinGroup.isPending ? 'â€¦' : 'Join'}</button>
+            <button type="submit" disabled={joinGroup.isPending || joinCode.trim().length < 4} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-bold hover:bg-secondary disabled:opacity-50" data-testid="button-join-group">{joinGroup.isPending ? '…' : 'Join'}</button>
           </form>
         </div>
         {error && <p className="text-xs font-semibold text-accent" data-testid="group-error">{error}</p>}
@@ -1017,7 +1018,7 @@ function GroupsTab() {
             <input required value={createForm.name} onChange={(event) => setCreateForm({ ...createForm, name: event.target.value })} placeholder="Group name, e.g. Kota batch 27" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/25" data-testid="input-group-name" />
             <input value={createForm.description} onChange={(event) => setCreateForm({ ...createForm, description: event.target.value })} placeholder="What is this room for? (optional)" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-3 focus:ring-primary/25" data-testid="input-group-description" />
             <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={createForm.isDiscoverable} onChange={(event) => setCreateForm({ ...createForm, isDiscoverable: event.target.checked })} className="h-4 w-4" data-testid="checkbox-group-discoverable" /> Allow anyone to find this group in discovery</label>
-            <button type="submit" disabled={createGroup.isPending || !createForm.name.trim()} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50" data-testid="button-save-group">{createGroup.isPending ? 'Creatingâ€¦' : 'Create group'}</button>
+            <button type="submit" disabled={createGroup.isPending || !createForm.name.trim()} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50" data-testid="button-save-group">{createGroup.isPending ? 'Creating…' : 'Create group'}</button>
           </form>
         </Card>
       )}
@@ -1028,7 +1029,7 @@ function GroupsTab() {
             {groups.map((group) => (
               <button key={group.id} type="button" onClick={() => setSelectedId(group.id)} className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors ${selected?.id === group.id ? 'border-primary/40 bg-primary/5' : 'border-border/70 hover:bg-secondary'}`} data-testid={`group-card-${group.id}`}>
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary font-display text-sm font-bold">{group.name.slice(0, 2).toUpperCase()}</span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{group.name}</p><p className="text-xs text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole === 'owner' ? ' Â· you own this' : ''}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{group.name}</p><p className="text-xs text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole === 'owner' ? ' � you own this' : ''}</p></div>
               </button>
             ))}
             <DiscoverGroups onPick={(group) => setSelectedId(group.id)} />
@@ -1056,10 +1057,10 @@ function DiscoverGroups({ onPick }: { onPick: (group: GroupSummary) => void }) {
       <button type="button" onClick={() => setVisible((open) => !open)} className="inline-flex items-center gap-2 text-xs font-bold text-primary" data-testid="button-toggle-discover"><Search size={13} /> {visible ? 'Hide discovery' : 'Discover open groups'}</button>
       {visible && (
         <div className="mt-3 space-y-2">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by nameâ€¦" className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs outline-none" data-testid="input-discover-query" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name…" className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs outline-none" data-testid="input-discover-query" />
           {search.data?.map((group) => (
             <button key={group.id} type="button" onClick={() => { onPick(group); setVisible(false); }} className="flex w-full items-center gap-2 rounded-lg border border-border/70 p-2.5 text-left hover:bg-secondary" data-testid={`discover-${group.name}`}>
-              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{group.name}</span><span className="text-[10px] text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole ? ' Â· already joined' : ''}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{group.name}</span><span className="text-[10px] text-muted-foreground">{group.memberCount} member{group.memberCount === 1 ? '' : 's'}{group.myRole ? ' � already joined' : ''}</span></span>
               {!group.myRole && <span className="rounded-md bg-primary px-2 py-1 text-[9px] font-bold text-primary-foreground">Open</span>}
             </button>
           ))}
@@ -1154,7 +1155,7 @@ function GroupDetail({ group, refresh, onLeave }: { group: GroupSummary; refresh
                     {meta ? <DeltaBadge delta={meta.rankDelta} /> : null}
                     {sparklineByHandle.get(entry.handle) && <Sparkline ranks={sparklineByHandle.get(entry.handle) ?? []} />}
                     {meta?.streak ? <WeeklyStreakChip streak={meta.streak} /> : null}
-                    <p className="font-display font-bold">{entry.score}</p>
+                    <p className="font-display font-bold">{formatMinutes(entry.score)}</p>
                   </div>
                 );
               })}

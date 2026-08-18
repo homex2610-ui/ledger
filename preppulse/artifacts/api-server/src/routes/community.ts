@@ -62,6 +62,7 @@ import {
   connectionUserIds,
   groupUserIds,
   isGroupMember,
+  streaksForUsers,
   toProfileShape,
   userHandlesById,
   weeklyPulseForUsers,
@@ -279,6 +280,7 @@ router.get("/circles", async (req, res) => {
   const allIds = [...connectionIds, req.userId];
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(allIds);
   const handles = await userHandlesById(allIds);
+  const streaks = await streaksForUsers(allIds, timeZone);
 
   const memberShape = async (id: string, isOwner: boolean) => {
     const info = handles.get(id) ?? { handle: "unknown", initials: "??", avatarUrl: null };
@@ -289,7 +291,7 @@ router.get("/circles", async (req, res) => {
       avatarUrl: info.avatarUrl,
       weeklyMinutes: minutesByUser.get(id) ?? 0,
       weeklyTopics: topicsByUser.get(id) ?? 0,
-      streak: await computeStreak(id, timeZone),
+      streak: streaks.get(id) ?? 0,
       isOwner,
     };
   };
@@ -431,6 +433,7 @@ router.get("/cohorts", async (req, res) => {
   const memberIds = memberRows.map((row) => row.userId);
   const { minutesByUser, topicsByUser } = await weeklyPulseForUsers(memberIds);
   const handles = await userHandlesById(memberIds);
+  const streaks = await streaksForUsers(memberIds, timeZone);
 
   const members = await Promise.all(
     [...memberRows]
@@ -444,7 +447,7 @@ router.get("/cohorts", async (req, res) => {
           avatarUrl: info.avatarUrl,
           weeklyMinutes: minutesByUser.get(row.userId) ?? 0,
           weeklyTopics: topicsByUser.get(row.userId) ?? 0,
-          streak: await computeStreak(row.userId, timeZone),
+          streak: streaks.get(row.userId) ?? 0,
         };
       }),
   );
