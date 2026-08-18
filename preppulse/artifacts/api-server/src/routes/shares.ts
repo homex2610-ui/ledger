@@ -147,7 +147,7 @@ router.post("/shares", requireAuth, async (req, res) => {
     variant: inserted.variant,
     payload: inserted.payload,
     createdAt: inserted.createdAt,
-    shareUrl: `/share/${inserted.type === "daily_focus" ? "focus" : "unknown"}/${inserted.id}`,
+    shareUrl: `/api/share-page/${inserted.type === "daily_focus" ? "focus" : "unknown"}/${inserted.id}`,
   });
 });
 
@@ -292,7 +292,7 @@ router.get("/og/share", async (req, res) => {
   try {
     const png = await renderShareOgPng(payload, {
       variant: artifact.variant === "B" ? "B" : "A",
-      shareUrl: `${appOrigin(req)}/share/focus/${artifact.id}`,
+      shareUrl: `${appOrigin(req)}/api/share-page/focus/${artifact.id}`,
     });
     res
       .status(200)
@@ -313,10 +313,6 @@ router.get("/share-page/:type/:shareId", async (req, res) => {
     return;
   }
   await serveSharePage(type, req.params.shareId, req, res);
-});
-
-router.get("/focus/:shareId", async (req, res) => {
-  await serveSharePage(SHARE_TYPE_BY_PATH["focus"], req.params.shareId, req, res);
 });
 
 async function serveSharePage(

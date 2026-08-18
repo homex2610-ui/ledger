@@ -28,7 +28,7 @@ export function buildSharePageHtml(payload: DailyFocusPayload, options: SharePag
       ? `${payload.subjects[0].subject} · ${payload.subjects[1] ? payload.subjects[1].subject + " · " : ""}every minute counted. Join Ledger and turn focus into momentum.`
       : "Every minute counted. Join Ledger and turn focus into momentum.";
   const ogImage = `${options.appOrigin}/api/og/share?id=${options.artifactId}`;
-  const shareUrl = `${options.appOrigin}/share/focus/${options.artifactId}`;
+  const shareUrl = `${options.appOrigin}/api/share-page/focus/${options.artifactId}`;
   const joinUrl = `${options.appOrigin}/signin`;
   const cardUrl = `${options.appOrigin}/signin`;
 

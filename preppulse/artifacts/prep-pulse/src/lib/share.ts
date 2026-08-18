@@ -42,5 +42,5 @@ export function setSharePromptsEnabled(enabled: boolean): void {
 }
 
 export function shareUrlFor(artifactId: string): string {
-  return `${window.location.origin}/share/focus/${artifactId}`;
+  return `${window.location.origin}/api/share-page/focus/${artifactId}`;
 }
