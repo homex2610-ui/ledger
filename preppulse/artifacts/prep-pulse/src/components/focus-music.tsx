@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { CloudRain, Headphones, Link2, Music2, Pause, Play, Sparkles, Trees, Volume2, Waves, X } from 'lucide-react';
+import { Headphones, Link2, Music2, Pause, Play, Volume2, X } from 'lucide-react';
 import { extractYouTubeId, loadFocusMusicUrl, saveFocusMusicUrl } from '@/lib/focus-music';
 import { Card, SectionTitle } from '@/components/ui-elements';
-import { SOUNDSCAPE_PRESETS, soundscapeEngine, type SoundscapeType } from '@/lib/ambient-soundscapes';
 
 const YT_PRESETS = [
   { label: 'Lo-fi Beats', id: 'jfKfPfyJRdk', icon: Headphones },
@@ -66,25 +65,7 @@ function loadYouTubeApi(): Promise<void> {
   });
 }
 
-function getSoundscapeIcon(iconName: string) {
-  switch (iconName) {
-    case 'Sparkles':
-      return Sparkles;
-    case 'CloudRain':
-      return CloudRain;
-    case 'Waves':
-      return Waves;
-    case 'Trees':
-      return Trees;
-    default:
-      return Sparkles;
-  }
-}
-
 export function FocusMusic() {
-  const [activeTab, setActiveTab] = useState<'soundscapes' | 'youtube'>('soundscapes');
-  const [activeSoundscape, setActiveSoundscape] = useState<SoundscapeType | null>(null);
-
   const [draft, setDraft] = useState(loadFocusMusicUrl());
   const [videoId, setVideoId] = useState<string | null>(() => extractYouTubeId(loadFocusMusicUrl()));
   const [title, setTitle] = useState<string | null>(null);
@@ -95,11 +76,6 @@ export function FocusMusic() {
   const playerRef = useRef<YTPlayer | null>(null);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
-
-  // Sync volume to native engine on mount
-  useEffect(() => {
-    soundscapeEngine.setVolume(volume / 100);
-  }, [volume]);
 
   // YouTube Player setup
   useEffect(() => {
@@ -139,29 +115,7 @@ export function FocusMusic() {
     };
   }, [videoId]);
 
-  const handleSoundscapeToggle = (type: SoundscapeType) => {
-    if (activeSoundscape === type) {
-      soundscapeEngine.stop();
-      setActiveSoundscape(null);
-    } else {
-      // Pause YouTube if playing
-      if (playerRef.current && ytPlaying) {
-        try {
-          playerRef.current.pauseVideo();
-        } catch {
-          /* no-op */
-        }
-      }
-      soundscapeEngine.play(type);
-      setActiveSoundscape(type);
-    }
-  };
-
   const playId = (id: string) => {
-    // Stop native soundscape if active
-    soundscapeEngine.stop();
-    setActiveSoundscape(null);
-
     setError(null);
     const watch = `https://www.youtube.com/watch?v=${id}`;
     saveFocusMusicUrl(watch);
@@ -192,11 +146,7 @@ export function FocusMusic() {
     if (!player) return;
     try {
       if (ytPlaying) player.pauseVideo();
-      else {
-        soundscapeEngine.stop();
-        setActiveSoundscape(null);
-        player.playVideo();
-      }
+      else player.playVideo();
     } catch {
       /* player not ready */
     }
@@ -209,7 +159,6 @@ export function FocusMusic() {
     } catch {
       return;
     }
-    soundscapeEngine.setVolume(next / 100);
     try {
       playerRef.current?.setVolume(next);
     } catch {
@@ -226,7 +175,7 @@ export function FocusMusic() {
     setError(null);
   };
 
-  const isAudioActive = activeSoundscape !== null || (videoId !== null && ytPlaying);
+  const isAudioActive = videoId !== null && ytPlaying;
 
   return (
     <Card className="p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_hsl(186_32%_16%/.08)] md:p-5">
@@ -248,68 +197,10 @@ export function FocusMusic() {
         }
       />
 
-      <div className="mb-4 flex gap-1 rounded-xl border border-border/70 bg-secondary/50 p-1">
-        <button
-          type="button"
-          onClick={() => setActiveTab('soundscapes')}
-          className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition-colors ${
-            activeTab === 'soundscapes' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Synthesized Waves
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('youtube')}
-          className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition-colors ${
-            activeTab === 'youtube' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          YouTube & Lo-Fi
-        </button>
-      </div>
-
-      {activeTab === 'soundscapes' ? (
-        <div>
-          <p className="text-xs text-muted-foreground">
-            Zero-latency procedural soundscapes synthesized directly in your browser. 100% offline.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {SOUNDSCAPE_PRESETS.map((preset) => {
-              const Icon = getSoundscapeIcon(preset.iconName);
-              const isActive = activeSoundscape === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handleSoundscapeToggle(preset.id)}
-                  className={`flex flex-col items-start rounded-xl border p-3 text-left transition-all ${
-                    isActive
-                      ? 'border-primary bg-primary/10 text-primary shadow-sm ring-2 ring-primary/20'
-                      : 'border-border/80 bg-card hover:border-primary/40 hover:bg-secondary/40'
-                  }`}
-                  data-testid={`soundscape-preset-${preset.id}`}
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <Icon size={16} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
-                    {isActive && (
-                      <span className="flex h-2 w-2 rounded-full bg-primary animate-ping" />
-                    )}
-                  </div>
-                  <span className="mt-2 text-xs font-bold text-foreground">{preset.label}</span>
-                  <span className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                    {preset.detail}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div>
-          <p className="text-xs text-muted-foreground">
-            Play relaxing lo-fi streams or paste any YouTube study playlist.
-          </p>
+      <div>
+        <p className="text-xs text-muted-foreground">
+          Play relaxing lo-fi streams or paste any YouTube study playlist.
+        </p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {YT_PRESETS.map(({ label, id, icon: Icon }) => (
               <button
@@ -405,8 +296,7 @@ export function FocusMusic() {
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Volume slider */}
       <div className="mt-4 flex items-center gap-2 border-t border-border/60 pt-3">

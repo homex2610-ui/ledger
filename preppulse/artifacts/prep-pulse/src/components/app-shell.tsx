@@ -8,7 +8,6 @@ import {
   LogOut,
   Megaphone,
   MoreHorizontal,
-  Search,
   Settings,
   ShieldCheck,
   Timer,
@@ -29,7 +28,6 @@ import { getExamConfig } from '@workspace/exam-config';
 import { Avatar } from '@/components/avatar';
 import { BrandMark } from '@/components/brand-mark';
 import { OnboardingModal } from '@/components/onboarding';
-import { CommandPalette } from '@/components/command-palette';
 import { initialsFor } from '@/lib/utils';
 import { useFocusReminder } from '@/lib/reminder-prefs';
 import { clearShareRef, readShareRef } from '@/lib/share';
@@ -47,7 +45,6 @@ const navigation = [
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const queryClient = useQueryClient();
   const me = useGetMe().data;
   const logOut = useLogOut();
@@ -108,23 +105,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </span>
           </Link>
-
-          {/* Quick command palette search trigger */}
-          <button
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="mb-6 flex w-full items-center justify-between rounded-xl border border-sidebar-foreground/15 bg-sidebar-foreground/5 px-3 py-2 text-xs font-semibold text-sidebar-foreground/75 transition-colors hover:border-sidebar-foreground/30 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
-            data-testid="button-open-command-palette"
-          >
-            <span className="flex items-center gap-2">
-              <Search size={14} className="text-accent" />
-              <span>Search & jump...</span>
-            </span>
-            <kbd className="rounded bg-sidebar-foreground/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-sidebar-foreground/70">
-              ⌘K
-            </kbd>
-          </button>
-
           <p className="mb-3 px-3 font-mono-custom text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/45">
             Your workspace
           </p>
@@ -224,19 +204,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Header Quick search button */}
-              <button
-                type="button"
-                onClick={() => setCommandPaletteOpen(true)}
-                className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground md:flex"
-              >
-                <Search size={13} className="text-primary" />
-                <span>Quick Actions</span>
-                <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[9px] font-bold text-foreground">
-                  ⌘K
-                </kbd>
-              </button>
-
               {activeAnnouncement && (
                 <div
                   className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-3.5 py-1.5 text-xs font-bold sm:flex"
@@ -355,21 +322,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                setCommandPaletteOpen(true);
-              }}
-              className="mb-4 flex w-full items-center justify-between rounded-xl border border-sidebar-foreground/15 bg-sidebar-foreground/5 px-3 py-2 text-xs font-semibold text-sidebar-foreground/75"
-            >
-              <span className="flex items-center gap-2">
-                <Search size={14} className="text-accent" />
-                <span>Search & jump</span>
-              </span>
-              <kbd className="rounded bg-sidebar-foreground/15 px-1.5 py-0.5 font-mono text-[9px]">⌘K</kbd>
-            </button>
-
             <nav className="space-y-2">
               {navigation.map(({ href, label, icon: Icon }) => (
                 <Link
@@ -424,7 +376,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
       <OnboardingModal />
     </div>
   );
